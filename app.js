@@ -257,7 +257,7 @@
     if (typeof document.querySelectorAll === 'function') document.querySelectorAll('#mineType [data-mtype]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mtype === mtype)));
     const isFarmer = FARMER_GROUPS.indexOf(mtype) >= 0;
     const keep = sel.value;
-    sel.innerHTML = `<option value="">— 選一位${mtype} ${MINE_TYPES[mtype]} ရွေးပါ —</option>` + list.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}${isFarmer ? '｜' + esc(growLabel(growOfId[f.id])) : ''}｜${esc(visitAge(latestVisitDay(f.lastVisit, f.id, state.myVisitList), today).text.split('／')[0])}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`).join(''); // 0.4.82 選項加「距上次拜訪 N 天」（選項不能上色，靠文字）
+    sel.innerHTML = `<option value="">— 選一位${mtype} ${MINE_TYPES[mtype]} ရွေးပါ —</option>` + list.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).trim() /* 0.4.89 地區完整顯示（業務－地區），不切字 */) : ''}${isFarmer ? '｜' + esc(growLabel(growOfId[f.id])) : ''}｜${esc(visitAge(latestVisitDay(f.lastVisit, f.id, state.myVisitList), today).text.split('／')[0])}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`).join(''); // 0.4.82 選項加「距上次拜訪 N 天」（選項不能上色，靠文字）
     sel.value = keep && list.some(f => f.id === keep) ? keep : '';
     sel.disabled = !list.length;
     state.mineGrow = growOfId;
@@ -286,7 +286,7 @@
     if (!sel) return; // 舊頁面沒有這個分頁
     const ended = state.endedMine || [];
     const keep = sel.value;
-    const opt = f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}</option>`;
+    const opt = f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).trim() /* 0.4.89 地區完整顯示（業務－地區），不切字 */) : ''}</option>`;
     sel.innerHTML = (ended.length ? '<option value="">— 請選擇 ရွေးပါ —</option>' : '<option value="">還沒有審核通過的結案農民／အတည်ပြုပြီး ပိတ်သိမ်းထားသော လယ်သမား မရှိသေး</option>') + ended.map(opt).join(''); // 全部都是已結案：不再分組
     sel.disabled = !ended.length;
     sel.value = keep && ended.some(f => f.id === keep) ? keep : '';
@@ -696,7 +696,7 @@
   /** 0.4.82 執行任務清單這一頁的五類名稱（董事長截圖用字：一般農戶）；其他頁照舊叫一般農民 */
   const TODO_LABEL = g => (g === '一般農民' ? '一般農戶' : g);
   // 0.4.75 董事長「農民改鎮跟村」：鎮放前面（town＝鎮、village＝村）
-  const placeOf = c => { const place = [c.town, c.village, c.area ? String(c.area).split(/[ （(]/)[0] : ''].filter(Boolean).join('・'); return place; };
+  const placeOf = c => { const place = [c.town, c.village, c.area ? String(c.area).trim() /* 0.4.89 地區完整顯示，不切字 */ : ''].filter(Boolean).join('・'); return place; };
   /** 一類一小區塊：標題帶人數，沒有就寫「沒有」 */
   const tcGroupHtml = (g, my, items) => `<section class="tcgrp"><h3>${esc(TODO_LABEL(g))}（${items.length}）<span class="my">${esc(my)}</span></h3>`
     + (items.length ? `<ul>${items.join('')}</ul>` : '<p class="sub none">沒有／မရှိ</p>') + '</section>';
@@ -743,7 +743,7 @@
      舊後台沒有明細：照舊只有數字、不能點 */
   const md = d => String(d || '').slice(5).replace('-', '/');
   function monthDetailHtml(kind, cur) {
-    if (kind === 'new') return (cur.newList || []).map(c => { const place = [c.town, c.village, c.area ? String(c.area).split(/[ （(]/)[0] : ''].filter(Boolean).join('・');
+    if (kind === 'new') return (cur.newList || []).map(c => { const place = [c.town, c.village, c.area ? String(c.area).trim() /* 0.4.89 地區完整顯示，不切字 */ : ''].filter(Boolean).join('・');
       return `<li><span><b>${esc(c.name || '（未命名）')}</b>${place ? '｜' + esc(place) : ''}<br><small>${esc(c.group || '')}・${esc(md(c.date))} 新增 အသစ်</small></span></li>`; }).join('')
       || '<li class="empty">這個月沒有新增客戶／ဖောက်သည်အသစ် မရှိ</li>';
     return (cur.trialList || []).map(t => `<li><span><b>${esc(t.name || '（未命名）')}</b>｜${esc(catBi(t.cat === '推廣' ? '推廣' : '試作'))}<br>`
@@ -1041,6 +1041,7 @@
     const o = state.options = (await Store.getMeta('options')) || { regions: [], crops: [], varieties: [], fertilizers: [], brands: [], areaUnit: '英畝', priceUnit: '緬幣／籃' };
     const opt = arr => arr.map(x => `<option value="${esc(x)}"></option>`).join('');
     $('dlCrops').innerHTML = opt(o.crops);
+    refreshPriceCrops(); // 0.4.89 價格列作物下拉：先建好的列補上作物選項
     $('dlFerts').innerHTML = opt(o.fertilizers);
     $('dlBrands').innerHTML = opt(o.brands);
     const keep = $('pArea').value;
@@ -1084,6 +1085,20 @@
     setSelect($('pCrop'), crops, keep, '— 選擇作物 သီးနှံရွေးပါ —');
     fillDealerCrop($n('pDCrop').value);
   }
+  /* 0.4.89 董事長截圖：試作品項改成下拉＝作物選項（options.crops，同新增客戶作物下拉、中文／緬文），最後「其他（自己填）」選了才出現文字框 */
+  const TRIAL_OTHER = '__other';
+  function fillTrialItems() {
+    const sel = $n('tItem');
+    const crops = (state.options ? state.options.crops || [] : []).map(c => ({ value: c, text: cropText(c) }));
+    const keep = sel.value;
+    sel.innerHTML = '<option value="">— 選擇品項 ရွေးပါ —</option>' + crops.map(x => `<option value="${esc(x.value)}">${esc(x.text)}</option>`).join('')
+      + `<option value="${TRIAL_OTHER}">其他（自己填）／အခြား (ကိုယ်တိုင်ဖြည့်)</option>`;
+    sel.value = keep && (keep === TRIAL_OTHER || crops.some(x => x.value === keep)) ? keep : '';
+    refreshTrialOther();
+  }
+  function refreshTrialOther() { const o = $n('tItemOther'); o.hidden = $n('tItem').value !== TRIAL_OTHER; if (o.hidden) o.value = ''; }
+  /** 送出的試作品項（欄位名照舊是 item）：選了作物就是作物；選「其他」就是自己填的字（沒填＝空白，必填檢查會擋） */
+  const trialItemValue = () => { const v = String($n('tItem').value || ''); return v === TRIAL_OTHER ? String($n('tItemOther').value || '').trim() : v.trim(); };
   /** 0.4.73 董事長：盤商、種子商新增表單「品牌」改成作物下拉（跟農民同一份作物清單）；選單沒有的寫在下面「其他」 */
   function fillDealerCrop(keep) {
     const el = $n('pDCrop'); if (!el.id) return; // 舊頁面沒有這格（$n 給的假元件）就不畫
@@ -1232,7 +1247,7 @@
     else if (state.closeOnly && isDealerCat()) { const me = String(((await getConfig()) || {}).name || ''); mine = mine.filter(f => f.pending || !String(f.staff || '') || String(f.staff) === me); } // 0.4.82 盤商、種子商結案：負責業務空白照舊算可以（同 dealerIsMine、後台 ownDc）
     // 業務BUG#3（1號）：結案（農民結案、從結案分頁進來的盤商／種子商結案）不能新增客戶，選單不放「＋新增」
     const closing = state.cat === '結案' || !!state.dealerClose || (state.closeOnly && isDealerCat());
-    const optOf = f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}${f.crop ? '｜' + esc(f.crop) : ''}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`;
+    const optOf = f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).trim() /* 0.4.89 地區完整顯示（業務－地區），不切字 */) : ''}${f.crop ? '｜' + esc(f.crop) : ''}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`;
     let body = mine.map(optOf).join('');
     // 0.4.73 董事長「結案改為一般農民、試作農民、推廣農民結案」：選的那一種排前面（有進行中試作＝試作農民、推廣＝推廣農民、都沒有＝一般農民），
     // 其他自己負責的農民排在後面「其他農民」（分類只看進行中的試作，結束過的會被算一般，所以不藏起來，免得找不到人）
@@ -1477,6 +1492,7 @@
     $('trialStartForm').hidden = m !== 'start'; $('trialEndForm').hidden = m !== 'end';
     $('trialStartBtn').setAttribute('aria-pressed', String(m === 'start')); $('trialEndBtn').setAttribute('aria-pressed', String(m === 'end'));
     if (m === 'start' && !$('tStart').value) { $('tStart').value = mmDay(0); } // 業務BUG#4：緬甸的今天
+    if (m === 'start') fillTrialItems(); // 0.4.89 品項下拉＝最新的作物選項
     if (m === 'end' && !$('tYieldUnit').value) $('tYieldUnit').value = (state.options && state.options.yieldUnit) || '籃';
     placeFailBox(); // 0.4.74 失敗欄位放哪、要不要顯示統一由 placeFailBox 決定（試作結束／種植失敗／結案試作失敗）
     $('harvestBox').hidden = $('tOutcome').value === '失敗'; // 0.4.38 成功／結束 → 收成報告；失敗 → 失敗紀錄
@@ -1639,7 +1655,7 @@
   const collectFailure = () => ({ weather: $('fWeather').value, temp: $('fTemp').value, fert: $('fFert').value.trim(), water: $('fWater').value, pest: $('fPest').value, pestNote: $('fPestNote').value.trim(), reason: $('fReason').value.trim() });
   function trialProblem() {
     if (state.trialMode === 'end' && !state.activeTrial) return `找不到進行中的${state.cat}，請重新選一次客戶／${CAT_MY[state.cat]} ရှာမတွေ့၊ ဖောက်သည် ပြန်ရွေးပါ`; // T9
-    if (state.trialMode === 'start' && !$('tItem').value.trim()) return `請填${state.cat}品項／ပစ္စည်းအမည် ဖြည့်ပါ`;
+    if (state.trialMode === 'start' && !trialItemValue()) return `請填${state.cat}品項／ပစ္စည်းအမည် ဖြည့်ပါ`; // 0.4.89：下拉沒選、選「其他」沒填都擋
     if (state.trialMode === 'end' && $('tOutcome').value === '失敗') {
       const miss = failMissing();
       if (miss.length) return `${state.cat}失敗要填：${miss.join('、')}／မအောင်မြင်မှု မှတ်တမ်း မပြည့်စုံသေး`;
@@ -1776,7 +1792,7 @@
   }
 
   function collectTrial(tempId) {
-    if (state.trialMode === 'start') return { op: 'start', tempId, item: $('tItem').value.trim(), dosage: $('tDosage').value.trim(), start: $('tStart').value };
+    if (state.trialMode === 'start') return { op: 'start', tempId, item: trialItemValue(), dosage: $('tDosage').value.trim(), start: $('tStart').value };
     if (state.trialMode !== 'end' || !state.activeTrial) return null;
     const t = state.activeTrial;
     const o = { op: 'end', id: t.id, outcome: $('tOutcome').value, height: $('tHeight').value, grains: $('tGrains').value, yield: $('tYield').value,
@@ -1789,6 +1805,7 @@
   }
   function resetTrialForm() {
     ['tItem', 'tDosage', 'tStart', 'tHeight', 'tGrains', 'tYield', 'tYieldUnit', 'tComment', 'tOther', 'fTemp', 'fFert', 'fPestNote', 'fReason', 'tScore', 'fWeather', 'fWater', 'fPest', 'hDate', 'hQuality', 'hCompare', 'hAgain'].forEach(id => { $(id).value = ''; });
+    refreshTrialOther(); // 0.4.89 品項下拉清空：「其他」文字框也收起清掉
     $('tOutcome').value = '成功';
     $('plantFail').checked = false; // 0.4.33
     state.activeTrial = null;
@@ -2085,17 +2102,38 @@
     $('addPriceBtn').disabled = full;
     $('addPriceBtn').textContent = full ? `一次最多記 ${MAX_PRICES} 筆價格／အများဆုံး ${MAX_PRICES} ခု` : '＋ 加一筆價格／ဈေးနှုန်း ထပ်ထည့်';
   }
+  /** 0.4.89 價格列作物下拉的選項：文字「中文／緬文」（cropText）、value 中文作物名，最後「其他（自己填）」 */
+  function priceCropOptions() {
+    const crops = (state.options && state.options.crops) || [];
+    return `<option value="">作物 သီးနှံ</option>${crops.map(c => `<option value="${esc(c)}">${esc(cropText(c))}</option>`).join('')}<option value="${TRIAL_OTHER}">其他（自己填）／အခြား</option>`;
+  }
+  /** 打卡畫面打開時第一列價格會比作物選項先建（resetForm 早於 loadOptions）→ 選項載入後把已經有的列補上，選好的保留 */
+  function refreshPriceCrops() {
+    const box = document.getElementById('priceRows');
+    if (!box) return;
+    box.querySelectorAll('.pcs').forEach(s => { const keep = s.value; s.innerHTML = priceCropOptions(); s.value = keep; if (s.value !== keep) s.value = ''; });
+  }
   function addPriceRow(p) {
     if ($('priceRows').children.length >= MAX_PRICES) { refreshPriceBtn(); return; }
     const unit = (state.options && state.options.priceUnit) || '緬幣／籃';
     const div = document.createElement('div');
     div.className = 'price-row';
-    div.innerHTML = `<input type="text" class="pc" list="dlCrops" placeholder="作物 သီးနှံ" maxlength="40">
+    // 0.4.89 董事長截圖：作物欄原本是輸入框＋清單（只顯示中文）→ 改成下拉，顯示「中文／緬文」（同上面作物下拉的 cropText），最後「其他（自己填）」；
+    // 存的值照舊只存中文作物名：真正送出的還是 .pc（選作物時寫進中文名、選其他時變成文字框讓業務自己打）
+    div.innerHTML = `<div class="pcw"><select class="pcs" aria-label="作物">${priceCropOptions()}</select>
+      <input type="text" class="pc" placeholder="自己填作物 သီးနှံ" maxlength="40" hidden></div>
       <input type="text" class="pv" list="dlVarieties" placeholder="品種 မျိုး（可空白）" maxlength="80">
       <input type="number" class="pp" min="0" step="any" inputmode="decimal" placeholder="價格 ဈေးနှုန်း">
       <input type="text" class="pu" maxlength="30">
       <button type="button" class="del" aria-label="刪掉這筆價格">×</button>`;
     div.querySelector('.pu').value = (p && p.unit) || unit;
+    const pcs = div.querySelector('.pcs'), pc = div.querySelector('.pc');
+    pcs.addEventListener('change', () => { // 0.4.89：選作物 → .pc 存中文名（藏著）；選「其他」→ .pc 變成文字框自己打
+      const other = pcs.value === TRIAL_OTHER;
+      pc.hidden = !other; pc.value = other ? '' : pcs.value;
+      if (other) { try { pc.focus(); } catch (e) { /* 舊瀏覽器 */ } }
+      refreshSave();
+    });
     div.querySelector('.del').addEventListener('click', () => { div.remove(); refreshPriceBtn(); refreshSave(); });
     div.querySelectorAll('input').forEach(i => i.addEventListener('input', refreshSave));
     $('priceRows').appendChild(div);
@@ -2521,6 +2559,8 @@ ${state.cat}：${who}
     $n('cropEditBtn').addEventListener('click', () => { state.cropOpen = true; renderCropSum(); }); // 0.4.44
     $('addPriceBtn').addEventListener('click', () => addPriceRow());
     $('trialStartBtn').addEventListener('click', () => setTrialMode(state.trialMode === 'start' ? null : 'start'));
+    $n('tItem').addEventListener('change', () => { refreshTrialOther(); refreshSave(); }); // 0.4.89 選「其他」才出現文字框
+    $n('tItemOther').addEventListener('input', refreshSave);
     $('trialEndBtn').addEventListener('click', () => setTrialMode(state.trialMode === 'end' ? null : 'end'));
     $('tOutcome').addEventListener('change', () => setTrialMode('end'));
     $n('cTrialOutcome').addEventListener('change', () => { syncClosePlantFail(); placeFailBox(); refreshSave(); }); // 0.4.74 結案試作結果：選失敗就展開失敗紀錄；0.4.75 種植失敗跟著自動勾

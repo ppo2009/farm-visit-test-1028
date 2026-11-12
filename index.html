@@ -28,6 +28,8 @@ small,.sub{color:var(--muted);font-size:1rem} /* 0.4.29 董事長：業務字體
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:14px}
 label.lab,.lab{font-weight:700;display:block;margin-bottom:6px}
 select,input[type=text],input[type=tel],input[type=number],input[type=date],input[type=password],textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);min-width:0}
+select{max-width:100%;text-overflow:ellipsis;white-space:nowrap;overflow:hidden} /* 0.4.89 地區改「業務－地區」完整顯示：選項太長用省略號，不撐寬、不切字 */
+#tItemOther{margin-top:8px}
 textarea{min-height:96px;resize:vertical}
 .gps{font-size:1rem;color:var(--muted)}
 .gps b{color:var(--paddy)}
@@ -160,6 +162,7 @@ details.profile summary{font-weight:700;cursor:pointer}
 .fields .row4{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;align-items:end} /* 0.4.71 地區｜鎮｜村｜GPS（0.4.75 鄉改村、鎮在前）：電腦一排四格、手機 375 寬兩格兩排（140px 實測 375 會變一格一排） */
 #pGps{background:var(--surface,#f6f6f2);color:var(--muted)}
 .price-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px;border:1px solid var(--line);border-radius:10px;position:relative}
+.price-row .pcw{min-width:0;grid-column:1/-1} .price-row .pcw .pc{margin-top:6px} /* 0.4.89 作物下拉（中文／緬文）＋選「其他」才出現的自填框 */
 .price-row .del{position:absolute;right:6px;top:-10px;border:1px solid var(--line);background:var(--surface);border-radius:99px;width:26px;height:26px;cursor:pointer}
 .btn2{border:1px solid var(--paddy);background:none;color:var(--paddy);border-radius:10px;padding:10px;font-weight:700;cursor:pointer;width:100%}
 .save{border:0;border-radius:14px;background:var(--paddy);color:var(--surface);padding:15px;font-weight:900;font-size:1.1rem;cursor:pointer;width:100%}
@@ -640,7 +643,9 @@ footer{margin-top:18px;text-align:center}
         <button type="button" class="btn2" id="trialEndBtn">填結果／結束<span class="my">ရလဒ်ဖြည့် / ပြီးဆုံး</span></button>
       </div>
       <div class="fields" id="trialStartForm" hidden>
-        <div><label class="lab" for="tItem" id="tItemLab">試作品項（必填）<span class="my">ပစ္စည်းအမည် (မဖြစ်မနေ)</span></label><input type="text" id="tItem" maxlength="120" placeholder="例：A 肥料 2 號／ဥပမာ - A မြေသြဇာ နံပါတ် ၂"></div>
+        <!-- 0.4.89 董事長截圖：試作品項改成下拉＝作物選項（同新增客戶的作物下拉、中文／緬文），最後「其他（自己填）」選了才出現文字框；送出的 item 欄位不變 -->
+        <div><label class="lab" for="tItem" id="tItemLab">試作品項（必填）<span class="my">ပစ္စည်းအမည် (မဖြစ်မနေ)</span></label><select id="tItem"><option value="">— 選擇品項 ရွေးပါ —</option></select>
+          <input type="text" id="tItemOther" maxlength="120" hidden placeholder="自己填品項，例：A 肥料 2 號／ကိုယ်တိုင် ဖြည့်ပါ" aria-label="其他品項（自己填）"></div>
         <div class="row2">
           <div><label class="lab" for="tDosage">用量<span class="my">သုံးစွဲပမာဏ</span></label><input type="text" id="tDosage" maxlength="120" placeholder="例：每英畝 2 包／တစ်ဧကလျှင် ၂ အိတ်"></div>
           <div><label class="lab" for="tStart">開始日<span class="my">စတင်ရက်</span></label><input type="date" id="tStart"></div>
