@@ -160,6 +160,8 @@
   function setHomeTab(tab) {
     if (tab === 'assigned') tab = 'todo'; // 0.4.59 舊的指派任務分頁已併進執行任務清單
     if (HOME_TABS.indexOf(tab) < 0) tab = 'punch';
+    // 2號 0.4.63 低#11：舊快取的頁面沒有這一頁（例如 0.4.59 前沒有「結案」）→ 全部分頁都藏起來、首頁空白；頁面上沒有就回田間打卡
+    if (typeof document !== 'undefined' && document.getElementById && !document.getElementById('hp-' + tab)) tab = 'punch';
     state.homeTab = tab;
     HOME_TABS.forEach(t => {
       const b = $('htab-' + t), p = $('hp-' + t);
@@ -447,7 +449,8 @@
       const waitN = open.filter(t => ticked.has(t.id)).length, all0 = open.length + done.length;
       const pct = all0 ? Math.round(done.length / all0 * 100) : 0;
       sum.hidden = !all0;
-      sum.innerHTML = all0 ? `主管派了 <b>${all0}</b> 條：已完成 <b>${done.length}</b>、已打勾等送出 <b>${waitN}</b>、還沒做 <b>${open.length - waitN}</b>／ပြီး ${done.length}・မလုပ်ရသေး ${open.length - waitN}<span class="bar"><i style="width:${pct}%"></i></span>` : '';
+      // 2號 0.4.63 低#10：後台只回「沒做完＋近 7 天做完」的任務，不是全部 → 字寫清楚，不說成「派了 N 條」
+      sum.innerHTML = all0 ? `沒做完＋近 7 天做完的共 <b>${all0}</b> 條：已完成 <b>${done.length}</b>、已打勾等送出 <b>${waitN}</b>、還沒做 <b>${open.length - waitN}</b>／ပြီး ${done.length}・မလုပ်ရသေး ${open.length - waitN}<span class="bar"><i style="width:${pct}%"></i></span>` : '';
     }
     $('taskList').innerHTML = open.map(t => row(t, false)).join('') + done.map(t => row(t, true)).join('')
       || `<li class="empty">${(await Store.getMeta('home')) ? '目前沒有派給你的任務／ပေးထားသော အလုပ် မရှိ' : '連上網路後會顯示／အင်တာနက်ချိတ်ပြီးမှ ပြမည်'}</li>`;
@@ -947,7 +950,10 @@
     }
     if (state.cat !== '結案') return '';
     const miss = [['cPrice', '價格'], ['cYield', '產量'], ['cBuyer', '收購客戶']].filter(([id]) => !String($(id).value).trim()).map(([, n]) => n);
-    return miss.length ? `結案要填：${miss.join('、')}／ပိတ်သိမ်းရန် ဖြည့်ပါ` : '';
+    if (miss.length) return `結案要填：${miss.join('、')}／ပိတ်သိမ်းရန် ဖြည့်ပါ`;
+    // 2號 0.4.63 低#6：輸入框的 min=0 只有表單送出才擋，這裡自己檢查：價格、產量要大於 0（不能負數或 0）
+    const bad = [['cPrice', '價格'], ['cYield', '產量']].filter(([id]) => !(Number($(id).value) > 0)).map(([, n]) => n);
+    return bad.length ? `${bad.join('、')}要大於 0／၀ ထက် ကြီးရမည်` : '';
   }
   function collectClosing() {
     if (state.dealerClose) return { outcome: $n('dcOutcome').value, note: $n('dcNote').value.trim() }; // 0.4.42 盤商、種子商
