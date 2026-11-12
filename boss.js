@@ -594,7 +594,7 @@
         <span class="pill ${t.status === '成功' ? 'p-grn' : t.status === '失敗' ? 'p-red' : 'p-yel'}">${esc(t.status)}</span>
         ${t.hasReport ? ` <button class="btn" type="button" data-report="${esc(t.id)}">⬇ 試作報告（Word）</button>` : ''}
         ${t.conclusion ? `<div class="sub pre" style="margin-top:6px">結論：${esc(t.conclusion)}</div>` : ''}</div>`).join('')}
-      <div class="timeline">${list.map(v => `<div class="entry">${catPill(v)}<b>${esc(v.time)}</b>${!dealer && visitWeek(v) ? `　試作第 ${visitWeek(v)} 週` : ''} <span class="sub">${esc(v.staff)}</span>
+      <div class="timeline">${list.map(v => `<div class="entry">${catPill(v)}${v.stage ? '<span class="pill p-yel">' + esc(v.stage) + '</span> ' : '' /* 0.4.78 生長階段 */}<b>${esc(v.time)}</b>${!dealer && visitWeek(v) ? `　試作第 ${visitWeek(v)} 週` : ''} <span class="sub">${esc(v.staff)}</span>
         <div class="sub">${v.lat != null && v.lng != null ? `📍 <a href="${esc(v.nav)}" target="_blank" rel="noopener">${v.lat.toFixed(5)}, ${v.lng.toFixed(5)}（導航）</a>` : '📍 <span style="color:var(--chili)">無定位</span>'}
         　📷 ${v.check ? esc(v.check) : '現場拍攝'}</div>
         <div class="box"><div class="photos">${v.photos.length ? v.photos.map(id => `<div class="photo" data-photo="${esc(id)}">載入中…</div>`).join('') : '<div class="photo">沒有照片</div>'}</div>

@@ -171,6 +171,7 @@ li.go{cursor:pointer}
 .months{display:flex;gap:6px;margin-bottom:8px}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 14px;cursor:pointer;font-size:1rem}
 .months .chip{min-height:44px}            /* 田裡用手指按：月份切換至少 44 點高（2026-11-12 逐頁檢查） */
+.growtl{list-style:none;padding:0;margin:4px 0 10px} .growtl>li{display:block;border-left:3px solid var(--line);padding:4px 0 6px 10px;margin:0 0 4px} .growtl>li.has{border-left-color:var(--paddy)} .growtl .gst{font-weight:700} .growtl .gent{margin:4px 0 0;overflow-wrap:anywhere} .growtl .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;margin:4px 0} .growtl .pgrid .btn2.small,.growtl .pgrid img{width:100%;margin:0} /* 0.4.78 生長過程時間軸 */
 .measure{margin:8px 0;border:1px solid var(--line);border-radius:10px;padding:6px 10px} .measure summary{cursor:pointer;font-weight:700;min-height:40px;display:flex;flex-wrap:wrap;align-items:center;gap:0 6px} /* 0.4.77 採收量測 */
 .vclose{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0} .vclose .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;margin:6px 0} .vclose .pgrid .btn2.small,.vclose .pgrid img{width:100%;margin:0} .mcard{list-style:none;padding:8px 10px;margin:6px 0;border:1px dashed var(--line);border-radius:8px;font-variant-numeric:tabular-nums} .mcard li{display:block;border:0;padding:1px 0;overflow-wrap:anywhere} /* 0.4.77 種植資料：結案照片格子＋量測卡 */
 .plbtns{display:flex;gap:8px;align-items:stretch;margin:6px 0} .plbtns #plWordBtn{flex:1;min-width:0;min-height:48px} .plbtns #plEditBtn{flex:0 0 auto;min-height:48px;padding:4px 12px} /* 0.4.77 種植資料：大按鈕 Word、小按鈕修改 */
@@ -561,6 +562,12 @@ footer{margin-top:18px;text-align:center}
       </label>
     </div>
     <div class="thumbs" id="thumbs"></div>
+    <!-- 0.4.78 董事長「要有前期的發芽、開花、結果、長大、採收、採收後、剖面圖」：農民拜訪有拍照時選這張照片是哪個生長階段（選填，依種植日期自動建議，可改） -->
+    <div class="fields" id="stageBox" hidden>
+      <label class="lab" for="vStage">生長階段（選填）<span class="my">ကြီးထွားမှု အဆင့် (မဖြည့်လည်းရ)</span></label>
+      <select id="vStage"><option value="">— 不選 မရွေး —</option><option value="發芽">發芽／အညှောက်ထွက်</option><option value="長大">長大／ကြီးထွား</option><option value="開花">開花／ပန်းပွင့်</option><option value="結果">結果／အသီးသီး</option><option value="採收">採收／ရိတ်သိမ်း</option><option value="採收後">採收後／ရိတ်သိမ်းပြီး</option><option value="剖面圖">剖面圖／ဖြတ်ပိုင်းပုံ</option></select>
+      <p class="sub" id="stageHint"></p>
+    </div>
     <!-- 0.4.44 董事長：資訊太多 → 錄音不常用，改成照片下面一顆小按鈕 -->
     <button type="button" class="big recsmall" id="recBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
