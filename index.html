@@ -105,6 +105,9 @@ li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px
 .ncchip[aria-pressed="true"]{border-color:var(--paddy);background:var(--paddy-soft)}
 .ncchip[disabled]{opacity:.55;cursor:default}
 .nclist{margin-top:8px}
+/* 0.4.82 執行任務清單兩欄：每一類一小區塊（標題帶人數），長名字可換行，375 寬不撐寬 */
+.todocol{min-width:0} .tcgrp{margin:0 0 10px} .tcgrp h3{font-size:1rem;margin:8px 0 4px} .tcgrp h3 .my{font-size:.75rem;font-weight:400;color:var(--muted);margin-left:4px}
+.tcgrp li{overflow-wrap:anywhere} .tcgrp li.go{cursor:pointer} .tcgrp li small{color:var(--muted)} .tcgrp .none{margin:0 0 4px;color:var(--muted)}
 .nclist li small{color:var(--muted)}
 .todoboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start} /* 0.4.63 主管任務｜我的進度 兩欄 */
 .tasksum{border:1.5px solid var(--paddy);border-radius:12px;padding:10px 12px;margin:6px 0 10px;background:var(--surface)}
@@ -183,6 +186,9 @@ li.plan>span:first-child{flex:1;min-width:0}
 .bar i{display:block;height:100%;background:var(--paddy)}
 .stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 .stat b{display:block;font-size:1.5rem;font-variant-numeric:tabular-nums}
+.stat{min-width:0;overflow-wrap:anywhere} .stat.go{cursor:pointer} .stat.go[aria-expanded="true"]{border-color:var(--paddy);background:var(--paddy-soft)} /* 0.4.82 新增客戶、試作兩格可點（375 寬不撐寬） */
+.stat .statsub{display:block;font-size:.78rem;color:var(--muted);line-height:1.35} .stat.go .sub::after{content:" ▾"}
+.stat b.two{font-size:.92rem;line-height:1.4} .stat b.two span{display:block} /* 試作、推廣各一行（375 寬太擠就自己換行，不撐寬） */
 /* 0.4.69「我的進度」介面優化（1號）：電腦寬度最多 760 置中；一排重點數字；農民清單點了就地展開進度；試作報告摺起來 */
 .mine{max-width:760px;margin:0 auto}
 .mstats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:4px 0 6px} /* 0.4.75 六格（五類＋本月拜訪）排 3 欄 2 列 */
@@ -222,6 +228,13 @@ header.homehdr{position:relative}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,env(safe-area-inset-bottom));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:1rem;max-width:90%;z-index:9}
 #loginForm{display:grid;gap:12px}
 .err{color:var(--chili)}
+/* 0.4.82 快採收提醒條（首頁最上面，紅色；375 寬不撐寬） */
+.hvbar{border:1.5px solid var(--chili);background:var(--chili-soft);border-radius:12px;padding:8px 10px;margin:4px 0 10px;min-width:0;overflow-wrap:anywhere}
+.hvhead{display:block;width:100%;text-align:left;border:0;background:none;color:var(--chili);font:inherit;font-weight:700;cursor:pointer;padding:4px 0;min-height:44px}
+.hvhead .my{display:block;font-weight:400;font-size:.8rem}
+.hvlist{list-style:none;margin:6px 0;padding:0} .hvlist li{display:block;border-bottom:1px solid var(--line);padding:8px 12px;cursor:pointer;overflow-wrap:anywhere} .hvlist li small{color:var(--muted)} /* display:block 蓋掉全站 li 的左右排（不然一位會擠成好幾欄） */
+.hvhide{border:1px solid var(--chili);background:var(--surface);color:var(--chili);border-radius:99px;font:inherit;font-size:.85rem;padding:4px 12px;min-height:36px;cursor:pointer} .hvhide .my{font-size:.7rem;margin-left:4px}
+.vage{font-weight:700;font-size:.85rem;overflow-wrap:anywhere} .vage.r{color:var(--chili)} .vage.y{color:var(--turmeric)} .vage.g{color:var(--paddy)} /* 0.4.82 多久沒回訪：≥10 天紅、5～9 天黃、0～4 天綠（字裡另有「久未回訪」等文字，不只靠顏色） */
 footer{margin-top:18px;text-align:center}
 </style>
 </head>
@@ -251,6 +264,13 @@ footer{margin-top:18px;text-align:center}
 <section id="home" hidden>
   <header class="homehdr"><h1>田間打卡<span class="my">လယ်ကွင်း မှတ်တမ်း</span></h1><span class="hdr"><button type="button" class="syncbadge" id="syncBadge" hidden></button><span class="sub" id="who"></span><button type="button" id="logoutBtn">登出<span class="my">ထွက်ရန်</span></button></span><!-- 0.4.75 董事長：登出搬到首頁右上角、看得清楚，按了也通知後台停用這支手機 -->
     <!-- 0.4.73 董事長「試作報告拿掉」：0.4.69 右上角「分享我的報告／觀看其他業務報告」兩顆入口拿掉 --></header>
+  <!-- 0.4.82 董事長「蔬菜快採收前 10 天要跳通知給業務、要到現場」（選「打開就跳提醒」，不做推播）：後台 home.harvestSoon 有人才出現；
+       點了展開清單、點一位開那位的田間打卡；「今天先收起」存在手機，隔天（或多了新的人）再跳 -->
+  <div class="hvbar" id="harvestBar" hidden>
+    <button type="button" class="hvhead" id="harvestHead" aria-expanded="false" aria-controls="harvestList"></button>
+    <ul class="hvlist" id="harvestList" hidden></ul>
+    <button type="button" class="hvhide" id="harvestHide">今天先收起<span class="my">ယနေ့ ပိတ်ထားမည်</span></button>
+  </div>
   <!-- 0.4.26 董事長 2026-11-12：首頁改成上方分頁標籤，一頁不要放太多東西（田間打卡／執行任務清單／指派任務／我的進度） -->
   <nav class="htabs" role="tablist" aria-label="首頁分頁">
     <button type="button" role="tab" id="htab-punch" data-htab="punch" aria-selected="true">田間打卡<span class="my">မှတ်တမ်း</span></button>
@@ -259,9 +279,9 @@ footer{margin-top:18px;text-align:center}
     <!-- 0.4.81 董事長：「我的進度」改名「月分工作進度」（緬文待校對；id、data-htab 不變） -->
     <button type="button" role="tab" id="htab-mine" data-htab="mine" aria-selected="false">月分工作進度<span class="my">လစဉ် လုပ်ငန်း တိုးတက်မှု</span></button>
     <!-- 0.4.60 董事長截圖：三顆結案按鈕搬到自己的「結案」分頁（我的進度和種植資料中間） -->
-    <!-- 0.4.77 董事長截圖：種植資料移到結案前面 -->
-    <button type="button" role="tab" id="htab-plant" data-htab="plant" aria-selected="false">種植資料<span class="my">စိုက်ပျိုးမှု</span></button>
+    <!-- 0.4.77 董事長截圖：種植資料移到結案前面；0.4.82 董事長：再換回來（結案在前、種植資料最後，等於 0.4.78 之前的順序） -->
     <button type="button" role="tab" id="htab-close" data-htab="close" aria-selected="false">結案<span class="my">ပိတ်သိမ်း</span></button>
+    <button type="button" role="tab" id="htab-plant" data-htab="plant" aria-selected="false">種植資料<span class="my">စိုက်ပျိုးမှု</span></button>
   </nav>
 
   <!-- 分頁 1 田間打卡：照手稿左卡「農民」、右卡「盤商或種子商」，點了直接進打卡畫面（2026-11-12 規劃 D＋優化 1），下面是上傳狀態 -->
@@ -291,16 +311,20 @@ footer{margin-top:18px;text-align:center}
   <!-- 分頁 2 執行任務清單：要去做的事（任務打勾＋回訪日程） -->
   <div class="hpanel" id="hp-todo" role="tabpanel" aria-labelledby="htab-todo" hidden>
   <!-- 0.4.63 董事長：指派任務＝主管派下來的任務；這頁要一邊看主管派的任務、一邊看自己的進度 → 左右兩欄（手機上下排） -->
+  <!-- 0.4.82 董事長截圖：改左右兩大欄（電腦左右、375 寬上下）。左＝五類自己負責的客戶名單（點一位去田間打卡）；
+       右＝主管已派發的任務（原「執行中任務」搬過來改名，功能不變）＋已開發的客戶（本月新增照五類直接列出，取代點了才看的 chips） -->
   <div class="todoboard">
-  <div class="todocol">
-  <!-- 0.4.75 董事長截圖：「主管指派的任務」改為「執行中任務」；業務新增的農民、種子商、盤商（本月新增客戶）也放在這一欄 -->
-  <h2>執行中任務<span class="my">လုပ်ဆောင်ဆဲ အလုပ်များ</span><span class="sub">主管派的任務：誰派、什麼時候派、做完沒；做完打勾／ပြီးလျှင် အမှန်ခြစ်ပါ</span></h2>
+  <div class="todocol" id="todoLeft">
+  <h2>我負責的客戶<span class="my">ကျွန်ုပ် တာဝန်ယူသော ဖောက်သည်</span><span class="sub">點一位去田間打卡／နှိပ်ပြီး ကွင်းဆင်းမှတ်တမ်း ရေးပါ</span></h2>
+  <div class="tcgrps" id="todoCust"></div>
+  </div>
+  <div class="todocol" id="todoRight">
+  <h2>主管已派發的任務<span class="my">မန်နေဂျာ ပေးထားသော အလုပ်များ</span><span class="sub">誰派、什麼時候派、做完沒；做完打勾／ပြီးလျှင် အမှန်ခြစ်ပါ</span></h2>
   <div class="tasksum" id="taskSummary"></div>
   <ul id="taskList"></ul>
-  <!-- 0.4.72 董事長：本月新增幾個一般農民、試作農民、推廣農民、盤商、種子商，詳細的要列出來（1號） -->
-  <h2>本月新增客戶<span class="my">ဤလ ဖောက်သည်အသစ်</span><span class="sub" id="newCustSum">點一類看是哪幾位／နှိပ်ပြီး ကြည့်ပါ</span></h2>
-  <div class="ncchips" id="newCustChips" role="group" aria-label="本月新增客戶分類"></div>
-  <ul class="nclist" id="newCustList" hidden></ul>
+  <!-- 0.4.72 董事長：本月新增幾個一般農民、試作農民、推廣農民、盤商、種子商，詳細的要列出來（1號）；0.4.82 改名「已開發的客戶」、五類直接列名字＋編號 -->
+  <h2>已開發的客戶<span class="my">ဖော်ထုတ်ပြီး ဖောက်သည်</span><span class="sub" id="newCustSum">本月新增的客戶／ဤလ ဖောက်သည်အသစ်</span></h2>
+  <div class="tcgrps" id="newCustList"></div>
   </div>
   <!-- 0.4.75 董事長截圖：右欄打叉拿掉——每月目標跟「我的進度」的「主管訂的目標」同一份，合成一份（todoPlan 拿掉，app.js 沒有這格就略過）；日程清單搬到「我的進度」 -->
   </div>
@@ -352,10 +376,12 @@ footer{margin-top:18px;text-align:center}
     <div class="months" id="monthChips"></div>
     <div class="stats">
       <div class="stat"><b id="statVisits">—</b><span class="sub">拜訪次數／သွားရောက်သည့် အကြိမ်</span></div>
-      <div class="stat"><b id="statNew">—</b><span class="sub">新增客戶／ဖောက်သည်အသစ်</span></div>
+      <!-- 0.4.82 董事長截圖：新增客戶、試作兩格要看得出是哪幾位、哪一類 → 後台有明細時整格可點，在兩排卡片下面展開（同時只開一格） -->
+      <div class="stat" id="statNewBox"><b id="statNew">—</b><span class="sub">新增客戶／ဖောက်သည်အသစ်</span><small class="statsub" id="statNewSub" hidden></small></div>
       <div class="stat"><b id="statCust">—</b><span class="sub">拜訪過的客戶／သွားခဲ့သော ဖောက်သည်</span></div>
-      <div class="stat"><b id="statTrials">—</b><span class="sub">試作 開始／完成<br>စမ်းသပ် စတင်／ပြီးဆုံး</span></div>
+      <div class="stat" id="statTrialBox"><b id="statTrials">—</b><span class="sub" id="statTrialsLab">試作 開始／完成<br>စမ်းသပ် စတင်／ပြီးဆုံး</span></div>
     </div>
+    <ul class="nclist" id="statDetail" hidden aria-live="polite"></ul>
     <p class="sub" id="statByCat"></p>
     <h3 class="msub">主管訂的目標<span class="my">လစဉ် ပစ်မှတ်</span></h3>
     <ul id="planList"></ul>
@@ -383,6 +409,12 @@ footer{margin-top:18px;text-align:center}
     <button type="button" data-closecat="結案" data-closegroup="一般農民">一般農民結案<span class="my">ပုံမှန် လယ်သမား</span></button>
     <button type="button" data-closecat="結案" data-closegroup="試作農民">試作農民結案<span class="my">စမ်းသပ် လယ်သမား</span></button>
     <button type="button" data-closecat="結案" data-closegroup="推廣農民">推廣農民結案<span class="my">မြှင့်တင် လယ်သမား</span></button>
+  </div>
+  <!-- 0.4.82 董事長截圖：第二排「盤商結案」「種子商結案」（同樣大小）。按了進那一類的拜訪畫面，只列自己負責的店家；
+       選了店家、按「有見到」直接走 0.4.76「已簽約」：簽約內容必填，送 closing {outcome:'簽約', note}，主管確認後結案 -->
+  <div class="farmermenu closepick" id="closePick2">
+    <button type="button" data-signclose="盤商">盤商結案<span class="my">ကုန်သည် ပိတ်သိမ်း</span></button>
+    <button type="button" data-signclose="種子商">種子商結案<span class="my">မျိုးစေ့ဆိုင် ပိတ်သိမ်း</span></button>
   </div>
   </div>
 

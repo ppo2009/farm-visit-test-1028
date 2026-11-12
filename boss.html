@@ -46,6 +46,7 @@ section h3{margin:16px 0 8px;font-size:1rem;display:flex;gap:8px;align-items:cen
    修：欄寬固定不超過畫面（minmax(0,1fr)）、每筆可縮；標籤改成能自己換行（短的照樣一整塊不拆開）。 */
 ul.list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
 ul.list li{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0;overflow-wrap:anywhere}
+ul.list li.hs-late{border-color:var(--chili);color:var(--chili)} /* 0.4.82 快採收待盯：已過預計採收日還沒結案＝紅字 */
 .pill{font-size:.75rem;font-weight:700;padding:1px 9px;border-radius:99px;display:inline-block;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 .p-red{background:var(--chili-soft);color:var(--chili)} .p-yel{background:var(--turmeric-soft);color:var(--turmeric)} .p-grn{background:var(--paddy-soft);color:var(--paddy)}
 .empty{color:var(--muted)}

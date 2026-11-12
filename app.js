@@ -41,6 +41,8 @@
     view: '', cat: '試作', photos: [], audio: null, audioSec: 0, rec: null, recTimer: null, gps: null,
     farmers: [], options: null, original: null, mustChange: false,
     homeMonth: '', // 首頁工作進度目前看哪個月
+    monthOpen: '', // 0.4.82 本月成績展開哪一格明細：'' / 'new' / 'trial'
+    harvestOpen: false, // 0.4.82 快採收提醒條展開了沒
     formGen: 0, // 每清一次表單就加一；非同步處理完的錄音、照片，世代不同就丟掉
     busyPhotos: 0 // 還在處理的照片張數；大於 0 時不能儲存，免得後面幾張被丟掉（2026-11-11 抓到）
   };
@@ -198,12 +200,24 @@
     if (days < 0) return { days: 0, pct: 0, future: true, full: false };
     return { days, pct: Math.min(100, Math.round(days / GROW_DAYS * 100)), future: false, full: days >= GROW_DAYS };
   }
-  const growLabel = g => (g ? `${g.pct}%` : '未填種植日期');
-  function growHtml(g) { // 進度條＋百分比＋第 N 天／150 天（跟「主管訂的目標」同一種進度條）
+  // 0.4.82 董事長「百分比改天數」：畫面只寫天數（pct 只拿來畫進度條）；未來＝還沒到種植日期、超過＝已滿 150 天、沒填＝未填種植日期
+  const growLabel = g => (!g ? '未填種植日期' : g.future ? '還沒到種植日期' : g.full ? `已滿 ${GROW_DAYS} 天` : `第 ${g.days} 天／${GROW_DAYS} 天`);
+  function growHtml(g) { // 進度條＋第 N 天／150 天（跟「主管訂的目標」同一種進度條）
     if (!g) return '<p class="sub">未填種植日期，算不出種植進度（到「種植資料」分頁補填）／စိုက်ပျိုးသည့်ရက် မဖြည့်ရသေး</p>';
-    return `<div class="grow"><span class="lab">種植進度 စိုက်ပျိုးမှု တိုးတက်မှု：<b>${g.pct}%</b>　${g.future ? '還沒到種植日期／မစိုက်ရသေး' : `第 ${g.days} 天／${GROW_DAYS} 天 <span class="my">ရက် ${g.days}／${GROW_DAYS}</span>`}${g.full ? `（已滿 ${GROW_DAYS} 天 <span class="my">ပြည့်</span>）` : ''}</span>`
+    return `<div class="grow"><span class="lab">種植進度 စိုက်ပျိုးမှု တိုးတက်မှု：${g.future ? '<b>還沒到種植日期</b>／မစိုက်ရသေး' : `<b>第 ${g.days} 天／${GROW_DAYS} 天</b> <span class="my">ရက် ${g.days}／${GROW_DAYS}</span>`}${g.full ? `（已滿 ${GROW_DAYS} 天 <span class="my">ပြည့်</span>）` : ''}</span>`
       + `<span class="bar"><i style="width:${g.pct}%"></i></span></div>`;
   }
+  /* 0.4.82 董事長「業務端客戶多久沒回訪要上色」：距最後拜訪日 10 天以上紅、5～9 天黃、0～4 天綠；從沒拜訪過＝紅「還沒拜訪」。
+     天數用緬甸日期（mmDay）；顏色之外一定有文字（久未回訪／快該回訪／最近有去），不能只靠顏色 */
+  const AGE_WORD = { r: '久未回訪', y: '快該回訪', g: '最近有去' };
+  function visitAge(lastVisit, today) {
+    const a = String(lastVisit || '').slice(0, 10), t = String(today || '').slice(0, 10);
+    const d = /^\d{4}-\d\d-\d\d$/.test(a) && /^\d{4}-\d\d-\d\d$/.test(t) ? Math.round((Date.parse(t) - Date.parse(a)) / 86400000) : NaN;
+    if (!isFinite(d)) return { days: null, lv: 'r', text: '還沒拜訪／မသွားရသေး' };
+    const n = Math.max(0, d), lv = n >= 10 ? 'r' : n >= 5 ? 'y' : 'g'; // 手機時間比後台慢、最後拜訪日看起來在明天：當 0 天
+    return { days: n, lv, text: `距上次拜訪 ${n} 天・${AGE_WORD[lv]}／ရက် ${n}` };
+  }
+  const visitAgeHtml = (lastVisit, today) => { const a = visitAge(lastVisit, today); return `<span class="vage ${a.lv}">${esc(a.text)}</span>`; };
   /** 農民分三類，跟結案 group 同一套（closeTrialGroup）：有進行中試作＝試作農民、推廣＝推廣農民、都沒有＝一般農民；盤商、種子商照類型 */
   async function mineGroupOf(f) {
     const type = f.type || '農民';
@@ -233,20 +247,22 @@
     if (typeof document.querySelectorAll === 'function') document.querySelectorAll('#mineType [data-mtype]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mtype === mtype)));
     const isFarmer = FARMER_GROUPS.indexOf(mtype) >= 0;
     const keep = sel.value;
-    sel.innerHTML = `<option value="">— 選一位${mtype} ${MINE_TYPES[mtype]} ရွေးပါ —</option>` + list.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}${isFarmer ? '｜' + esc(growLabel(growOfId[f.id])) : ''}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`).join('');
+    sel.innerHTML = `<option value="">— 選一位${mtype} ${MINE_TYPES[mtype]} ရွေးပါ —</option>` + list.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}${isFarmer ? '｜' + esc(growLabel(growOfId[f.id])) : ''}｜${esc(visitAge(f.lastVisit, today).text.split('／')[0])}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`).join(''); // 0.4.82 選項加「距上次拜訪 N 天」（選項不能上色，靠文字）
     sel.value = keep && list.some(f => f.id === keep) ? keep : '';
     sel.disabled = !list.length;
     state.mineGrow = growOfId;
+    state.mineGroupOf = groupOf; // 0.4.82 執行任務清單左欄用同一套分類
     if (!sel.value) { const b = $n('closeProgress'); b.hidden = true; b.innerHTML = ''; const hb = $n('closeHistory'); hb.hidden = true; hb.innerHTML = ''; hb._tok = null; const gb = $n('closeGrow'); gb.hidden = true; gb.innerHTML = ''; }
     $n('closeFarmerCount').textContent = list.length ? `共 ${list.length} 位${mtype}，從下拉選一位看進度和過往拜訪紀錄（照片、錄音）／${list.length} ဦး၊ ရွေးပြီး ကြည့်ပါ`
       : `還沒有自己負責的${mtype}／${MINE_TYPES[mtype]} မရှိသေး`;
     // 「主管訂的目標」底下：農民種植進度（三類都列，百分比由高到低；沒填種植日期排最後）
     const gl = document.getElementById('growList');
     if (gl) {
-      const farmers = state.closeList.slice().sort((a, b) => { const ga = growOfId[a.id], gb = growOfId[b.id]; return (gb ? gb.pct : -1) - (ga ? ga.pct : -1); });
+      const dayKey = g => (!g ? -2 : g.future ? -1 : g.days); // 0.4.82 照天數排：天數多的在前，還沒到種植日期其次，沒填最後
+      const farmers = state.closeList.slice().sort((a, b) => dayKey(growOfId[b.id]) - dayKey(growOfId[a.id]));
       gl.innerHTML = farmers.map(f => { const g = growOfId[f.id];
         return `<li class="plan"><span>${esc(f.name)}<br><small>${esc(groupOf[f.id])}・${g ? (g.future ? '還沒到種植日期／မစိုက်ရသေး' : `第 ${g.days} 天／${GROW_DAYS} 天（ရက် ${g.days}）`) : '未填種植日期／ရက် မဖြည့်ရ'}</small><span class="bar"><i style="width:${g ? g.pct : 0}%"></i></span></span>`
-          + `${!g ? '<span class="pill wait">未填 မဖြည့်ရ</span>' : g.full ? `<span class="pill ok">已滿 ${GROW_DAYS} 天 ပြည့်</span>` : `<span class="pill wait">${g.pct}%</span>`}</li>`; }).join('')
+          + `${!g ? '<span class="pill wait">未填 မဖြည့်ရ</span>' : g.full ? `<span class="pill ok">已滿 ${GROW_DAYS} 天 ပြည့်</span>` : g.future ? '<span class="pill wait">還沒到種植日期</span>' : `<span class="pill wait">第 ${g.days} 天</span>`}</li>`; }).join('')
         || '<li class="empty">還沒有自己負責的農民／လယ်သမား မရှိသေး</li>';
     }
   }
@@ -639,34 +655,132 @@
   /* ───── 0.4.72 董事長「執行任務清單：新增幾個一般農民、試作農民、推廣農民、盤商、種子商，詳細的要列出來」（1號）─────
      後台 home.newList＝本月自己新增的客戶（已分好類）；五格各幾位，點一格展開那一類的明細（名字、鎮・村・地區、新增日期），再點收起 */
   const NEW_GROUPS = [['一般農民', 'ပုံမှန် လယ်သမား'], ['試作農民', 'စမ်းသပ် လယ်သမား'], ['推廣農民', 'မြှင့်တင် လယ်သမား'], ['盤商', 'ကုန်သည်'], ['種子商', 'မျိုးစေ့ဆိုင်']];
+  /** 0.4.82 執行任務清單這一頁的五類名稱（董事長截圖用字：一般農戶）；其他頁照舊叫一般農民 */
+  const TODO_LABEL = g => (g === '一般農民' ? '一般農戶' : g);
+  // 0.4.75 董事長「農民改鎮跟村」：鎮放前面（town＝鎮、village＝村）
+  const placeOf = c => { const place = [c.town, c.village, c.area ? String(c.area).split(/[ （(]/)[0] : ''].filter(Boolean).join('・'); return place; };
+  /** 一類一小區塊：標題帶人數，沒有就寫「沒有」 */
+  const tcGroupHtml = (g, my, items) => `<section class="tcgrp"><h3>${esc(TODO_LABEL(g))}（${items.length}）<span class="my">${esc(my)}</span></h3>`
+    + (items.length ? `<ul>${items.join('')}</ul>` : '<p class="sub none">沒有／မရှိ</p>') + '</section>';
+  /** 0.4.82 右欄「已開發的客戶」：本月新增照五類直接列出名字＋客戶編號（取代 0.4.72 點了才看的 chips） */
   function renderNewCust(h) {
-    const chips = document.getElementById('newCustChips'), ul = document.getElementById('newCustList');
-    if (!chips || !ul) return; // 舊頁面沒有這一塊
+    const box = document.getElementById('newCustList');
+    if (!box) return; // 舊頁面沒有這一塊
     const list = h && Array.isArray(h.newList) ? h.newList : null;
     const sum = document.getElementById('newCustSum');
     if (!list) { // 還沒同步過，或後台還是舊版（只有總數）
-      chips.innerHTML = ''; ul.hidden = true; ul.innerHTML = '';
+      box.innerHTML = '';
       if (sum) sum.textContent = h ? `本月新增 ${h.newCustomers == null ? '—' : h.newCustomers} 位（明細要等後台更新）／အသေးစိတ် နောက်မှ` : '連上網路後會顯示／အင်တာနက်ချိတ်ပြီးမှ ပြမည်';
       return;
     }
-    const count = g => list.filter(c => c.group === g).length;
-    if (!NEW_GROUPS.some(([g]) => g === state.ncGroup && count(g))) state.ncGroup = ''; // 選的那類這個月沒有了：收起
-    if (sum) sum.textContent = `本月共 ${list.length} 位，點一類看是哪幾位／${list.length} ဦး၊ နှိပ်ပြီး ကြည့်ပါ`;
-    chips.innerHTML = NEW_GROUPS.map(([g, my]) => { const n = count(g);
-      return `<button type="button" class="ncchip" data-ncg="${esc(g)}" aria-pressed="${state.ncGroup === g}"${n ? '' : ' disabled'}><b>${n}</b><span>${esc(g)}<span class="my">${esc(my)}</span></span></button>`; }).join('');
-    const shown = state.ncGroup ? list.filter(c => c.group === state.ncGroup) : [];
-    ul.hidden = !shown.length;
-    // 0.4.75 董事長「農民改鎮跟村」：鎮放前面（town＝鎮、village＝村）
-    ul.innerHTML = shown.map(c => { const place = [c.town, c.village, c.area ?String(c.area).split(/[ （(]/)[0] : ''].filter(Boolean).join('・');
-      return `<li><span><b>${esc(c.name || '（未命名）')}</b>${place ? '｜' + esc(place) : ''}<br><small>${esc(c.group)}・${esc(String(c.date || '').slice(5).replace('-', '/'))} 新增 အသစ်</small></span></li>`; }).join('');
-    chips.querySelectorAll('[data-ncg]').forEach(b => b.addEventListener('click', () => { state.ncGroup = state.ncGroup === b.dataset.ncg ? '' : b.dataset.ncg; renderNewCust(h); }));
+    if (sum) sum.textContent = `本月新增共 ${list.length} 位／ဤလ ဖောက်သည်အသစ် ${list.length} ဦး`;
+    box.innerHTML = NEW_GROUPS.map(([g, my]) => tcGroupHtml(g, my, list.filter(c => c.group === g).map(c => { const place = placeOf(c);
+      return `<li><span><b>${esc(c.name || '（未命名）')}</b>｜${esc(c.id || '')}${place ? '｜' + esc(place) : ''}<br><small>${esc(String(c.date || '').slice(5).replace('-', '/'))} 新增 အသစ်</small></span></li>`; }))).join('');
+  }
+  /** 0.4.82 左欄「我負責的客戶」：五類（分類同月分工作進度 mineGroupOf），列「名字｜客戶編號｜鎮・村」，點一位開那位的田間打卡（openFromList 鎖類別） */
+  const TODO_GROUPS = [['一般農民', 'ပုံမှန် လယ်သမား'], ['試作農民', 'စမ်းသပ် လယ်သမား'], ['推廣農民', 'မြှင့်တင် လယ်သမား'], ['盤商', 'ကုန်သည်'], ['種子商', 'မျိုးစေ့ဆိုင်']];
+  function renderTodoCust() {
+    const box = document.getElementById('todoCust');
+    if (!box) return; // 舊頁面沒有這一塊
+    const all = state.mineAll || [], gOf = state.mineGroupOf || {};
+    box.innerHTML = TODO_GROUPS.map(([g, my]) => tcGroupHtml(g, my, all.filter(f => gOf[f.id] === g).map(f => { const tv = [f.town, f.village].filter(Boolean).join('・');
+      return `<li class="go" data-id="${esc(f.id)}" data-type="${esc(f.type || '農民')}" role="button" tabindex="0"><span><b>${esc(f.name || '（未命名）')}</b>｜${f.pending ? '（新，未上傳 မတင်ရသေး）' : esc(f.id)}${tv ? '｜' + esc(tv) : ''}</span></li>`; }))).join('');
+    box.querySelectorAll('li.go').forEach(li => {
+      li.onclick = () => openFromList(li.dataset.id, li.dataset.type);
+      li.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFromList(li.dataset.id, li.dataset.type); } };
+    });
+  }
+
+  /* ───── 0.4.82 董事長截圖「本月成績」：新增客戶看得出是哪幾位、哪一類；試作分出試作、推廣，是哪位農民 ─────
+     後台每個月給 newList（同 home.newList）、trialList（{trialId, cid, name, cat 試作／推廣, kind 開始／完成, date, item, outcome}）；
+     有明細：新增客戶那格多一行分類計數、試作那格改兩行，整格可點，在兩排卡片下面展開（同時只開一格，再點收起，跟著月份切換）；
+     舊後台沒有明細：照舊只有數字、不能點 */
+  const md = d => String(d || '').slice(5).replace('-', '/');
+  function monthDetailHtml(kind, cur) {
+    if (kind === 'new') return (cur.newList || []).map(c => { const place = [c.town, c.village, c.area ? String(c.area).split(/[ （(]/)[0] : ''].filter(Boolean).join('・');
+      return `<li><span><b>${esc(c.name || '（未命名）')}</b>${place ? '｜' + esc(place) : ''}<br><small>${esc(c.group || '')}・${esc(md(c.date))} 新增 အသစ်</small></span></li>`; }).join('')
+      || '<li class="empty">這個月沒有新增客戶／ဖောက်သည်အသစ် မရှိ</li>';
+    return (cur.trialList || []).map(t => `<li><span><b>${esc(t.name || '（未命名）')}</b>｜${esc(catBi(t.cat === '推廣' ? '推廣' : '試作'))}<br>`
+      + `<small>${t.kind === '完成' ? '完成 ပြီးဆုံး' : '開始 စတင်'}・${esc(md(t.date))}${t.item ? '｜' + esc(t.item) : ''}${t.outcome ? '｜結果 ရလဒ်：' + esc(t.outcome) : ''}</small></span></li>`).join('')
+      || '<li class="empty">這個月沒有開始或完成的試作、推廣／မရှိ</li>';
+  }
+  function renderMonthDetail(cur) {
+    const nb = document.getElementById('statNewBox'), tb = document.getElementById('statTrialBox'), ul = document.getElementById('statDetail');
+    if (!nb || !tb || !ul) return; // 舊頁面沒有這一塊
+    const has = { new: !!cur && Array.isArray(cur.newList), trial: !!cur && Array.isArray(cur.trialList) };
+    if (!has[state.monthOpen]) state.monthOpen = ''; // 換到沒有明細的月份（或舊後台）：收起
+    // 新增客戶：數字下面一行分類計數（只列有的類）
+    const sub = $n('statNewSub');
+    if (has.new) { const cnt = NEW_GROUPS.map(([g]) => [g, cur.newList.filter(c => c.group === g).length]).filter(([, n]) => n);
+      sub.textContent = cnt.map(([g, n]) => `${g} ${n}`).join('・'); sub.hidden = !cnt.length; } else { sub.textContent = ''; sub.hidden = true; }
+    // 試作：兩行「試作 開始 n／完成 n」「推廣 開始 n／完成 n」
+    const tr = $n('statTrials'), lab = $n('statTrialsLab');
+    if (has.trial) {
+      const n = (cat, kind) => cur.trialList.filter(t => (t.cat === '推廣' ? '推廣' : '試作') === cat && t.kind === kind).length;
+      tr.className = 'two';
+      tr.innerHTML = ['試作', '推廣'].map(c => `<span>${c} 開始 ${n(c, '開始')}／完成 ${n(c, '完成')}</span>`).join('');
+      lab.innerHTML = '試作、推廣 開始／完成<br>စမ်းသပ်・မြှင့်တင် စတင်／ပြီးဆုံး';
+    } else { tr.className = ''; lab.innerHTML = '試作 開始／完成<br>စမ်းသပ် စတင်／ပြီးဆုံး'; } // 數字照舊由 renderHome 寫
+    [['new', nb], ['trial', tb]].forEach(([k, box]) => {
+      const on = has[k];
+      box.classList.toggle('go', on);
+      if (on) { box.setAttribute('role', 'button'); box.tabIndex = 0; box.setAttribute('aria-expanded', String(state.monthOpen === k)); }
+      else { box.removeAttribute('role'); box.removeAttribute('tabindex'); box.removeAttribute('aria-expanded'); }
+      const toggle = () => { if (!on) return; state.monthOpen = state.monthOpen === k ? '' : k; renderMonthDetail(cur); };
+      box.onclick = toggle; // 用 onclick（不是 addEventListener）：renderHome 常重畫，不會疊好幾個
+      box.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
+    });
+    ul.hidden = !state.monthOpen;
+    ul.innerHTML = state.monthOpen ? monthDetailHtml(state.monthOpen, cur) : '';
+  }
+
+  /* ───── 0.4.82 董事長「蔬菜快採收前 10 天要跳通知給業務、要到現場」（選「打開就跳提醒」，不做推播）─────
+     後台 home.harvestSoon＝[{cid, name, crop, plantDate, harvestDate, daysLeft, lastVisit, overdue}]（自己負責、0～10 天內或已過採收日還沒結案）
+     首頁最上面紅色提醒條「X 位農民快採收，請到現場」，點了展開清單，點一位開那位的田間打卡；
+     「今天先收起」記在手機（哪一天、哪個帳號、當時有誰），隔天、換人、或多了新的人就再跳；舊後台沒這欄就不顯示 */
+  /** 要不要跳：有人、而且今天這個帳號沒收起過（或收起後多了新的人） */
+  function harvestShow(list, seen, account, today) {
+    if (!Array.isArray(list) || !list.length) return false;
+    if (!seen || seen.day !== today || seen.account !== account) return true;
+    const ids = seen.ids || [];
+    return list.some(x => ids.indexOf(String(x.cid)) < 0);
+  }
+  function harvestItemHtml(x) {
+    const left = Number(x.daysLeft);
+    const when = x.overdue || left < 0 ? `<b class="vage r">已過採收日 ${Math.abs(left)} 天</b>` : left === 0 ? '<b class="vage r">今天採收</b>' : `<b class="vage ${left <= 3 ? 'r' : 'y'}">剩 ${left} 天</b>`;
+    return `<li data-cid="${esc(x.cid)}"><b>${esc(x.name || '（未命名）')}</b>${x.crop ? '｜' + esc(x.crop) : ''}<br>`
+      + `<small>預計採收 ရိတ်သိမ်းမည့်ရက် ${esc(String(x.harvestDate || '').slice(5).replace('-', '/'))}</small>・${when}<br>`
+      + `<small>最後拜訪 ${x.lastVisit ? esc(String(x.lastVisit).slice(5).replace('-', '/')) : '還沒拜訪'}</small></li>`;
+  }
+  async function renderHarvest(h) {
+    const bar = document.getElementById('harvestBar');
+    if (!bar) return; // 舊頁面沒有這一塊
+    const list = h && Array.isArray(h.harvestSoon) ? h.harvestSoon : null; // 舊後台沒有這欄：不顯示
+    const cfg = (await getConfig()) || {}, today = mmDay(0);
+    const seen = await Store.getMeta('harvestSeen');
+    if (!harvestShow(list, seen, String(cfg.account || ''), today)) { bar.hidden = true; return; }
+    bar.hidden = false;
+    const head = $n('harvestHead'), ul = $n('harvestList');
+    head.innerHTML = `⚠ ${list.length} 位農民快採收，請到現場${state.harvestOpen ? '　▴' : '　▾'}<span class="my">လယ်သမား ${list.length} ဦး ရိတ်သိမ်းခါနီး၊ ကွင်းဆင်းပါ</span>`;
+    head.setAttribute('aria-expanded', String(!!state.harvestOpen));
+    ul.hidden = !state.harvestOpen;
+    ul.innerHTML = state.harvestOpen ? list.map(harvestItemHtml).join('') : '';
+    ul.querySelectorAll('li[data-cid]').forEach(li => { li.onclick = () => openFromList(li.dataset.cid, '農民'); });
+    head.onclick = () => { state.harvestOpen = !state.harvestOpen; renderHarvest(h); }; // onclick：重畫不會疊好幾個
+    $n('harvestHide').onclick = async () => {
+      await Store.setMeta('harvestSeen', { day: today, account: String(cfg.account || ''), ids: list.map(x => String(x.cid)) });
+      state.harvestOpen = false; bar.hidden = true;
+    };
   }
 
   async function renderHome() {
     const h = (await Store.getMeta('home')) || null;
+    await renderHarvest(h); // 0.4.82 快採收提醒條
     const today = await phoneToday(h);
     const list = (h ? h.schedule : []).map(s => Object.assign({}, s, { late: s.due < today })); // 逾期用手機的今天重算
-    $('scheduleList').innerHTML = list.map(s => `<li class="go" data-id="${esc(s.id)}" data-type="${esc(s.type)}"><span>${esc(s.name)}<br><small>${esc(catBi(s.type || '農民'))}・應回訪 ပြန်သွားရန် ${esc(s.due.slice(5).replace('-', '/'))}</small></span>${s.late ? '<span class="pill late">逾期 ရက်ကျော်</span>' : s.due === today ? '<span class="pill wait">今天 ယနေ့</span>' : ''}</li>`).join('')
+    const lastOf = {}; ((await Store.getMeta('farmers')) || []).forEach(f => { lastOf[f.id] = f.lastVisit; }); // 0.4.82 日程那列加「距上次拜訪 N 天」（farmers 的 lastVisit）
+    const soon = {}; ((h && Array.isArray(h.harvestSoon)) ? h.harvestSoon : []).forEach(x => { soon[x.cid] = true; }); // 0.4.82 日程裡快採收的人加標籤
+    $('scheduleList').innerHTML = list.map(s => `<li class="go" data-id="${esc(s.id)}" data-type="${esc(s.type)}"><span>${esc(s.name)}<br><small>${esc(catBi(s.type || '農民'))}・應回訪 ပြန်သွားရန် ${esc(s.due.slice(5).replace('-', '/'))}</small><br>${visitAgeHtml(lastOf[s.id], today)}${soon[s.id] ? ' <span class="pill late">快採收 ရိတ်သိမ်းခါနီး</span>' : ''}</span>${s.late ? '<span class="pill late">逾期 ရက်ကျော်</span>' : s.due === today ? '<span class="pill wait">今天 ယနေ့</span>' : ''}</li>`).join('')
       || `<li class="empty">${h ? '這 7 天沒有排到回訪／၇ ရက်အတွင်း သွားရန် မရှိ' : '連上網路後會顯示／အင်တာနက်ချိတ်ပြီးမှ ပြမည်'}</li>`;
     $('scheduleList').querySelectorAll('li.go').forEach(li => li.addEventListener('click', () => {
       openFromList(li.dataset.id, li.dataset.type); // 0.4.63 從清單進來也鎖死類別（先算好是一般／試作／推廣）
@@ -674,12 +788,13 @@
     await renderTasks();
     await renderMyTrials(h);
     await fillCloseFarmers();
+    renderTodoCust(); // 0.4.82 執行任務清單左欄：五類自己負責的客戶
     fillPlantFarmers(); // 0.4.59 種植資料分頁共用同一份「自己負責的農民」
     renderReports(); // 0.4.61 試作報告：按過「看試作報告」才有清單，首頁重畫時照舊顯示
     // 月計劃（2C）
     const plan = (h && h.plan) || [];
     $('planList').innerHTML = plan.map(p => `<li class="plan"><span>${esc(p.label)}<br><small>${esc(p.period)}　${p.done}／${p.target}</small>
-      <span class="bar"><i style="width:${Math.max(0, Math.min(100, p.pct))}%"></i></span></span>${p.done >= p.target ? '<span class="pill ok">達成 ပြည့်မီ</span>' : `<span class="pill wait">${p.pct}%</span>`}</li>`).join('')
+      <span class="bar"><i style="width:${Math.max(0, Math.min(100, p.pct))}%"></i></span></span>${p.done >= p.target ? '<span class="pill ok">達成 ပြည့်မီ</span>' : `<span class="pill wait">${esc(String(p.done))}／${esc(String(p.target))}</span>`}</li>`).join('') /* 0.4.82 董事長：不顯示 %，只留 done／target；進度條保留 */
       || `<li class="empty">${h && h.plan ? '這個月沒有訂目標／ဤလ ပစ်မှတ် မရှိ' : '連上網路後會顯示／အင်တာနက်ချိတ်ပြီးမှ ပြမည်'}</li>`; // 舊版留下的首頁資料沒有計劃欄，不能說成沒有目標（第五輪自抓）
     // 0.4.63 執行任務清單右欄「我的進度」：本月拜訪次數＋月計劃（跟我的進度分頁同一份）
     const tp = document.getElementById('todoPlan');
@@ -696,6 +811,7 @@
     $('statNew').textContent = cur ? cur.newCustomers : (h ? h.newCustomers : '—');
     $('statCust').textContent = cur ? cur.customersVisited : '—';
     $('statTrials').textContent = cur ? `${cur.trialsStarted}／${cur.trialsEnded}` : '—';
+    renderMonthDetail(cur); // 0.4.82 新增客戶、試作兩格的分類和明細（舊後台沒有明細就照舊）
     const bc = cur ? cur.byCategory : (h && h.byCategory) || {};
     $('statByCat').textContent = Object.keys(bc || {}).length ? '類別 အမျိုးအစား：' + Object.entries(bc).map(([k, n]) => `${catBi(k)} ${n} 次`).join('、') : '';
     if (h && h.syncedAt) { const d = new Date(h.syncedAt); $('homeSynced').textContent = `（${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())} 更新 အပ်ဒိတ်）`; }
@@ -991,6 +1107,7 @@
     // 0.4.47 董事長「一般拜訪農民的時候，試作農民跟推廣農民要鎖死」：只鎖從首頁選一般拜訪進來的；任務、客戶清單進來的照舊（有進行中的試作會自動切過去）
     state.catLocked = !!state.lockNext && ['農戶', '試作', '推廣', '盤商', '種子商'].indexOf(cat) >= 0; state.lockNext = false; // 0.4.53 盤商、種子商也鎖
     if (state.catLocked) state.catManual = true; // 鎖死就不自動切到試作
+    state.signOnly = !!state.signNext; state.signNext = false; // 0.4.82 結案分頁的盤商、種子商結案：只走「已簽約」
     applyCatLabels();
     resetForm();
     await loadOptions();
@@ -1015,7 +1132,8 @@
     let mine = all.filter(f => types.indexOf(f.type || '農民') >= 0);
     // 0.4.33 董事長：怕業務結案按錯 →「結案」只列自己負責的農民（手機剛新增還沒上傳的也算自己的）；其他類別照舊全部列
     // 0.4.64（2號 0.4.63 清單中#2）：從結案分頁進來的盤商、種子商結案也只列自己負責的（跟農民結案同一規則；後台也會擋）
-    if (state.cat === '結案' || (state.closeOnly && isDealerCat())) { const me = String(((await getConfig()) || {}).name || ''); mine = mine.filter(f => f.pending || String(f.staff || '') === me); }
+    if (state.cat === '結案') { const me = String(((await getConfig()) || {}).name || ''); mine = mine.filter(f => f.pending || String(f.staff || '') === me); }
+    else if (state.closeOnly && isDealerCat()) { const me = String(((await getConfig()) || {}).name || ''); mine = mine.filter(f => f.pending || !String(f.staff || '') || String(f.staff) === me); } // 0.4.82 盤商、種子商結案：負責業務空白照舊算可以（同 dealerIsMine、後台 ownDc）
     // 業務BUG#3（1號）：結案（農民結案、從結案分頁進來的盤商／種子商結案）不能新增客戶，選單不放「＋新增」
     const closing = state.cat === '結案' || !!state.dealerClose || (state.closeOnly && isDealerCat());
     const optOf = f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}${f.crop ? '｜' + esc(f.crop) : ''}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`;
@@ -1168,11 +1286,13 @@
     // 第8任（1號提醒 dayOf）：改用緬甸日期 mmDay，手機時區不是緬甸也不會差一天（跟伺服器的日期同一把尺）
     const dayOf = ms => mmDay(0, ms || 0);
     const recent = remote ? remote : local.map(v => ({ time: dayOf(v.deviceTime), staff: '我', cat: CAT_LABEL(v.category || ''), text: v.text || '', plantFail: '', closing: '' }));
-    if (o.home && !c.lastVisit && !trials.length && !recent.length) { box.innerHTML = H3 + `<p>這位${c.type && c.type !== '農民' ? '客戶' : '農民'}還沒有拜訪紀錄。<br>` + '<span class="my">မှတ်တမ်း မရှိသေး</span></p>'; return; }
+    // 0.4.82 多久沒回訪：後台的最後拜訪日、這支手機剛打（還沒同步）的，取比較新的那天
+    const age = `<p class="sub">${visitAgeHtml([c.lastVisit, local[0] ? dayOf(local[0].deviceTime) : ''].filter(Boolean).sort().pop(), mmDay(0))}</p>`;
+    if (o.home && !c.lastVisit && !trials.length && !recent.length) { box.innerHTML = H3 + age + `<p>這位${c.type && c.type !== '農民' ? '客戶' : '農民'}還沒有拜訪紀錄。<br>` + '<span class="my">မှတ်တမ်း မရှိသေး</span></p>'; return; }
     if (!c.lastVisit && !trials.length && !recent.length) {
       // 沒有任何進度：跳出新增（補齊）農民資料
-      box.innerHTML = SHOW_PROFILE_ON_VISIT ? H3 + '<p>這位農民還沒有拜訪紀錄，請先把下面的農民資料填完整（跟新增農民一樣）。<br><span class="my">မှတ်တမ်း မရှိသေး၊ လယ်သမား အချက်အလက် ဖြည့်ပါ</span></p>'
-        : H3 + '<p>這是第一次拜訪這位客戶。<br><span class="my">ပထမဆုံး သွားရောက်မှု</span></p>'; // 0.4.48
+      box.innerHTML = SHOW_PROFILE_ON_VISIT ? H3 + age + '<p>這位農民還沒有拜訪紀錄，請先把下面的農民資料填完整（跟新增農民一樣）。<br><span class="my">မှတ်တမ်း မရှိသေး၊ လယ်သမား အချက်အလက် ဖြည့်ပါ</span></p>'
+        : H3 + age + '<p>這是第一次拜訪這位客戶。<br><span class="my">ပထမဆုံး သွားရောက်မှု</span></p>'; // 0.4.48
       $('profileBox').open = true;
       $('profileTitle').textContent = '補齊農民資料（還沒有拜訪紀錄）／လယ်သမား အချက်အလက် ဖြည့်ရန်';
       return;
@@ -1185,7 +1305,7 @@
     // 0.4.44 只露最近一次拜訪，其他收進「看更早的」
     const vItems = vs ? vs.split('</li>').filter(Boolean).map(x => x + '</li>') : [];
     const more = vItems.length > 1 ? `<details><summary>看更早的 ${vItems.length - 1} 筆／ယခင်များ</summary><ul>${vItems.slice(1).join('')}</ul></details>` : '';
-    box.innerHTML = `${H3}${head ? `<p class="sub">${head}</p>` : ''}${tr ? `<ul>${tr}</ul>` : ''}` +
+    box.innerHTML = `${H3}${age}${head ? `<p class="sub">${head}</p>` : ''}${tr ? `<ul>${tr}</ul>` : ''}` +
       (vItems.length ? `<p class="sub">上次拜訪${remote ? '' : '（沒網路，只有這支手機記的）'}：</p><ul>${vItems[0]}</ul>${more}` : '');
   }
 
@@ -1338,6 +1458,7 @@
     const lab = $n('dcSignedLab'), cb = $n('dcSigned');
     lab.hidden = !dealerSignShown();
     $n('dcSignNote').hidden = !(dealerSignBase() && !dealerIsMine()); // 0.4.80 別人負責的：說清楚為什麼沒有「已簽約」
+    if (state.signOnly) { cb.checked = !lab.hidden; cb.disabled = true; } else cb.disabled = false; // 0.4.82 結案分頁進來：有見到就自動勾「已簽約」、不能取消（一定走簽約）
     if (lab.hidden) cb.checked = false; // 換成農民、沒見到、換人：勾選一起取消
     if (state.dealerClose) return; // 舊的結案模式自己管結案框
     const on = dealerSignOn();
@@ -1481,6 +1602,18 @@
       if (closePlantFailOn() && !closeTrialFailed()) { const fm = failMissing(); if (fm.length) return `種植失敗要填：${fm.join('、')}／မအောင်မြင်မှု မှတ်တမ်း မပြည့်စုံသေး`; }
     }
     return '';
+  }
+  /** 0.4.82 結案分頁的盤商結案／種子商結案：沒有自己負責的那一類就只提示；有就打開那一類的拜訪畫面（結案、只走已簽約） */
+  async function signCloseOpen(cat) {
+    if (cat !== '盤商' && cat !== '種子商') return;
+    const me = String(((await getConfig()) || {}).name || '');
+    const all = ((await Store.getMeta('farmers')) || []).concat((await Store.getMeta('localCustomers')) || []);
+    if (!all.some(f => (f.type || '') === cat && (f.pending || !String(f.staff || '') || String(f.staff) === me))) {
+      toast(`你沒有負責的${cat}／${cat === '盤商' ? 'ကုန်သည်' : 'မျိုးစေ့ဆိုင်'} မရှိပါ`); return;
+    }
+    state.closeGroup = ''; state.closeNext = true; state.signNext = true; state.lockNext = true;
+    await openVisit(cat);
+    refreshDealerSign(); refreshSave();
   }
   function collectClosing() {
     if (state.dealerClose) return { outcome: $n('dcOutcome').value, note: $n('dcNote').value.trim() }; // 0.4.42 盤商、種子商
@@ -1870,10 +2003,11 @@
     const hasContent = noMeetOn() || state.photos.length || state.audio || $('note').value.trim() || collectPrices().length || state.trialMode || ((state.cat === '結案' || state.dealerClose || dealerSignOn()) && !closeProblem()) || (sel && sel !== '__new' && collectProfile());
     $('note').placeholder = noteExample().join('\n'); // 範例跟著農民進度換
     const tp = noMeetProblem() || trialProblem() || closeProblem() || priceProblem() || profileProblem();
-    const ok = sel && nameOk && !state.rec && !state.busyPhotos && !tp && (isNew || hasContent) && !state.saving; // 業務BUG#4：存檔途中（等定位最多 15 秒）不能再按
+    const signNeed = !!state.signOnly && !dealerSignOn(); // 0.4.82 結案分頁的盤商、種子商結案：一定要走「已簽約」才能送（沒見到、還沒按有見到都不能存）
+    const ok = sel && nameOk && !state.rec && !state.busyPhotos && !tp && (isNew || hasContent) && !signNeed && !state.saving; // 業務BUG#4：存檔途中（等定位最多 15 秒）不能再按
     $('saveBtn').disabled = !ok;
     // 2號 0.4.69 低7（第8任）：存檔中按鈕停用時，提示原本落到「至少做一樣」→ 先說存檔中
-    $('saveHint').textContent = !sel ? '' : state.saving ? '存檔中，請稍等…／သိမ်းနေသည်' : !nameOk ? '請先填名字／အမည် အရင်ဖြည့်ပါ' : state.rec ? '錄音中，先按一下結束錄音／အသံသွင်းနေသည်၊ အရင် ရပ်ပါ' : state.busyPhotos ? `照片處理中（還有 ${state.busyPhotos} 張）… ဓာတ်ပုံ ပြင်ဆင်နေ` : tp ? tp : !ok ? `拍照、上傳照片、錄音、打字${state.cat === '盤商' ? '、記價格' : ''}${$('farmer').value === '__new' || SHOW_PROFILE_ON_VISIT ? '（或改客戶資料）' : ''}至少做一樣／ဓာတ်ပုံ၊ အသံ၊ စာ တစ်ခုခု လုပ်ပါ` : '';
+    $('saveHint').textContent = !sel ? '' : state.saving ? '存檔中，請稍等…／သိမ်းနေသည်' : !nameOk ? '請先填名字／အမည် အရင်ဖြည့်ပါ' : state.rec ? '錄音中，先按一下結束錄音／အသံသွင်းနေသည်၊ အရင် ရပ်ပါ' : state.busyPhotos ? `照片處理中（還有 ${state.busyPhotos} 張）… ဓာတ်ပုံ ပြင်ဆင်နေ` : tp ? tp : signNeed ? '盤商、種子商結案：先按「有見到」，再寫簽約內容／ တွေ့ပြီး ကိုနှိပ်ပြီး စာချုပ် အကြောင်းအရာ ရေးပါ' : !ok ? `拍照、上傳照片、錄音、打字${state.cat === '盤商' ? '、記價格' : ''}${$('farmer').value === '__new' || SHOW_PROFILE_ON_VISIT ? '（或改客戶資料）' : ''}至少做一樣／ဓာတ်ပုံ၊ အသံ၊ စာ တစ်ခုခု လုပ်ပါ` : '';
   }
 
   /**
@@ -2204,6 +2338,9 @@ ${state.cat}：${who}
         applyCatLabels(); refreshNoMeet(); refreshSave();
       }
     }));
+    // 0.4.82 董事長截圖：結案分頁第二排「盤商結案」「種子商結案」→ 那一類的拜訪畫面、只列自己負責的（負責業務空白也算），選了店家按「有見到」直接走「已簽約」
+    // 舊的 state.dealerClose 結案模式送「成功／失敗」，跟後台 0.4.76 收的「簽約」不一致，所以不用它
+    document.querySelectorAll('[data-signclose]').forEach(b => b.addEventListener('click', () => signCloseOpen(b.dataset.signclose)));
     $n('closeFarmer').addEventListener('change', showCloseProgress); // 0.4.57 結案選單挑農民 → 列出進度
     $n('plFarmer').addEventListener('change', onPlantFarmer); // 0.4.59 種植資料
     $n('plSave').addEventListener('click', savePlant);
