@@ -171,6 +171,7 @@ li.go{cursor:pointer}
 .months{display:flex;gap:6px;margin-bottom:8px}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 14px;cursor:pointer;font-size:1rem}
 .months .chip{min-height:44px}            /* 田裡用手指按：月份切換至少 44 點高（2026-11-12 逐頁檢查） */
+.plbtns{display:flex;gap:8px;align-items:stretch;margin:6px 0} .plbtns #plWordBtn{flex:1;min-width:0;min-height:48px} .plbtns #plEditBtn{flex:0 0 auto;min-height:48px;padding:4px 12px} /* 0.4.77 種植資料：大按鈕 Word、小按鈕修改 */
 #logoutBtn{min-height:44px;padding:4px 12px;border:1px solid var(--line);border-radius:99px;background:var(--surface);color:inherit;font:inherit;font-size:.9rem;font-weight:700;line-height:1.15;cursor:pointer;white-space:nowrap} #logoutBtn .my{display:block;font-size:.7rem;font-weight:400;color:inherit} /* 0.4.75 右上角看得清楚的登出鈕（按的範圍 44px） */
 .chip[aria-pressed="true"]{background:var(--paddy);color:var(--surface);border-color:var(--paddy)}
 li.plan>span:first-child{flex:1;min-width:0}
@@ -387,7 +388,13 @@ footer{margin-top:18px;text-align:center}
       <select id="plFarmer"><option value="">— 請選擇 ရွေးပါ —</option></select></div>
     <!-- 0.4.61 董事長：選擇農民後下面的資料應該自動載入，不是要填寫的 → 先顯示目前資料（唯讀），按「修改」才變表單 -->
     <div class="progress" id="plCard" hidden aria-live="polite"></div>
-    <button type="button" class="btn2" id="plEditBtn" hidden>✎ 修改種植資料<span class="my">ပြင်ရန်</span></button>
+    <!-- 0.4.77 董事長「修改種植資料改為生成 WORD 檔」：大按鈕產生 Word（種植資料＋全部拜訪＋照片），修改留成旁邊的小按鈕 -->
+    <div class="plbtns" id="plBtns" hidden>
+      <button type="button" class="btn2" id="plWordBtn">📄 產生 Word 檔<span class="my">Word ဖိုင် ထုတ်ရန်</span></button>
+      <button type="button" class="btn2 small" id="plEditBtn">✎ 修改<span class="my">ပြင်ရန်</span></button>
+    </div>
+    <!-- 0.4.77 董事長「目前種植資料要有從頭到尾紀錄的文字、圖片」：這位農民全部拜訪（由舊到新；照片、錄音按了才下載） -->
+    <div class="progress vhist" id="plHistory" hidden aria-live="polite"></div>
     <div id="plForm" hidden>
       <div class="row2">
         <div><label class="lab" for="plCo">種子公司<span class="my">မျိုးစေ့ ကုမ္ပဏီ</span></label><select id="plCo"></select></div>

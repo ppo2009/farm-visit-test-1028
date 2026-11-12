@@ -174,6 +174,7 @@
       if (p) p.hidden = t !== tab;
     });
     try { localStorage.setItem('farm-home-tab', tab); } catch (e) { /* 存不了 */ }
+    renderPlantHistory(); // 0.4.77 種植資料的完整紀錄：只有在這一頁才讀、離開就收起（換掉讀取記號，晚到的結果不會再打開）
   }
   function initHomeTabs() {
     let saved = '';
@@ -255,7 +256,7 @@
     const keep = sel.value;
     sel.innerHTML = '<option value="">— 請選擇 ရွေးပါ —</option>' + list.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}</option>`).join('');
     sel.value = keep && list.some(f => f.id === keep) ? keep : '';
-    if (!sel.value) { $n('plForm').hidden = true; $n('plCard').hidden = true; $n('plEditBtn').hidden = true; }
+    if (!sel.value) { $n('plForm').hidden = true; $n('plCard').hidden = true; $n('plBtns').hidden = true; renderPlantHistory(); }
   }
   /** 0.4.61 董事長「選擇農民後下面的資料應該是自動載入，不是要填寫的」：唯讀卡片（沒填的寫「未填」） */
   function plantCardHtml(f, o) {
@@ -268,16 +269,46 @@
     return `<h3>目前種植資料／လက်ရှိ အချက်အလက်<span class="who"><b>${esc(f.name)}</b></span></h3><ul>${rows.map(([k, x]) => `<li>${k}：${val(x)}</li>`).join('')}</ul>`;
   }
   function setPlantEditing(on) {
-    $n('plForm').hidden = !on; $n('plCard').hidden = on; $n('plEditBtn').hidden = on;
+    $n('plForm').hidden = !on; $n('plCard').hidden = on; $n('plBtns').hidden = on; // 0.4.77 修改時 Word、修改兩顆按鈕一起藏
+  }
+  /* ───── 0.4.77 董事長「目前種植資料要有從頭到尾紀錄的文字、圖片」「修改種植資料改為生成 WORD 檔」 ───── */
+  /** 種植資料的完整紀錄：在這一頁、選了農民才讀（由舊到新，只有這一頁這樣排）；其他情況收起 */
+  function renderPlantHistory() {
+    const sel = $('plFarmer'), cid = sel ? sel.value : '';
+    const el = $('plHistory') || $n('plHistory'); // 舊頁面沒有這一塊：給不顯示的假元件
+    if (!cid || state.homeTab !== 'plant') { el.hidden = true; el.innerHTML = ''; el._tok = null; return; }
+    renderHistory(cid, el, { list: state.closeList || [], current: () => !!sel && sel.value === cid && state.homeTab === 'plant', showTrials: true, oldFirst: true });
+  }
+  /** 產生 Word 檔失敗時給業務看的話（沒網路、逾時、舊後台、後台說的原因） */
+  const farmerReportErr = r => (r && r.offline ? '產生 Word 檔要有網路，請連上網路再按一次／အင်တာနက် လိုသည်'
+    : r && r.timeout ? 'Word 檔產生太久（照片多或網路慢），請稍後再按一次／ကြာနေသည်၊ ထပ်နှိပ်ပါ'
+    : r && r.code === 'BAD_ACTION' ? '後台還沒更新，暫時不能產生 Word 檔，請告訴主管／နောက်မှ ထပ်ကြိုးစားပါ'
+    : (r && r.message) || '產生失敗，請再按一次／မအောင်မြင်၊ ထပ်နှိပ်ပါ');
+  /** 按「產生 Word 檔」：後台 farmerReport 做好（種植資料＋全部拜訪＋照片）傳回來，手機下載成 .docx */
+  async function downloadFarmerReport(btn) {
+    const cid = $n('plFarmer').value;
+    if (!cid || btn.disabled) return;
+    const label = btn.innerHTML;
+    btn.disabled = true; btn.textContent = '產生中…／ထုတ်နေသည်'; $n('plHint').textContent = '';
+    try {
+      const r = await gasCall({ action: 'farmerReport', cid });
+      if (!r || !r.ok || !r.data) { const m = farmerReportErr(r); toast(m); $n('plHint').textContent = m; return; }
+      const bytes = Uint8Array.from(atob(r.data), ch => ch.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: r.mime || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+      const a = document.createElement('a'); a.href = url; a.download = r.name || ('種植紀錄_' + cid + '.docx'); document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      $n('plHint').textContent = 'Word 檔已下載／ဒေါင်းပြီး';
+    } catch (e) { const m = farmerReportErr(null); toast(m); $n('plHint').textContent = m; } finally { btn.disabled = false; btn.innerHTML = label; }
   }
   /** 選了農民：先顯示目前種植資料（唯讀），表單也先填好，按「修改」才打開 */
   async function onPlantFarmer() {
     const cid = $n('plFarmer').value, f = (state.closeList || []).find(x => x.id === cid);
     $n('plHint').textContent = '';
-    if (!f) { $n('plForm').hidden = true; $n('plCard').hidden = true; $n('plEditBtn').hidden = true; return; }
+    if (!f) { $n('plForm').hidden = true; $n('plCard').hidden = true; $n('plBtns').hidden = true; renderPlantHistory(); return; }
     const o0 = (await Store.getMeta('options')) || {};
     $n('plCard').innerHTML = plantCardHtml(f, o0);
     setPlantEditing(false);
+    renderPlantHistory(); // 0.4.77 卡片下面列這位農民從頭到尾的紀錄
     const o = (await Store.getMeta('options')) || {};
     document.querySelectorAll('.unit').forEach(el => { el.textContent = `（${o.areaUnit || '英畝'}）`; });
     const crops = (o.crops || []).map(c => ({ value: c, text: cropText(c) })); crops.push({ value: '其他', text: '其他／အခြား' });
@@ -366,7 +397,7 @@
     const cfg = await getConfig();
     if (!cfg || !cfg.deviceKey || (typeof navigator !== 'undefined' && navigator.onLine === false)) return { ok: false, offline: true };
     // 1號第2任 0.4.73 讀碼中1（第8任）：照片、錄音（myFile）用 base64 傳，長錄音在緬甸網路 20 秒常傳不完 → 跟報告檔一樣給 60 秒
-    const ms = payload && (payload.action === 'trialReportFile' || payload.action === 'myFile') ? 60000 : 20000;
+    const ms = payload && payload.action === 'farmerReport' ? 120000 : payload && (payload.action === 'trialReportFile' || payload.action === 'myFile') ? 60000 : 20000; // 0.4.77 種植紀錄 Word 含全部照片，給 120 秒
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctl && typeof setTimeout === 'function' ? setTimeout(() => ctl.abort(), ms) : null;
     try {
@@ -468,10 +499,12 @@
   function histHtml(r, o) {
     const addr = [r.area, r.town, r.village].filter(Boolean).join('・');
     const head = o.showAddr ? `<p class="sub">${addr ? '📍 ' + esc(addr) : ''}${r.address ? `${addr ? '　' : '📍 '}${esc(r.address)}` : ''}${r.phone ? `　📞 ${esc(String(r.phone).replace(/^'/, ''))}` : ''}</p>` : '';
-    const trials = (r.trials || []).map(t => `<li><span class="pill ${TRIAL_PILL[t.status] || 'wait'}">${esc(t.status || '—')}</span> <b>${esc(catBi(t.cat || '試作'))}</b>：${esc(t.item || '（未填品項）')}${t.crop ? '（' + esc(t.crop) + '）' : ''}`
+    const tl = o.oldFirst ? (r.trials || []).slice().reverse() : (r.trials || []); // 0.4.77 種植資料頁：由舊到新（從頭到尾）
+    const trials = tl.map(t => `<li><span class="pill ${TRIAL_PILL[t.status] || 'wait'}">${esc(t.status || '—')}</span> <b>${esc(catBi(t.cat || '試作'))}</b>：${esc(t.item || '（未填品項）')}${t.crop ? '（' + esc(t.crop) + '）' : ''}`
       + `<br><small>${esc(t.start || '?')}～${esc(t.end || (t.status === '進行中' ? '進行中' : '?'))}${t.yield !== '' ? `・產量 ${esc(t.yield)} ${esc(t.yieldUnit)}` : ''}${t.comment ? '・農民評價：' + esc(t.comment) : ''}</small>`
       + `${t.reason ? `<br><small>失敗原因 အကြောင်းရင်း：${esc(t.reason)}</small>` : ''}${t.conclusion ? `<br><small>結論：${esc(t.conclusion)}</small>` : ''}</li>`).join('');
-    const visits = (r.visits || []).map(v => `<li><b>${esc(v.time)}</b>｜${esc(histCatBi(v.cat))}${v.staff ? '｜' + esc(v.staff) : ''}`
+    const vl = o.oldFirst ? (r.visits || []).slice().reverse() : (r.visits || []);
+    const visits = vl.map(v => `<li><b>${esc(v.time)}</b>｜${esc(histCatBi(v.cat))}${v.staff ? '｜' + esc(v.staff) : ''}`
       // 1號第2任讀碼中2（第8任）：text 是中文摘要，業務自己打的（常是緬文）看不到 → 摘要跟打字原文不一樣時，原文另外列一行
       + `${v.text ? `<br>${esc(v.text)}` : ''}${v.typed && v.typed !== v.text ? `<br><small>打字原文 မူရင်း：${esc(v.typed)}</small>` : ''}${v.noMeet ? `<br><span class="pill wait">沒見到</span> ${esc(v.noMeet)}` : ''}${v.prices ? `<br><small>價格：${esc(v.prices)}</small>` : ''}`
       + `${v.plantFail ? `<br><span class="pill late">種植失敗</span> ${esc(v.plantFail)}` : ''}${v.closing ? `<br><small>結案：${esc(v.closing)}</small>` : ''}`
@@ -479,7 +512,7 @@
       + `${v.audio ? ` <button type="button" class="btn2 small" data-hau="${esc(v.audio)}">🔊 錄音</button>` : ''}</li>`).join('');
     return `<h3>過往紀錄／ယခင် မှတ်တမ်း</h3>${head}`
       + (trials ? `<p class="sub">試作／推廣（成功、失敗）：</p><ul>${trials}</ul>` : (o.showTrials ? '<p class="sub">沒有試作、推廣紀錄／စမ်းသပ်မှု မရှိ</p>' : ''))
-      + `<p class="sub">拜訪紀錄 共 ${r.total || 0} 筆${r.more ? '（只列最近 50 筆）' : ''}；照片、錄音按了才下載：</p>`
+      + `<p class="sub">拜訪紀錄 共 ${r.total || 0} 筆${r.more ? '（只列最近 50 筆）' : ''}${o.oldFirst ? '，由舊到新' : ''}；照片、錄音按了才下載：</p>`
       + (visits ? `<ul>${visits}</ul>` : '<p>還沒有拜訪紀錄／မှတ်တမ်း မရှိသေး</p>');
   }
   async function renderHistory(cid, el, opts) {
@@ -2003,7 +2036,8 @@ ${state.cat}：${who}
     $n('closeFarmer').addEventListener('change', showCloseProgress); // 0.4.57 結案選單挑農民 → 列出進度
     $n('plFarmer').addEventListener('change', onPlantFarmer); // 0.4.59 種植資料
     $n('plSave').addEventListener('click', savePlant);
-    $n('plEditBtn').addEventListener('click', () => { $n('plHint').textContent = ''; setPlantEditing(true); }); // 0.4.61 按修改才變表單
+    $n('plEditBtn').addEventListener('click', () => { $n('plHint').textContent = ''; setPlantEditing(true); }); // 0.4.61 按修改才變表單（0.4.77 改成小按鈕）
+    $n('plWordBtn').addEventListener('click', () => downloadFarmerReport($n('plWordBtn'))); // 0.4.77 產生 Word 檔
     $n('plCancel').addEventListener('click', () => onPlantFarmer()); // 取消：表單換回原本的值、回到唯讀卡片
     // 0.4.73 董事長「試作報告拿掉」：業務手機不再有試作報告區、首頁右上角兩個入口（loadReports 等函式留著不呼叫，後台 trialReports 也留著）
     // 0.4.73 我的進度：切換看農民／盤商／種子商（最上面一排數字也能點）；換種類就收起展開的那一位

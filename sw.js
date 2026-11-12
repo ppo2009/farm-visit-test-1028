@@ -1,6 +1,6 @@
 /* 背景程式：讓網頁沒網路也打得開，並在 Android 手機一有網路時於背景自動上傳 */
 /* global self, caches, clients, FarmCore */
-const VERSION = 'build-20261112-171406';
+const VERSION = 'build-20261112-172715';
 const CACHE = 'farm-visit-' + VERSION;
 const SHELL = ['./', './index.html', './app.js', './core.js', './config.js', './inapp.js', './manifest.json', './icon-192.png', './icon-512.png'];
 
