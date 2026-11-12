@@ -239,6 +239,21 @@ footer{margin-top:18px;text-align:center}
 
   <!-- 分頁 4 我的進度：我的試作、月計劃、工作進度 -->
   <div class="hpanel" id="hp-mine" role="tabpanel" aria-labelledby="htab-mine" hidden>
+  <!-- 0.4.57 董事長：結案從打卡畫面最下面搬到「我的進度」；選一種進結案畫面，送主管審核 -->
+  <h2>結案（送主管審核）<span class="my">ပိတ်သိမ်း (မန်နေဂျာ စစ်ဆေးရန်)</span><span class="sub">農民收成賣掉、盤商或種子商洽談成功／失敗時，選一種去結案／ရွေးပြီး ပိတ်သိမ်းပါ</span></h2>
+  <!-- 0.4.57 董事長：裡面要有找到哪幾個農民、農民的進度是什麼；點一位＝下面選單選他、列出完整進度 -->
+  <p class="sub" id="closeFarmerCount">我找到的農民／ကျွန်ုပ်ရှာတွေ့သော လယ်သမား</p>
+  <ul id="closeFarmerList"></ul>
+  <!-- 0.4.57 董事長：結案下面有選單可以挑農民，列出農民的進度 -->
+  <div><label class="lab" for="closeFarmer">選擇農民（看進度）<span class="my">လယ်သမား ရွေးပါ (တိုးတက်မှု ကြည့်ရန်)</span></label>
+    <select id="closeFarmer"><option value="">— 請選擇 ရွေးပါ —</option></select></div>
+  <div class="progress" id="closeProgress" hidden aria-live="polite"></div>
+  <div class="farmermenu closepick" id="closePick">
+    <button type="button" data-closecat="結案">農民結案<span class="my">လယ်သမား</span></button>
+    <button type="button" data-closecat="盤商">盤商結案<span class="my">ကုန်သည်</span></button>
+    <button type="button" data-closecat="種子商">種子商結案<span class="my">မျိုးစေ့ဆိုင်</span></button>
+  </div>
+
   <h2>我的試作<span class="my">ကျွန်ုပ်၏ စမ်းသပ်ကွက်များ</span><span class="sub">進行中的試作、推廣，點一下去拜訪／လုပ်ဆောင်ဆဲ စမ်းသပ်ကွက်၊ နှိပ်ပြီး သွားရောက်ပါ</span></h2>
   <ul id="trialList"></ul>
 
@@ -312,7 +327,7 @@ footer{margin-top:18px;text-align:center}
             <select id="nmReason"><option value="沒見到農民">沒見到農民／မတွေ့</option><option value="農民拒絕">農民拒絕／ငြင်းဆို</option><option value="其他">其他／အခြား</option></select></div>
           <div><label class="lab" for="nmNext">下次再訪日期<span class="my">နောက်တစ်ကြိမ် သွားမည့်ရက်</span></label><input type="date" id="nmNext"></div>
         </div>
-        <div><label class="lab" for="nmNote">說明（可不填）<span class="my">မှတ်ချက်</span></label><input type="text" id="nmNote" maxlength="300" placeholder="例：農民去外地，下週回來／ခရီးထွက်၊ နောက်အပတ် ပြန်လာမည်"></div>
+        <div><label class="lab" for="nmNote">匯報了什麼（必填）<span class="my">အစီရင်ခံ (မဖြစ်မနေ)</span></label><input type="text" id="nmNote" maxlength="300" placeholder="例：農民去外地，下週回來／ခရီးထွက်၊ နောက်အပတ် ပြန်လာမည်"></div>
       </div>
     </div>
 
@@ -449,8 +464,8 @@ footer{margin-top:18px;text-align:center}
 
     <button type="button" class="save" id="saveBtn" disabled>儲存（自動上傳）<span class="my">သိမ်းမည်</span></button>
     <p class="sub" id="saveHint"></p>
-    <!-- 0.4.40 董事長：結案從上方類別按鈕搬到最下面；按了進結案畫面，送出後要主管審核通過才正式結案 -->
-    <button type="button" class="btn2 closemode" id="closeModeBtn" hidden>結案（送主管審核）<span class="my">ပိတ်သိမ်း (မန်နေဂျာ စစ်ဆေးရန်)</span></button>
+    <!-- 0.4.57 董事長：結案的入口搬到首頁「我的進度」；這顆只在結案畫面出現，按了取消結案回首頁 -->
+    <button type="button" class="btn2 closemode" id="closeModeBtn" hidden>← 取消結案<span class="my">ပိတ်သိမ်းမှု ပယ်ဖျက်</span></button>
   </div>
 </section>
 
