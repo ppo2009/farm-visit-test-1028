@@ -361,6 +361,25 @@ footer{margin-top:18px;text-align:center}
     <select id="closeFarmer"><option value="">—</option></select>
     <!-- 0.4.75 董事長「農民 150 天做成一個進度 100%」：選到農民，進度卡最上面放種植進度 -->
     <div class="progress" id="closeGrow" hidden aria-live="polite"></div>
+    <!-- 0.4.82 董事長「修改搬走」：修改種植資料的表單從種植資料分頁搬到這裡（id 不變）；選了還在種、自己負責的農民，按種植進度下面的「修改種植資料」就地打開 -->
+    <div id="plForm" class="plform" hidden>
+      <div class="row2">
+        <div><label class="lab" for="plCo">種子公司<span class="my">မျိုးစေ့ ကုမ္ပဏီ</span></label><select id="plCo"></select></div>
+        <div><label class="lab" for="plCrop">作物<span class="my">သီးနှံ</span></label><select id="plCrop"></select></div>
+      </div>
+      <div class="row2">
+        <div><label class="lab" for="plCode">代碼<span class="my">ကုဒ်</span></label><input type="text" id="plCode" maxlength="30"></div>
+        <div><label class="lab" for="plDate">種植日期<span class="my">စိုက်သည့်ရက်</span></label><input type="date" id="plDate"></div>
+      </div>
+      <div class="row2">
+        <div><label class="lab" for="plNow">目前種植面積<small class="unit"></small><span class="my">လက်ရှိ စိုက်ဧက</span></label><input type="number" id="plNow" min="0" step="any" inputmode="decimal"></div>
+        <div><label class="lab" for="plMax">可種植面積<small class="unit"></small><span class="my">စိုက်နိုင်သော ဧက</span></label><input type="number" id="plMax" min="0" step="any" inputmode="decimal"></div>
+      </div>
+      <div><label class="lab" for="plFert">其他<span class="my">အခြား</span></label><input type="text" id="plFert" maxlength="120"></div><!-- 0.4.71 董事長：使用肥料改其他 -->
+      <button type="button" class="save" id="plSave">存檔（上傳）<span class="my">သိမ်းမည်</span></button>
+      <button type="button" class="link" id="plCancel">取消修改／မပြင်တော့</button>
+    </div>
+    <p class="sub" id="plHint"></p>
     <div class="progress" id="closeProgress" hidden aria-live="polite"></div>
     <!-- 0.4.73 董事長「點進去要有之前拜訪過的紀錄及照片及錄音」：過往全部拜訪（照片、錄音按了才下載） -->
     <div class="progress vhist" id="closeHistory" hidden aria-live="polite"></div>
@@ -420,35 +439,18 @@ footer{margin-top:18px;text-align:center}
 
   <!-- 分頁 5 種植資料（0.4.59 董事長：這邊改種植資料）：選自己負責的農民，改作物、種子公司、代碼、面積、種植日期、肥料；直接存，不算一次拜訪 -->
   <div class="hpanel" id="hp-plant" role="tabpanel" aria-labelledby="htab-plant" hidden>
-  <h2>種植資料<span class="my">စိုက်ပျိုးမှု အချက်အလက်</span><span class="sub">選農民 → 改資料 → 存檔（要有網路；不算拜訪次數）／လယ်သမား ရွေး → ပြင် → သိမ်း</span></h2>
+  <h2>種植資料<span class="my">စိုက်ပျိုးမှု အချက်အလက်</span><span class="sub">結案經主管審核後，在這裡看完整紀錄、產生 Word／မန်နေဂျာ အတည်ပြုပြီးသော ပိတ်သိမ်းမှုများ ဤနေရာတွင် ကြည့်ပြီး Word ထုတ်ပါ</span></h2>
   <div class="fields">
-    <div><label class="lab" for="plFarmer">選擇農民<span class="my">လယ်သမား ရွေးပါ</span></label>
+    <div><label class="lab" for="plFarmer">選擇已結案的農民（主管審核通過）<span class="my">ပိတ်သိမ်းပြီး လယ်သမား ရွေးပါ</span></label>
       <select id="plFarmer"><option value="">— 請選擇 ရွေးပါ —</option></select></div>
     <!-- 0.4.61 董事長：選擇農民後下面的資料應該自動載入，不是要填寫的 → 先顯示目前資料（唯讀），按「修改」才變表單 -->
     <div class="progress" id="plCard" hidden aria-live="polite"></div>
     <!-- 0.4.77 董事長「修改種植資料改為生成 WORD 檔」：大按鈕產生 Word（種植資料＋全部拜訪＋照片），修改留成旁邊的小按鈕 -->
     <div class="plbtns" id="plBtns" hidden>
       <button type="button" class="btn2" id="plWordBtn">📄 產生 Word 檔<span class="my">Word ဖိုင် ထုတ်ရန်</span></button>
-      <button type="button" class="btn2 small" id="plEditBtn">✎ 修改<span class="my">ပြင်ရန်</span></button>
+      <button type="button" class="btn2 small" id="plEditBtn" hidden>✎ 修改<span class="my">ပြင်ရန်</span></button><!-- 0.4.82 修改搬到月分工作進度：這顆一律藏起來（id 留著，舊程式找得到） -->
     </div>
-    <div id="plForm" hidden>
-      <div class="row2">
-        <div><label class="lab" for="plCo">種子公司<span class="my">မျိုးစေ့ ကုမ္ပဏီ</span></label><select id="plCo"></select></div>
-        <div><label class="lab" for="plCrop">作物<span class="my">သီးနှံ</span></label><select id="plCrop"></select></div>
-      </div>
-      <div class="row2">
-        <div><label class="lab" for="plCode">代碼<span class="my">ကုဒ်</span></label><input type="text" id="plCode" maxlength="30"></div>
-        <div><label class="lab" for="plDate">種植日期<span class="my">စိုက်သည့်ရက်</span></label><input type="date" id="plDate"></div>
-      </div>
-      <div class="row2">
-        <div><label class="lab" for="plNow">目前種植面積<small class="unit"></small><span class="my">လက်ရှိ စိုက်ဧက</span></label><input type="number" id="plNow" min="0" step="any" inputmode="decimal"></div>
-        <div><label class="lab" for="plMax">可種植面積<small class="unit"></small><span class="my">စိုက်နိုင်သော ဧက</span></label><input type="number" id="plMax" min="0" step="any" inputmode="decimal"></div>
-      </div>
-      <div><label class="lab" for="plFert">其他<span class="my">အခြား</span></label><input type="text" id="plFert" maxlength="120"></div><!-- 0.4.71 董事長：使用肥料改其他 -->
-      <button type="button" class="save" id="plSave">存檔（上傳）<span class="my">သိမ်းမည်</span></button>
-      <button type="button" class="link" id="plCancel">取消修改／မပြင်တော့</button>
-    </div>
-    <p class="sub" id="plHint"></p>
+    <p class="sub" id="plWordHint" aria-live="polite"></p><!-- 0.4.82 種植資料頁只剩看紀錄、產生 Word：Word 的提示字 -->
     <!-- 0.4.77 董事長「目前種植資料要有從頭到尾紀錄的文字、圖片」：這位農民全部拜訪（由舊到新；照片、錄音按了才下載）
          0.4.80 中4：移到修改表單、提示字下面，按「修改」時表單就在卡片正下方 -->
     <div class="progress vhist" id="plHistory" hidden aria-live="polite"></div>
@@ -486,6 +488,10 @@ footer{margin-top:18px;text-align:center}
     <details class="profile" id="profileBox" hidden>
       <summary id="profileTitle">客戶資料／ဖောက်သည် အချက်အလက်</summary>
       <div class="fields">
+        <!-- 0.4.82 董事長截圖：結案（審核過）的客戶從下拉消失後，新增時要能「快速帶入舊客戶資料」：只列自己負責、已結案、同類型的；帶基本資料，作物、品種、代碼、種植日期、目前面積、GPS 不帶（新一季重填）；存檔照舊建新客戶 -->
+        <div id="quickFillBox" hidden><label class="lab" for="quickFill">從已結案的舊客戶帶入<span class="my">ပိတ်သိမ်းပြီး ဖောက်သည်ဟောင်းမှ ယူမည်</span></label>
+          <select id="quickFill"></select>
+          <p class="sub">只帶名字、電話、地區、鎮、村、地址等基本資料；作物、品種、種植日期、目前面積要重填，存檔會建一位新客戶／အခြေခံ အချက်အလက်သာ ယူမည်</p></div>
         <div id="dealerTypeBox"><label class="lab" for="pType">類型<span class="my">အမျိုးအစား</span></label>
           <select id="pType"><option value="盤商">盤商</option><option value="種子商">種子商</option></select></div>
         <div><label class="lab" for="pName" id="pNameLab">名字<span class="my">အမည်</span></label><input type="text" id="pName" maxlength="60"></div>

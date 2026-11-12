@@ -252,7 +252,8 @@
     sel.disabled = !list.length;
     state.mineGrow = growOfId;
     state.mineGroupOf = groupOf; // 0.4.82 執行任務清單左欄用同一套分類
-    if (!sel.value) { const b = $n('closeProgress'); b.hidden = true; b.innerHTML = ''; const hb = $n('closeHistory'); hb.hidden = true; hb.innerHTML = ''; hb._tok = null; const gb = $n('closeGrow'); gb.hidden = true; gb.innerHTML = ''; }
+    // 0.4.82 沒選人：修改種植資料的表單也收起（state.plEditCid、plForm）
+    if (!sel.value) { state.plEditCid = ''; $n('plForm').hidden = true; const b = $n('closeProgress'); b.hidden = true; b.innerHTML = ''; const hb = $n('closeHistory'); hb.hidden = true; hb.innerHTML = ''; hb._tok = null; const gb = $n('closeGrow'); gb.hidden = true; gb.innerHTML = ''; }
     $n('closeFarmerCount').textContent = list.length ? `共 ${list.length} 位${mtype}，從下拉選一位看進度和過往拜訪紀錄（照片、錄音）／${list.length} ဦး၊ ရွေးပြီး ကြည့်ပါ`
       : `還沒有自己負責的${mtype}／${MINE_TYPES[mtype]} မရှိသေး`;
     // 「主管訂的目標」底下：農民種植進度（三類都列，百分比由高到低；沒填種植日期排最後）
@@ -267,19 +268,19 @@
     }
   }
   /* ───── 0.4.59 首頁「種植資料」分頁：選自己負責的農民，改種植資料直接存（不算拜訪） ───── */
-  /** 0.4.80 中3：種植資料選單的人＝自己負責的農民＋自己負責、已結案的（ended 標記；只在這一頁） */
-  const plantPool = () => (state.closeList || []).concat((state.endedMine || []).map(f => Object.assign({}, f, { ended: true })));
+  /** 0.4.80 中3：種植資料選單的人＝自己負責、已結案的（ended 標記）
+      0.4.82 董事長「要先結案、等主管審核過才會產出種植資料」（選「名單只列審核過的；修改搬走」）：只列 endedMine（主管審核過才會變已結束；沒開審核直接結案的也算），還在種的不列 */
+  const plantPool = () => (state.endedMine || []).map(f => Object.assign({}, f, { ended: true }));
   function fillPlantFarmers() {
     const sel = document.getElementById('plFarmer');
     if (!sel) return; // 舊頁面沒有這個分頁
-    const list = (state.closeList || []).filter(f => !f.pending); // 剛新增還沒上傳的，後台還沒有這位
     const ended = state.endedMine || [];
     const keep = sel.value;
-    const opt = (f, tail) => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}${tail}</option>`;
-    sel.innerHTML = '<option value="">— 請選擇 ရွေးပါ —</option>' + list.map(f => opt(f, '')).join('')
-      + (ended.length ? `<optgroup label="已結案／ပိတ်သိမ်းပြီး">${ended.map(f => opt(f, '（已結案）')).join('')}</optgroup>` : '');
-    sel.value = keep && (list.some(f => f.id === keep) || ended.some(f => f.id === keep)) ? keep : '';
-    if (!sel.value) { $n('plForm').hidden = true; $n('plCard').hidden = true; $n('plBtns').hidden = true; renderPlantHistory(); }
+    const opt = f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}</option>`;
+    sel.innerHTML = (ended.length ? '<option value="">— 請選擇 ရွေးပါ —</option>' : '<option value="">還沒有審核通過的結案農民／အတည်ပြုပြီး ပိတ်သိမ်းထားသော လယ်သမား မရှိသေး</option>') + ended.map(opt).join(''); // 全部都是已結案：不再分組
+    sel.disabled = !ended.length;
+    sel.value = keep && ended.some(f => f.id === keep) ? keep : '';
+    if (!sel.value) { $n('plCard').hidden = true; $n('plBtns').hidden = true; renderPlantHistory(); }
   }
   /** 0.4.61 董事長「選擇農民後下面的資料應該是自動載入，不是要填寫的」：唯讀卡片（沒填的寫「未填」） */
   function plantCardHtml(f, o) {
@@ -312,31 +313,51 @@
     : r && r.code === 'BAD_ACTION' ? '後台還沒更新，暫時不能產生 Word 檔，請告訴主管／နောက်မှ ထပ်ကြိုးစားပါ'
     : (r && r.message) || '產生失敗，請再按一次／မအောင်မြင်၊ ထပ်နှိပ်ပါ');
   /** 按「產生 Word 檔」：後台 farmerReport 做好（種植資料＋全部拜訪＋照片）傳回來，手機下載成 .docx */
-  async function downloadFarmerReport(btn) {
+  async function downloadFarmerReport(btn) { // 0.4.82 表單搬走後，種植資料頁的提示字改用 plWordHint
     const cid = $n('plFarmer').value;
     if (!cid || btn.disabled) return;
     const label = btn.innerHTML;
-    btn.disabled = true; btn.textContent = '產生中…照片多時要 1～2 分鐘／ထုတ်နေသည်၊ ၁～၂ မိနစ် ကြာနိုင်'; $n('plHint').textContent = ''; // 0.4.80 中2
+    btn.disabled = true; btn.textContent = '產生中…照片多時要 1～2 分鐘／ထုတ်နေသည်၊ ၁～၂ မိနစ် ကြာနိုင်'; $n('plWordHint').textContent = ''; // 0.4.80 中2
     try {
       const r = await gasCall({ action: 'farmerReport', cid });
-      if (!r || !r.ok || !r.data) { const m = farmerReportErr(r); toast(m); $n('plHint').textContent = m; return; }
+      if (!r || !r.ok || !r.data) { const m = farmerReportErr(r); toast(m); $n('plWordHint').textContent = m; return; }
       const bytes = Uint8Array.from(atob(r.data), ch => ch.charCodeAt(0));
       const url = URL.createObjectURL(new Blob([bytes], { type: r.mime || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
       const a = document.createElement('a'); a.href = url; a.download = r.name || ('種植紀錄_' + cid + '.docx'); document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 10000);
-      $n('plHint').textContent = 'Word 檔已下載／ဒေါင်းပြီး';
-    } catch (e) { const m = farmerReportErr(null); toast(m); $n('plHint').textContent = m; } finally { btn.disabled = false; btn.innerHTML = label; }
+      $n('plWordHint').textContent = 'Word 檔已下載／ဒေါင်းပြီး';
+    } catch (e) { const m = farmerReportErr(null); toast(m); $n('plWordHint').textContent = m; } finally { btn.disabled = false; btn.innerHTML = label; }
   }
-  /** 選了農民：先顯示目前種植資料（唯讀），表單也先填好，按「修改」才打開 */
+  /** 選了農民（0.4.82 起只有審核過的已結案農民）：顯示目前種植資料（唯讀）＋完整紀錄＋產生 Word；不能修改 */
   async function onPlantFarmer() {
-    const cid = $n('plFarmer').value, f = plantPool().find(x => x.id === cid); // 0.4.80 中3：已結案的也找得到
-    $n('plHint').textContent = '';
-    if (!f) { $n('plForm').hidden = true; $n('plCard').hidden = true; $n('plBtns').hidden = true; renderPlantHistory(); return; }
+    const cid = $n('plFarmer').value, f = plantPool().find(x => x.id === cid);
+    $n('plWordHint').textContent = '';
+    if (!f) { $n('plCard').hidden = true; $n('plBtns').hidden = true; renderPlantHistory(); return; }
     const o0 = (await Store.getMeta('options')) || {};
     $n('plCard').innerHTML = plantCardHtml(f, o0);
-    setPlantEditing(false);
-    $n('plEditBtn').hidden = !!f.ended; // 0.4.80 中3：已結案的只能看、產生 Word，不能修改
+    $n('plCard').hidden = false; $n('plBtns').hidden = false;
+    $n('plEditBtn').hidden = true; // 0.4.82 修改搬到月分工作進度
     renderPlantHistory(); // 0.4.77 卡片下面列這位農民從頭到尾的紀錄
+  }
+  /* ───── 0.4.82 董事長「修改搬走」：修改種植資料在月分工作進度，選了還在種、自己負責的農民 → 種植進度下面「修改種植資料」→ 就地打開原本那份表單（id 不變、存檔走同一個 plantSave） ───── */
+  /** 可以改的人：自己負責、還在種（closeList）、已經上傳（後台有這位） */
+  const plantEditable = cid => (state.closeList || []).find(x => x.id === cid && !x.pending) || null;
+  async function openPlantEdit(cid) {
+    const f = plantEditable(cid);
+    if (!f) return;
+    state.plEditCid = cid;
+    $n('plHint').textContent = '';
+    await fillPlantForm(f);
+    $n('plForm').hidden = false;
+    const eb = $n('pfEditBtn'); eb.hidden = true;
+  }
+  function closePlantEdit() {
+    state.plEditCid = ''; $n('plForm').hidden = true;
+    const eb = $n('pfEditBtn'); eb.hidden = false;
+  }
+  /** 表單先填好這位農民現在的種植資料（原本 onPlantFarmer 的後半段） */
+  async function fillPlantForm(f) {
+    const cid = f.id;
     const o = (await Store.getMeta('options')) || {};
     document.querySelectorAll('.unit').forEach(el => { el.textContent = `（${o.areaUnit || '英畝'}）`; });
     const crops = (o.crops || []).map(c => ({ value: c, text: cropText(c) })); crops.push({ value: '其他', text: '其他／အခြား' });
@@ -401,7 +422,7 @@
       areaNow: $n('plNow').value, areaMax: $n('plMax').value, fertilizer: $n('plFert').value.trim() };
   }
   async function savePlant() {
-    const cid = $n('plFarmer').value, cfg = await getConfig();
+    const cid = state.plEditCid || '', cfg = await getConfig(); // 0.4.82 改在月分工作進度：存的是正在改的那位（不是種植資料分頁選的）
     if (!cid) return;
     if (!cfg || !cfg.deviceKey || (typeof navigator !== 'undefined' && navigator.onLine === false)) { $n('plHint').textContent = '要有網路才能存種植資料，請連上網路再按一次／အင်တာနက် လိုသည်'; return; }
     const ch = plantChanges(cid);
@@ -416,7 +437,7 @@
       $n('plHint').textContent = '已存好，主管看得到／သိမ်းပြီး';
       toast('種植資料已存好／သိမ်းပြီး');
       $n('plHistory')._doneCid = null; // 0.4.80 低5：存好了要重讀紀錄
-      await fillCloseFarmers(); await onPlantFarmer(); $n('plHint').textContent = '已存好，主管看得到／သိမ်းပြီး';
+      await fillCloseFarmers(); closePlantEdit(); showCloseProgress(); $n('plHint').textContent = '已存好，主管看得到／သိမ်းပြီး'; // 0.4.82 存好收起表單、重畫進度卡與 150 天進度
     } catch (e) { $n('plHint').textContent = '網路不穩，沒存成功，請再按一次／ထပ်နှိပ်ပါ'; } finally { btn.disabled = false; }
   }
   /* ───── 0.4.61 董事長：農民試作成功、失敗都要產生一份報表檔，所有人都看得到 ─────
@@ -499,7 +520,14 @@
     const current = () => !!sel && sel.value === cid, list = state.mineAll || state.closeList || [];
     // 0.4.75 董事長「農民 150 天做成一個進度 100%」：選到農民 → 進度卡最上面放種植進度條（盤商、種子商沒有）
     const gb = $n('closeGrow'), f = list.find(x => x.id === cid);
-    if (cid && f && (f.type || '農民') === '農民') { gb.hidden = false; gb.innerHTML = growHtml((state.mineGrow || {})[cid] || growOf(f.plantDate, mmDay(0))); }
+    if (state.plEditCid && state.plEditCid !== cid) closePlantEdit(); // 換人：正在改的那份收起來
+    if (cid && f && (f.type || '農民') === '農民') {
+      gb.hidden = false;
+      // 0.4.82 董事長「修改搬走」：還在種、自己負責、已上傳的農民 → 種植進度下面一顆「修改種植資料」，按了就地打開表單
+      gb.innerHTML = growHtml((state.mineGrow || {})[cid] || growOf(f.plantDate, mmDay(0)))
+        + (plantEditable(cid) ? `<button type="button" class="btn2 small" id="pfEditBtn"${state.plEditCid === cid ? ' hidden' : ''}>✎ 修改種植資料<span class="my">စိုက်ပျိုးမှု အချက်အလက် ပြင်ရန်</span></button>` : '');
+      const eb = document.getElementById('pfEditBtn'); if (eb) eb.onclick = () => openPlantEdit(cid);
+    }
     else { gb.hidden = true; gb.innerHTML = ''; }
     renderProgress(cid, { box: $n('closeProgress'), current, list, home: true });
     renderHistory(cid, $n('closeHistory'), { current, list }); // 0.4.73 董事長：點進去要有之前拜訪過的紀錄及照片及錄音
@@ -752,6 +780,46 @@
       + `<small>預計採收 ရိတ်သိမ်းမည့်ရက် ${esc(String(x.harvestDate || '').slice(5).replace('-', '/'))}</small>・${when}<br>`
       + `<small>最後拜訪 ${x.lastVisit ? esc(String(x.lastVisit).slice(5).replace('-', '/')) : '還沒拜訪'}</small></li>`;
   }
+  /* 0.4.82 董事長「快採收紅色提醒條能讓手機發出響聲嗎」：提醒條出現（有新的、今天沒收起）時嗶一聲（Web Audio 產生約 0.5 秒，不用外部音檔）＋震動 [200,100,200]（有才呼叫，iPhone 沒有就略過）。
+     首頁常重畫（每次同步）→ 另外記「今天已經為哪些人響過」（harvestBeeped，跟收起用的 harvestSeen 同一套判斷）：同一天同一份名單只響一次，多了新的人才再響。
+     瀏覽器擋自動播放（還沒碰過畫面）：等使用者第一次點畫面時補播一次。全部包 try，失敗不影響畫面 */
+  const BEEP_GESTURES = ['pointerdown', 'touchstart', 'keydown'];
+  function harvestBeep() {
+    let AC = null;
+    try { AC = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext); } catch (e) { AC = null; }
+    const buzz = () => { try { if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') navigator.vibrate([200, 100, 200]); } catch (e) { /* 震動失敗不影響畫面 */ } };
+    if (!AC) { buzz(); return 'noaudio'; }
+    let ac;
+    try { ac = new AC(); } catch (e) { buzz(); return 'noaudio'; }
+    const play = () => {
+      try {
+        const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+        o.type = 'sine'; o.frequency.value = 880;
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.4, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+        o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + 0.5);
+        o.onended = () => { try { ac.close(); } catch (e) { /* 關不掉沒關係 */ } };
+      } catch (e) { /* 播不出來不影響畫面 */ }
+      buzz();
+    };
+    if (ac.state !== 'suspended') { play(); return 'played'; }
+    // 還沒碰過畫面：瀏覽器把聲音暫停 → 等第一次點畫面再補播一次
+    const once = () => {
+      try { BEEP_GESTURES.forEach(t => document.removeEventListener(t, once, true)); } catch (e) { /* 拿不掉也只會多播一次 */ }
+      try { Promise.resolve(ac.resume()).then(play, () => {}); } catch (e) { /* 播不出來不影響畫面 */ }
+    };
+    try { BEEP_GESTURES.forEach(t => document.addEventListener(t, once, true)); } catch (e) { /* 掛不上就算了 */ }
+    return 'waiting';
+  }
+  /** 要不要響：今天這個帳號還沒為這些人響過（多了新的人也算）→ 響、記下來 */
+  async function harvestAlert(list, account, today) {
+    try {
+      const beeped = await Store.getMeta('harvestBeeped');
+      if (!harvestShow(list, beeped, account, today)) return false;
+      await Store.setMeta('harvestBeeped', { day: today, account, ids: list.map(x => String(x.cid)) });
+      harvestBeep();
+      return true;
+    } catch (e) { return false; } // 響不了不影響提醒條
+  }
   async function renderHarvest(h) {
     const bar = document.getElementById('harvestBar');
     if (!bar) return; // 舊頁面沒有這一塊
@@ -760,6 +828,7 @@
     const seen = await Store.getMeta('harvestSeen');
     if (!harvestShow(list, seen, String(cfg.account || ''), today)) { bar.hidden = true; return; }
     bar.hidden = false;
+    await harvestAlert(list, String(cfg.account || ''), today); // 0.4.82 提醒條出現時嗶一聲＋震動（同一天同一份名單只響一次）
     const head = $n('harvestHead'), ul = $n('harvestList');
     head.innerHTML = `⚠ ${list.length} 位農民快採收，請到現場${state.harvestOpen ? '　▴' : '　▾'}<span class="my">လယ်သမား ${list.length} ဦး ရိတ်သိမ်းခါနီး၊ ကွင်းဆင်းပါ</span>`;
     head.setAttribute('aria-expanded', String(!!state.harvestOpen));
@@ -1159,6 +1228,28 @@
   const DEALER_KEYS = ['name', 'owner', 'phone', 'area', 'village', 'town', 'address', 'dcrop', 'fertilizer'];
   const FARMER_KEYS = ['name', 'phone', 'area', 'village', 'town', 'crop', 'variety', 'varCode', 'areaNow', 'areaMax', 'plantDate', 'fertilizer'];
   const activeKeys = () => (isDealerCat() ? DEALER_KEYS : FARMER_KEYS);
+  /* ───── 0.4.82 董事長截圖：新增農民（盤商、種子商也一樣）時「快速帶入舊客戶資料」─────
+     選項＝Store 的 endedMine 原始資料（自己負責、已結案；state.endedMine 只留農民，這裡另外讀）中同類型的：農民頁列農民、盤商頁列盤商、種子商頁列種子商。
+     選了只帶基本資料；作物、品種、代碼、種植日期、目前種植面積、GPS 不帶（新一季要重填）。帶完可以再改；存檔照舊建新客戶（新編號），不動舊客戶 */
+  const QUICK_KEYS = ['name', 'phone', 'area', 'town', 'village', 'address', 'owner', 'brand', 'areaMax'];
+  const quickType = () => (isDealerCat() ? state.cat : '農民');
+  async function fillQuickFill() {
+    const box = $n('quickFillBox'), sel = $n('quickFill');
+    const want = quickType();
+    const list = ((await Store.getMeta('endedMine')) || []).filter(c => (c.type || '農民') === want);
+    state.quickList = list;
+    box.hidden = !list.length; // 沒有舊客戶就不顯示
+    sel.innerHTML = '<option value="">— 選一位帶入（可不選） ရွေးပါ —</option>' + list.map(c => { const tv = [c.town, c.village].filter(Boolean).join('・');
+      return `<option value="${esc(c.id)}">${esc(c.name || '（未命名）')}｜${esc(c.id)}${tv ? '｜' + esc(tv) : ''}</option>`; }).join('');
+    sel.value = '';
+  }
+  function applyQuickFill() {
+    const c = (state.quickList || []).find(x => x.id === $n('quickFill').value);
+    if (!c) return;
+    QUICK_KEYS.forEach(k => { const el = $n(PROFILE_INPUTS[k]); el.value = c[k] == null ? '' : String(c[k]); });
+    if (c.area && $n('pArea').value !== String(c.area)) { try { $n('pArea').insertAdjacentHTML('beforeend', `<option>${esc(c.area)}</option>`); } catch (e) { /* 舊頁面 */ } $n('pArea').value = c.area; } // 選單裡沒有的舊地區也放回去
+    refreshSave();
+  }
 
   // 業務BUG#1（2號小助手 2026-11-12）：換農民時上一位的打字、照片、錄音、種植失敗會留著，存檔就記到新農民身上
   const FAIL_IDS = ['fWeather', 'fTemp', 'fFert', 'fWater', 'fPest', 'fPestNote', 'fReason'];
@@ -1217,7 +1308,9 @@
     if (!val) { box.hidden = true; $('progressBox').hidden = true; const hb = $n('closeVisitHist'); hb.hidden = true; hb.innerHTML = ''; hb._tok = null; const vh = $n('visitHistory'); vh.hidden = true; vh.innerHTML = ''; vh._tok = null; refreshTrialBox(); refreshSave(); return; } // 0.4.35 沒選人：進度、作物品種都收起來；0.4.73、0.4.75 過往紀錄也收
     box.hidden = val !== '__new' && !SHOW_PROFILE_ON_VISIT; // 0.4.48 舊客戶不顯示客戶資料（資料照樣讀進來，開始試作時的品種代碼仍用得到）
     $('dealerTypeBox').hidden = true; // 盤商、種子商分開進來，種類就是入口，不用再選
+    $n('quickFillBox').hidden = true; // 0.4.82 帶入舊客戶：只有新增時才出現
     if (val === '__new') {
+      fillQuickFill();
       box.open = true;
       $('profileTitle').textContent = isDealerCat() ? `新${state.cat}資料／${CAT_MY[state.cat]} အသစ်` : '新農民資料／လယ်သမား အသစ်';
     } else {
@@ -2312,6 +2405,7 @@ ${state.cat}：${who}
     });
     $('farmer').addEventListener('change', onFarmerChange);
     Object.values(PROFILE_INPUTS).forEach(id => $n(id).addEventListener('input', refreshSave)); // 0.4.71 $n：舊頁面沒有新欄位時初始化不中斷
+    $n('quickFill').addEventListener('change', applyQuickFill); // 0.4.82 新增時從已結案的舊客戶帶入基本資料
     $('pArea').addEventListener('change', refreshSave);
     $('pCrop').addEventListener('change', () => fillVarieties('')); // 換作物就重選品種
     $('pVarCo').addEventListener('change', () => { fillVarieties(''); refreshSave(); }); // 0.4.31 換種子公司就重選品種
@@ -2344,9 +2438,9 @@ ${state.cat}：${who}
     $n('closeFarmer').addEventListener('change', showCloseProgress); // 0.4.57 結案選單挑農民 → 列出進度
     $n('plFarmer').addEventListener('change', onPlantFarmer); // 0.4.59 種植資料
     $n('plSave').addEventListener('click', savePlant);
-    $n('plEditBtn').addEventListener('click', () => { $n('plHint').textContent = ''; setPlantEditing(true); }); // 0.4.61 按修改才變表單（0.4.77 改成小按鈕）
+    // 0.4.82 修改搬到月分工作進度（pfEditBtn 在 showCloseProgress 畫）：種植資料頁的 plEditBtn 一律藏起來、不再掛修改
     $n('plWordBtn').addEventListener('click', () => downloadFarmerReport($n('plWordBtn'))); // 0.4.77 產生 Word 檔
-    $n('plCancel').addEventListener('click', () => onPlantFarmer()); // 取消：表單換回原本的值、回到唯讀卡片
+    $n('plCancel').addEventListener('click', () => { $n('plHint').textContent = ''; closePlantEdit(); }); // 取消：收起表單（0.4.82 在月分工作進度；下次打開會重新填原本的值）
     // 0.4.73 董事長「試作報告拿掉」：業務手機不再有試作報告區、首頁右上角兩個入口（loadReports 等函式留著不呼叫，後台 trialReports 也留著）
     // 0.4.73 我的進度：切換看農民／盤商／種子商（最上面一排數字也能點）；換種類就收起展開的那一位
     const pickMineType = t => { if (!MINE_TYPES[t]) return; state.mineType = t; const s = document.getElementById('closeFarmer'); if (s) s.value = ''; fillCloseFarmers(); };
