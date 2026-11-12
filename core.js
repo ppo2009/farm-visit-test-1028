@@ -173,7 +173,9 @@
     const now0 = await Store.getMeta('config');
     if (!now0 || !now0.deviceKey || now0.deviceKey !== sentKey) return false;
     // 0.4.94 低4（第11任第五輪）：原本來回超過 5 秒就不校正，緬甸網路常常超過 → 一直沒校正。改成 60 秒內都校正（誤差最多約來回時間的一半），超過 60 秒才放棄
-    if (data && data.serverTime && Date.now() - sentAt <= 60000) {
+    // 0.4.98（第13任 手機5）：請求途中手機時間被往回調（自動對時、手動改時間）時來回時間會變負數，原本照樣用「一半來回時間」算 → 校正錯好幾分鐘到幾小時；來回時間 < 0 就這次不校正
+    const rtt = Date.now() - sentAt;
+    if (data && data.serverTime && rtt >= 0 && rtt <= 60000) {
       // 伺服器時間 − 手機時間（扣掉一半來回時間），之後離線打卡都用它校正。
       // （第六輪原本只用來回 5 秒內的回應，怕上傳大檔時「一半來回時間」誤差太大；0.4.94 放寬到 60 秒，誤差最多約 30 秒，比完全不校正好）
       const now = Date.now();
@@ -359,8 +361,10 @@
       report.left = todo.length;
       let serverFails = 0;
       let timeouts = 0; // 0.4.94 中3：連續逾時幾筆（2 筆就先停）
+      let pos = 0; // 0.4.98（第13任 手機6）：進度用「第幾筆」：原本用已送成功的筆數＋1，逾時、讀不到檔先跳過的那筆不算 → 畫面一直停在同一個數字
       for (const v of todo) {
-        if (onProgress) onProgress({ id: v.id, index: report.sent + 1, total: todo.length });
+        pos++;
+        if (onProgress) onProgress({ id: v.id, index: pos, total: todo.length });
         // 0.4.87 中1（第11任驗收改）：照片、錄音逐張讀；讀不到跟網路錯誤分開（原本當成沒網路整輪停住，後面全部卡住、也不能登出）：
         // ① 讀不到 → 這筆記讀檔失敗次數、照一般失敗排 nextTry，先送後面的筆（IndexedDB 讀 Blob 有時只是一時失敗）
         // ② 同一筆連續 READ_FAIL_MAX 次讀不到 → 送出讀得到的照片＋錄音（讀不到就空），其他欄位（打字、價格、結案、試作）照送，

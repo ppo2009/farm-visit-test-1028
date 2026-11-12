@@ -437,19 +437,31 @@
     return { crop: $n('plCrop').value, variety, varCode: $n('plCode').value.trim(), plantDate: $n('plDate').value,
       areaNow: $n('plNow').value, areaMax: $n('plMax').value, fertilizer: $n('plFert').value.trim() };
   }
-  /** 0.4.94 中4：種植資料存檔逾時後，同步回來（客戶清單更新）時比對：後台的值已經是送出的值 → 提示「剛才的修改已存好」；超過一天還對不上就不再比 */
+  /** 0.4.94 中4：種植資料存檔逾時後，同步回來（客戶清單更新）時比對：後台的值已經是送出的值 → 提示「剛才的修改已存好」；超過一天還對不上就不再比
+   *  0.4.98（第13任 手機8）：原本只記一筆、不分帳號 → 連續兩位農民逾時，前一位的被蓋掉；換人登入同一支手機，上一位的比對結果提示給下一位。
+   *  改成一筆一位（帳號＋客戶編號），只比現在這個帳號的（舊版存的單筆沒有帳號：照舊比） */
   async function plantPendingCheck() {
-    const pp = await Store.getMeta('plantPending');
-    if (!pp || !pp.cid) return '';
-    if (Date.now() - (pp.at || 0) > 86400000) { await Store.setMeta('plantPending', null); return 'expired'; }
-    const f = ((await Store.getMeta('farmers')) || []).find(x => x.id === pp.cid);
-    if (!f) return '';
+    const raw = await Store.getMeta('plantPending');
+    const list = Array.isArray(raw) ? raw : raw && raw.cid ? [raw] : [];
+    if (!list.length) return '';
+    const acct = ((await getConfig()) || {}).account || '';
+    const farmers = (await Store.getMeta('farmers')) || [];
     const same = (a, b) => { const x = String(a == null ? '' : a).trim(), y = String(b == null ? '' : b).trim(); return x === y || (x !== '' && y !== '' && isFinite(Number(x)) && isFinite(Number(y)) && Number(x) === Number(y)); };
-    const ok = Object.keys(pp.profile || {}).every(k => same(f[k], pp.profile[k])) && (pp.clear || []).every(k => String(f[k] == null ? '' : f[k]).trim() === '');
-    if (!ok) return '';
-    await Store.setMeta('plantPending', null);
-    toast(`剛才的種植資料修改已存好（${f.name || pp.cid}）／ယခင် ပြင်ဆင်ချက် သိမ်းပြီးပါပြီ`);
-    return 'saved';
+    let res = '', changed = false;
+    const keep = list.filter(pp => {
+      if (!pp || !pp.cid) { changed = true; return false; }
+      if (Date.now() - (pp.at || 0) > 86400000) { changed = true; if (!res) res = 'expired'; return false; }
+      if (pp.account && acct && pp.account !== acct) return true; // 別的帳號的：留著，等他登入再比
+      const f = farmers.find(x => x.id === pp.cid);
+      if (!f) return true;
+      const ok = Object.keys(pp.profile || {}).every(k => same(f[k], pp.profile[k])) && (pp.clear || []).every(k => String(f[k] == null ? '' : f[k]).trim() === '');
+      if (!ok) return true;
+      changed = true; res = 'saved';
+      toast(`剛才的種植資料修改已存好（${f.name || pp.cid}）／ယခင် ပြင်ဆင်ချက် သိမ်းပြီးပါပြီ`);
+      return false;
+    });
+    if (changed) await Store.setMeta('plantPending', keep.length ? keep : null);
+    return res;
   }
   async function savePlant() {
     const cid = state.plEditCid || '', cfg = await getConfig(); // 0.4.82 改在月分工作進度：存的是正在改的那位（不是種植資料分頁選的）
@@ -463,13 +475,24 @@
       const r = await gasCall({ action: 'plantSave', cid, profile: ch.profile, clear: ch.clear }); // 業務BUG#3：改走 gasCall，有逾時；種植資料中1（第8任）：只送改過的欄位
       // 0.4.94 中4（第11任第五輪）：逾時不代表沒存到（後台常常其實已存好）→ 不叫業務馬上重按；記下送出的值，下次同步回來比對，已經是送出的值就說「剛才的修改已存好」
       if (r && r.timeout) {
-        await Store.setMeta('plantPending', { cid, profile: ch.profile, clear: ch.clear, at: Date.now() });
+        try { // 0.4.98（第13任 手機8）：一位一筆（帳號＋客戶編號），同一位再逾時就換成這次的值；其他位的留著（記不下來不影響下面的提示）
+          const raw = await Store.getMeta('plantPending'), acct = cfg.account || '';
+          // 0.4.98 審查（手機 低1）：升版前存的舊格式（沒帳號）同一位也一起換掉（跟存好時清除同一規則），不然舊值剛好等於後台時會誤報「已存好」
+          const list = (Array.isArray(raw) ? raw : raw && raw.cid ? [raw] : []).filter(pp => !(pp && pp.cid === cid && (!pp.account || pp.account === acct)));
+          list.push({ account: acct, cid, profile: ch.profile, clear: ch.clear, at: Date.now() });
+          await Store.setMeta('plantPending', list);
+        } catch (e) { /* 記不下來：只是之後不會自動提示已存好 */ }
         $n('plHint').textContent = '網路太慢，可能已存好，請稍後到這位農民的進度看一下再決定要不要重按／အင်တာနက် နှေးသည်၊ သိမ်းပြီး ဖြစ်နိုင်သည်၊ ခဏနေမှ တိုးတက်မှုကို ကြည့်ပြီး ထပ်နှိပ်ရန် ဆုံးဖြတ်ပါ';
         return;
       }
       if (!r || !r.ok) { $n('plHint').textContent = (r && r.message) || '存檔失敗，請再試一次／မအောင်မြင်'; return; }
       if (Array.isArray(r.farmers)) await Store.setMeta('farmers', r.farmers);
-      { const pp = await Store.getMeta('plantPending'); if (pp && pp.cid === cid) await Store.setMeta('plantPending', null); } // 0.4.94 中4：這位這次存好了，先前逾時那筆不用再比
+      { // 0.4.94 中4：這位這次存好了，先前逾時那筆不用再比（0.4.98 手機8：只拿掉這個帳號這一位的）
+        const raw = await Store.getMeta('plantPending'), acct = cfg.account || '';
+        const list = Array.isArray(raw) ? raw : raw && raw.cid ? [raw] : [];
+        const left = list.filter(pp => !(pp && pp.cid === cid && (!pp.account || pp.account === acct)));
+        if (left.length !== list.length) await Store.setMeta('plantPending', left.length ? left : null);
+      }
       $n('plHint').textContent = '已存好，主管看得到／သိမ်းပြီး';
       toast('種植資料已存好／သိမ်းပြီး');
       $n('plHistory')._doneCid = null; // 0.4.80 低5：存好了要重讀紀錄
@@ -636,21 +659,25 @@
     if (!m || typeof m !== 'object') return '';
     const has = x => x !== '' && x != null;
     const val = { variety: m.variety, sample: has(m.sampleCount) ? `${m.sampleCount} ${m.sampleUnit || ''}` : '',
-      weight: has(m.weightKg) ? `${m.weightKg} kg${m.husk ? '（' + m.husk + '）' : ''}` : (m.husk || ''), length: has(m.length) ? `${m.length} ${m.lengthUnit || ''}` : '',
+      weight: has(m.weightKg) ? `${thou(m.weightKg)} kg${m.husk ? '（' + m.husk + '）' : ''}` : (m.husk || ''), length: has(m.length) ? `${m.length} ${m.lengthUnit || ''}` : '',
       rows: m.rows, sowDate: m.sowDate, harvestDate: m.harvestDate, days: has(m.days) ? `${m.days} 天` : '' };
     const li = MEASURE_ROWS.filter(([k]) => has(val[k])).map(([k, zh, my]) => `<li>${zh} <span class="my">${my}</span>：<b>${esc(String(val[k]).trim())}</b></li>`).join('');
     return li ? `<ul class="mcard">${li}</ul>` : '';
   }
   /** 0.4.81 董事長「結案通過主管審核過，才能在種植資料顯示」：結案那筆的審核狀態（closingDetail.state；舊後台沒有就看 closeRejected／closePending；空白＝不用審核） */
   const closeStateOf = v => { const d = v && v.closingDetail && typeof v.closingDetail === 'object' ? v.closingDetail : null; return (d && d.state) || (v && v.closeRejected ? '已退回' : v && v.closePending ? '待確認' : ''); };
+  /** 0.4.98（第13任 Word7）：千分位（跟後台 thou_ 同一規則：整數部分每三位加逗號；不是數字原樣回）；thouText：舊結案文字裡「價格 12000」「產量 1500」補千分位（同 Word 的做法） */
+  const thou = n => { const s = String(n == null ? '' : n).trim(); return /^-?\d+(\.\d+)?$/.test(s) ? s.replace(/^(-?\d+)/, m => m.replace(/\B(?=(\d{3})+(?!\d))/g, ',')) : s; };
+  const thouText = t => String(t || '').replace(/(價格|產量) (\d{4,}(?:\.\d+)?)/g, (m0, k, n) => k + ' ' + thou(n));
   /** 最近一筆結案：狀態、文字、價格、產量（重量）、收購客戶…、照片格子、量測卡。後台還沒給 closingDetail 時退回顯示結案那串文字 */
   function closeBlockHtml(v) {
     const d = v.closingDetail && typeof v.closingDetail === 'object' ? v.closingDetail : null;
     const pill = v.closeRejected || (d && d.state === '已退回') ? '<span class="pill late">主管已退回 ပြန်ပို့</span>' : v.closePending || (d && d.state === '待確認') ? '<span class="pill wait">待主管確認 စစ်ဆေးဆဲ</span>' : '<span class="pill ok">已結案 ပိတ်သိမ်းပြီး</span>';
-    const rows = d ? [['賣給地區 ရောင်းသည့်ဒေသ', d.region], ['價格 ဈေးနှုန်း', d.price !== '' && d.price != null ? `${d.price} ${d.priceUnit || ''}` : ''], ['產量（重量） အထွက်', d.yield !== '' && d.yield != null ? `${d.yield} ${d.yieldUnit || ''}` : ''],
-      ['收購客戶 ဝယ်သူ', d.buyer], ['電話 ဖုန်း', d.phone], ['原因 အကြောင်းရင်း', d.reason], ['進度 တိုးတက်မှု', d.progress], ['試作結果 ရလဒ်', d.trialOutcome || (d.trialResult && d.trialResult.outcome) || '']].filter(([, x]) => x !== '' && x != null) : [];
+    // 0.4.98（第13任 Word7）：價格、產量千分位；試作結果用後台跟 Word 同一套備援（trialText：結案沒帶就看這一季已結束的試作、以試作分頁為準）；舊後台沒給就照舊
+    const rows = d ? [['賣給地區 ရောင်းသည့်ဒေသ', d.region], ['價格 ဈေးနှုန်း', d.priceText || (d.price !== '' && d.price != null ? `${thou(d.price)} ${d.priceUnit || ''}` : '')], ['產量（重量） အထွက်', d.yieldText || (d.yield !== '' && d.yield != null ? `${thou(d.yield)} ${d.yieldUnit || ''}` : '')],
+      ['收購客戶 ဝယ်သူ', d.buyer], ['電話 ဖုန်း', d.phone], ['原因 အကြောင်းရင်း', d.reason], ['進度 တိုးတက်မှု', d.progress], ['試作結果 ရလဒ်', d.trialText || d.trialOutcome || (d.trialResult && d.trialResult.outcome) || '']].filter(([, x]) => x !== '' && x != null) : [];
     return `<div class="vclose"><b>${esc(v.time || '')}</b> ${pill}${v.staff ? '｜' + esc(v.staff) : ''}`
-      + (rows.length ? `<ul>${rows.map(([k, x]) => `<li>${k}：<b>${esc(String(x).trim())}</b></li>`).join('')}</ul>` : (v.closing ? `<p>${esc(v.closing)}</p>` : ''))
+      + (rows.length ? `<ul>${rows.map(([k, x]) => `<li>${k}：<b>${esc(String(x).trim())}</b></li>`).join('')}</ul>` : (v.closing ? `<p>${esc(thouText(v.closing))}</p>` : ''))
       + `${v.text ? `<p>${esc(v.text)}</p>` : ''}${v.typed && v.typed !== v.text ? `<p><small>打字原文 မူရင်း：${esc(v.typed)}</small></p>` : ''}`
       + `${v.plantFail ? `<p><span class="pill late">種植失敗</span> ${esc(v.plantFail)}</p>` : ''}`
       + `${(v.photos || []).length ? `<div class="pgrid">${v.photos.map((id, i) => `<button type="button" class="btn2 small" data-hph="${esc(id)}">📷 照片 ${i + 1}</button>`).join('')}</div>` : ''}`
@@ -662,7 +689,7 @@
     const head = o.showAddr ? `<p class="sub">${addr ? '📍 ' + esc(addr) : ''}${r.address ? `${addr ? '　' : '📍 '}${esc(r.address)}` : ''}${r.phone ? `　📞 ${esc(String(r.phone).replace(/^'/, ''))}` : ''}</p>` : '';
     const tl = o.oldFirst ? (r.trials || []).slice().reverse() : (r.trials || []); // 0.4.77 種植資料頁：由舊到新（從頭到尾）
     const trials = tl.map(t => `<li><span class="pill ${TRIAL_PILL[t.status] || 'wait'}">${esc(t.status || '—')}</span> <b>${esc(catBi(t.cat || '試作'))}</b>：${esc(t.item || '（未填品項）')}${t.crop ? '（' + esc(t.crop) + '）' : ''}`
-      + `<br><small>${esc(t.start || '?')}～${esc(t.end || (t.status === '進行中' ? '進行中' : '?'))}${t.yield !== '' ? `・產量 အထွက် ${esc(t.yield)} ${esc(t.yieldUnit)}` : ''}${t.comment ? '・農民評價 သုံးသပ်ချက်：' + esc(t.comment) : ''}</small>`
+      + `<br><small>${esc(t.start || '?')}～${esc(t.end || (t.status === '進行中' ? '進行中' : '?'))}${t.yield !== '' ? `・產量 အထွက် ${esc(thou(t.yield))} ${esc(t.yieldUnit)}` : ''}${t.comment ? '・農民評價 သုံးသပ်ချက်：' + esc(t.comment) : ''}</small>`
       + `${t.reason ? `<br><small>失敗原因 အကြောင်းရင်း：${esc(t.reason)}</small>` : ''}${t.conclusion ? `<br><small>結論 နိဂုံး：${esc(t.conclusion)}</small>` : ''}</li>`).join('');
     const raw = r.visits || [];
     // 0.4.81 董事長「結案通過主管審核過，才能在種植資料顯示」（只有種植資料頁 closeFirst）：待確認、已退回那筆的結案內容先藏起來，拜訪本身照列
@@ -976,7 +1003,7 @@
     const dayDiff = (a, b) => Math.round((Date.parse(String(b).slice(0, 10)) - Date.parse(String(a).slice(0, 10))) / 86400000);
     const week = s => (isDay(s) ? Math.max(1, Math.ceil(dayDiff(s, today) / 7)) : null);
     // 最後拜訪日：伺服器的＋這支手機自己存的拜訪（還沒同步的也算，剛量完不會還叫你去量）
-    const mine = await myVisits(); // 低#6（第8任）：只算目前帳號的
+    const mine = state.myVisitList || await myVisits(); // 低#6（第8任）：只算目前帳號的；0.4.98（第13任 手機9）：只有 renderHome 呼叫，它剛讀過（state.myVisitList），不再整份重讀一次（含沒上傳的照片錄音）
     const localDay = ms => mmDay(0, ms); // 業務BUG#4：拜訪日也用緬甸日期，跟伺服器的最後拜訪日同一把尺
     const lastOf = cid => { const p0 = people.find(f => f.id === cid) || {}; return latestVisitDay(p0.lastVisit, [cid, p0.tempId], mine); }; // 0.4.91 低2：連臨時編號一起比 // 0.4.84 改用共用的 latestVisitDay（同一套：後台與這支手機取較新）
     /** 量測週：開始後第 2、4、8 週（boss.js 有同一組數字，要改兩邊一起改；2026-11-12 優化 4） */
@@ -2553,7 +2580,9 @@ ${state.cat}：${who}
   /* 0.4.91 中1（第11任第三輪清單）：網頁（index.html）和程式（app.js）新舊混用時（背景程式逾時各自拿快取），試作品項只剩空白、開不了試作。
      兩邊各放一個版本標記（index.html <meta name="app-build">、這裡的 APP_BUILD），開機比對：不一樣就重新整理一次。
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
-  const APP_BUILD = '0491-1'; // 要跟 index.html 的 app-build 一模一樣
+  // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
+  // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
+  const APP_BUILD = '0.4.98'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
