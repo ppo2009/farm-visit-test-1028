@@ -50,8 +50,10 @@ textarea{min-height:96px;resize:vertical}
 button .my{color:inherit;opacity:.85} /* 按鈕裡的緬文跟按鈕字同色（選取後底色變綠，灰字會看不見；2026-11-12 實測） */
 h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文／緬文）用一般粗細，不要跟標題一樣粗 */
 .catswitch{display:flex;gap:6px}
-.farmermenu{display:grid;gap:8px;margin-top:10px;padding:10px;border:2px solid var(--paddy);border-radius:16px;background:var(--surface)}
-.farmermenu button{min-height:56px;border:1.5px solid var(--paddy);background:var(--paddy-soft);color:var(--paddy);border-radius:12px;font-weight:700;font-size:1.05rem;cursor:pointer}
+/* 0.4.45 董事長截圖：三個選項（一般拜訪／試作／推廣）同一排左中右，不要上下疊三排 */
+.farmermenu{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px;padding:10px;border:2px solid var(--paddy);border-radius:16px;background:var(--surface)}
+.farmermenu[hidden]{display:none}
+.farmermenu button{min-height:56px;border:1.5px solid var(--paddy);background:var(--paddy-soft);color:var(--paddy);border-radius:12px;font-weight:700;font-size:1.05rem;cursor:pointer;padding:6px 4px;word-break:keep-all;overflow-wrap:anywhere;min-width:0}
 /* 0.4.32 農民那組按鈕寬度照字數分（一般拜訪農民 6 字、試作農民 4、推廣農民 4），長的不會被擠成兩行；0.4.40 結案搬到畫面最下面 */
 .catswitch[data-group="farmer"]{display:grid;grid-template-columns:6.6fr 4.6fr 4.6fr}
 .closemode{display:block;width:100%;margin-top:18px;border-color:#9a6a00;color:#9a6a00}
@@ -59,7 +61,7 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
 .catswitch[data-group="farmer"] button{padding-left:2px;padding-right:2px}
 .catswitch button{flex:1;min-height:48px;border:1.5px solid var(--paddy);background:none;color:var(--paddy);border-radius:12px;font-weight:700;cursor:pointer;padding:6px 4px;word-break:keep-all;overflow-wrap:anywhere;min-width:0}
 /* 0.4.24（2026-11-12 業務面線上檢查）：375 點寬手機「一般拜訪」被拆成「一般拜／訪」兩行 → 中文詞不從中間斷（真的放不下才斷），窄手機字縮小一點 */
-@media (max-width:400px){.catswitch{gap:4px}.catswitch button{font-size:1rem;padding:6px 2px}}
+@media (max-width:400px){.catswitch{gap:4px}.catswitch button{font-size:1rem;padding:6px 2px}.farmermenu{gap:6px;padding:8px}.farmermenu button{font-size:.95rem;padding:6px 2px}}
 /* 首頁分頁標籤（0.4.26，董事長給的範例：一排文字分頁，選到的那個加框） */
 /* 寬度照中文字數分（4、6、4、4 字）：緬文小字比較長，用內容寬度分會把中文擠成兩行（0.4.29 字體 16px 後實測） */
 .htabs{display:grid;grid-template-columns:4fr 6fr 4fr 4fr;gap:2px;border-bottom:1px solid var(--line);margin:4px 0 14px;overflow:visible}
