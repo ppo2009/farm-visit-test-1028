@@ -388,7 +388,7 @@
   function applyCatLabels() {
     const cat = state.cat;
     $('visitTitle').textContent = isDealerCat() ? '盤商或種子商 ကုန်သည် / မျိုးစေ့ဆိုင်' : '農民 လယ်သမား';
-    $('farmerLab').innerHTML = isDealerCat() ? `1. 選擇${cat}<span class="my">${cat === '種子商' ? 'မျိုးစေ့ဆိုင်' : 'ကုန်သည်'} ရွေးပါ</span>` : '1. 選擇農民<span class="my">လယ်သမား ရွေးပါ</span>';
+    $('farmerLab').innerHTML = isDealerCat() ? `選擇${cat}<span class="my">${cat === '種子商' ? 'မျိုးစေ့ဆိုင်' : 'ကုန်သည်'} ရွေးပါ</span>` : '選擇農民<span class="my">လယ်သမား ရွေးပါ</span>';
     $('priceBox').hidden = cat !== '盤商' || !!state.dealerClose; // 0.4.41 董事長：種子商那邊不需要價格，只有盤商有
     document.querySelectorAll('.dealer-only').forEach(el => { el.hidden = !isDealerCat(); });
     document.querySelectorAll('.farmer-only').forEach(el => { el.hidden = isDealerCat(); });
@@ -661,7 +661,8 @@
     if (!shown) state.noMeet = false;
     const on = noMeetOn();
     // 0.4.44 董事長「資訊太多」→ 第 3 步只問「有見到嗎」：還沒選，兩顆都不亮、下面拍照打字試作都先不出現
-    const chosen = !shown || on || !!state.meetChosen;
+    // 0.4.54 第6任檢查：還沒選客戶時也先不露拍照、打字、價格（第 1 步先選客戶）
+    const chosen = (!shown && !!$('farmer').value) || on || !!state.meetChosen;
     $('meetYes').setAttribute('aria-pressed', String(shown && chosen && !on)); $('meetNo').setAttribute('aria-pressed', String(on));
     const mb = $('meetBody'); if (mb) mb.hidden = !chosen;
     $('noMeetForm').hidden = !on;
@@ -735,6 +736,7 @@
     const days = t && /^\d{4}-\d\d-\d\d/.test(String(t.start || '')) ? Math.floor((Date.now() - Date.parse(String(t.start).slice(0, 10))) / 86400000) : null;
     const wk = days == null ? null : Math.max(1, Math.ceil(days / 7));
     if (state.cat === '結案') return ['例：已賣給 Golden 糧行，價格比去年好，農民明年還要種', 'ဥပမာ - Golden ဆန်ဆိုင်သို့ ရောင်းပြီး၊ ဈေးကောင်း၊ နောက်နှစ် ဆက်စိုက်မည်'];
+    if (state.cat === '種子商') return ['例：老闆想再多進一批種子，下週帶樣品和新品介紹過去', 'ဥပမာ - ဆိုင်ရှင်က မျိုးစေ့ ထပ်မှာချင်၊ နောက်အပတ် နမူနာ ယူလာမည်']; // 0.4.54 種子商沒有價格，範例改成匯報紀錄
     if (isDealerCat()) return ['例：店裡水稻種子賣得好，老闆想多進 A 品牌，價格比上月漲一點', 'ဥပမာ - စပါးမျိုး ရောင်းကောင်း၊ A တံဆိပ် ထပ်မှာချင်၊ ဈေး နည်းနည်းတက်'];
     if (sel === '__new') return ['例：第一次拜訪，種水稻 5 英畝，目前用尿素，對我們的肥料有興趣，下週帶樣品', 'ဥပမာ - ပထမအကြိမ်၊ စပါး ၅ ဧက၊ ယူရီးယားသုံး၊ နမူနာ နောက်အပတ် ယူလာမည်'];
     if (state.trialMode === 'start') return ['例：今天開始試作，A 肥料每英畝 2 包，旁邊留一塊不施當對照，秧苗高約 15 公分', 'ဥပမာ - ယနေ့ စတင်၊ A မြေသြဇာ တစ်ဧက ၂ အိတ်၊ နှိုင်းယှဉ်ကွက် ထား'];
@@ -1048,7 +1050,7 @@
     const tp = noMeetProblem() || trialProblem() || closeProblem();
     const ok = sel && nameOk && !state.rec && !state.busyPhotos && !tp && (isNew || hasContent);
     $('saveBtn').disabled = !ok;
-    $('saveHint').textContent = !sel ? '' : !nameOk ? '請先填名字／အမည် အရင်ဖြည့်ပါ' : state.rec ? '錄音中，先按一下結束錄音／အသံသွင်းနေသည်၊ အရင် ရပ်ပါ' : state.busyPhotos ? `照片處理中（還有 ${state.busyPhotos} 張）… ဓာတ်ပုံ ပြင်ဆင်နေ` : tp ? tp : !ok ? `拍照、上傳照片、錄音、打字${isDealerCat() ? '、記價格' : ''}（或改客戶資料）至少做一樣／ဓာတ်ပုံ၊ အသံ၊ စာ တစ်ခုခု လုပ်ပါ` : '';
+    $('saveHint').textContent = !sel ? '' : !nameOk ? '請先填名字／အမည် အရင်ဖြည့်ပါ' : state.rec ? '錄音中，先按一下結束錄音／အသံသွင်းနေသည်၊ အရင် ရပ်ပါ' : state.busyPhotos ? `照片處理中（還有 ${state.busyPhotos} 張）… ဓာတ်ပုံ ပြင်ဆင်နေ` : tp ? tp : !ok ? `拍照、上傳照片、錄音、打字${state.cat === '盤商' ? '、記價格' : ''}${$('farmer').value === '__new' || SHOW_PROFILE_ON_VISIT ? '（或改客戶資料）' : ''}至少做一樣／ဓာတ်ပုံ၊ အသံ၊ စာ တစ်ခုခု လုပ်ပါ` : '';
   }
 
   async function save() {
@@ -1159,6 +1161,9 @@ ${state.cat}：${who}
 
   function resetForm() {
     state.formGen++;
+    // 0.4.54 第6任檢查：上一位客戶的進度卡、作物四格會殘留到下一次打卡畫面 → 進畫面就清掉
+    const pbx = $('progressBox'); if (pbx) { pbx.hidden = true; pbx.innerHTML = ''; }
+    state.cropOpen = false; $('cropBox').hidden = true; $n('cropSum').hidden = true;
     ['cPrice', 'cYield', 'cBuyer', 'cPhone'].forEach(id => { $(id).value = ''; });
     $('cRegion').innerHTML = '<option value="">— 選擇地區 ဒေသရွေးပါ —</option>' + ((state.options && state.options.regions) || []).map(x => `<option>${esc(x)}</option>`).join('');
     state.busyPhotos = 0;
@@ -1224,7 +1229,9 @@ ${state.cat}：${who}
 
 
   async function renderQueue() {
-    const all = (await Store.allVisits()).sort((a, b) => b.deviceTime - a.deviceTime);
+    // 0.4.54 第6任檢查：同一支手機換人登入，別人的紀錄不列、不算「沒上傳」（上傳本來就只送自己帳號的，算進來會永遠掛著）
+    const qcfg = (await Store.getMeta('config')) || {};
+    const all = (await Store.allVisits()).filter(v => !v.account || !qcfg.account || v.account === qcfg.account).sort((a, b) => b.deviceTime - a.deviceTime);
     const pending = all.filter(v => v.status === 'pending');
     const rejected = all.filter(v => v.status === 'rejected').length;
     const ticks = (await mineTicks()).length; // 只算自己帳號的打勾（自行審查 S1）
