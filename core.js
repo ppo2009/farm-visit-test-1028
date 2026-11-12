@@ -317,13 +317,19 @@
 
   /** 上傳完，伺服器已經有的新客戶，就把手機裡的暫時資料拿掉（網頁和背景程式都會做） */
   // 讀待上傳拜訪、讀清單、寫回都在同一個交易裡（R6-02：原本分三個交易，存新客戶夾在中間會被洗掉）
-  function pruneLocalCustomers() {
-    return Store.pruneByPending('localCustomers', (l, pending) => pending.some(v => v.farmerId === l.id));
+  // 0.4.97（第12任 BUG 審查手機 3）：同一位還有拜訪沒傳成（0.4.95 起逾時排重試更常見）時，原本暫存客戶會留著；
+  // 後台客戶清單已經有正式的他（帶回同一個臨時編號 tempId）→ 選單、月分工作進度同時出現兩個他、首頁多算 → 後台已有的就拿掉
+  // （沒傳成的拜訪照舊用臨時編號送，後台會對到同一位；拜訪本身帶完整客戶資料，不靠這份暫存）
+  async function pruneLocalCustomers() {
+    const srvTmp = new Set(((await Store.getMeta('farmers')) || []).map(f => f && f.tempId).filter(Boolean));
+    return Store.pruneByPending('localCustomers', (l, pending) => !srvTmp.has(l.id) && pending.some(v => v.farmerId === l.id));
   }
 
   /** 手機裡暫存的試作（還沒上傳的開始、已結束待上傳的）：對應的拜訪都傳完就拿掉 */
   function pruneLocalTrials() {
-    return Store.pruneByPending('localTrials', (l, pending) => pending.some(v => v.trial && (v.trial.tempId === l.id || v.trial.id === l.id)));
+    // 0.4.97（第12任 BUG 審查手機 1）：結案時一起填試作結果（closing.trialResult）也會記「這件已結束」，原本只認 v.trial → 結案還沒傳上去，記號就被清掉，試作又變回進行中
+    return Store.pruneByPending('localTrials', (l, pending) => pending.some(v => (v.trial && (v.trial.tempId === l.id || v.trial.id === l.id))
+      || (v.closing && v.closing.trialResult && v.closing.trialResult.id === l.id)));
   }
 
   async function runSyncInner(onProgress) {

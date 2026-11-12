@@ -931,7 +931,10 @@
     $('monthChips').querySelectorAll('[data-m]').forEach(b => b.addEventListener('click', () => { state.homeMonth = b.dataset.m; renderHome(); }));
     const cur = hist.find(x => x.month === state.homeMonth);
     $('statVisits').textContent = cur ? cur.visits : (h ? h.monthVisits : '—');
-    $n('msVisits').textContent = h && h.monthVisits != null ? String(h.monthVisits) : '—'; // 0.4.69 最上面一排：本月拜訪（不跟著月份切換）
+    // 0.4.69 最上面一排：本月拜訪（不跟著月份切換）
+    // 0.4.97（第12任 BUG 審查手機 2）：存著的首頁資料是上個月的（月初還沒同步過）→ 不能把上個月的數字當本月（0.4.95 起還會再加這個月未上傳的）→ 底數用「—」
+    const hThisMonth = !!(h && (!h.month || h.month === String(today || '').slice(0, 7)));
+    $n('msVisits').textContent = hThisMonth && h.monthVisits != null ? String(h.monthVisits) : '—';
     $('statNew').textContent = cur ? cur.newCustomers : (h ? h.newCustomers : '—');
     $('statCust').textContent = cur ? cur.customersVisited : '—';
     $('statTrials').textContent = cur ? `${cur.trialsStarted}／${cur.trialsEnded}` : '—';
@@ -943,8 +946,9 @@
       const thisMonth = String(today || '').slice(0, 7);
       const pendAll = (state.myVisitList || []).filter(v => v && v.status === 'pending' && mmDay(0, v.deviceTime).slice(0, 7) === thisMonth);
       const pend = (cur && cur.month && cur.month !== thisMonth) ? [] : pendAll; // 0.4.95（第12任驗收）：最上面一排「本月拜訪」不跟月份切換 → 一律加 pendAll；下面那組跟著看的月份
-      const lvOf = {}; ((await Store.getMeta('farmers')) || []).forEach(f => { lvOf[f.id] = String(f.lastVisit || ''); });
-      const newN = new Set(pend.filter(v => /^T_/.test(String(v.farmerId || ''))).map(v => v.farmerId)).size; // 新增客戶（臨時編號）
+      // 0.4.97（手機 3）：後台已建好正式客戶的臨時編號（tempId）也對到後台的最後拜訪日、不再算新增（後台已經算過）
+      const lvOf = {}, srvTmp = new Set(); ((await Store.getMeta('farmers')) || []).forEach(f => { lvOf[f.id] = String(f.lastVisit || ''); if (f.tempId) { lvOf[f.tempId] = lvOf[f.id]; srvTmp.add(f.tempId); } });
+      const newN = new Set(pend.filter(v => /^T_/.test(String(v.farmerId || '')) && !srvTmp.has(v.farmerId)).map(v => v.farmerId)).size; // 新增客戶（臨時編號）
       const custN = new Set(pend.filter(v => v.farmerId && (lvOf[v.farmerId] || '').slice(0, 7) !== thisMonth).map(v => v.farmerId)).size; // 這個月後台還沒算到的客戶
       const plus = (el, n) => { if (!el || !n) return; const base = Number(el.textContent); el.textContent = String((isFinite(base) && el.textContent.trim() !== '' ? base : 0) + n); };
       plus($n('statVisits'), pend.length); plus($n('msVisits'), pendAll.length); plus($n('statNew'), newN); plus($n('statCust'), custN);
@@ -1443,7 +1447,9 @@
     const box = o.box || $('progressBox');
     const current = o.current || (() => $('farmer').value === cid);
     if (!cid || cid === '__new') { box.hidden = true; box.innerHTML = ''; return; }
-    if (!o.box) state.closeWait = null; // 0.4.92 低5：換客戶先清掉上一位的「等主管確認」（新增農民不會對到，不用清）
+    // 0.4.92 低5：換客戶先清掉上一位的「等主管確認」（新增農民不會對到，不用清）
+    // 0.4.97（第12任 BUG 審查手機 4B）：原本清成 null → 等後台紀錄的最多 10 秒內不擋結案，這段時間能再送一次 → 先標「查詢中」，查完下面再寫實際結果
+    if (!o.box) state.closeWait = { cid, wait: 'checking' };
     const c = (o.list || state.allCustomers || []).find(f => f.id === cid) || {};
     // 0.4.49 董事長：進度卡標題旁顯示農民姓名、電話（點了直接撥）、地址（農民多半只有地區，沒填地址就顯示地區）
     const tel = String(c.phone || '').replace(/[\u1040-\u1049]/g, ch => String(ch.charCodeAt(0) - 0x1040)).replace(/[^0-9+]/g, ''); // 0.4.92 低2：緬文數字先轉 0-9
@@ -1469,7 +1475,8 @@
     // 等確認＝這支手機還有沒上傳、帶結案的拜訪（'local'），或後台最近拜訪裡最新一筆有結案的、結尾是「（待主管確認）」（'server'；退回的結尾不同，可以再送）
     if (!o.box) {
       const lastC = (remote || []).find(v => v && v.closing);
-      const w = local.some(v => v && v.status === 'pending' && v.closing) ? 'local' : lastC && /（待主管確認）$/.test(String(lastC.closing)) ? 'server' : '';
+      // 0.4.97（手機 4A）：沒拿到後台紀錄（離線、逾時）時，這支手機「已上傳」的結案（手機留 7 天）也算等確認——原本只看沒上傳的，昨天已上傳、今天在田裡沒網路就能再送一次，後台出兩筆待確認
+      const w = local.some(v => v && v.closing && (v.status === 'pending' || (!remote && v.status === 'uploaded'))) ? 'local' : lastC && /（待主管確認）$/.test(String(lastC.closing)) ? 'server' : '';
       state.closeWait = { cid, wait: w };
       if (w) waitHtml = `<p class="err">⏳ ${esc('這位已送結案、等主管確認中，不能再送一次（主管確認或退回後才能再送）／ပိတ်သိမ်းရန် ပို့ပြီးပါပြီ၊ မန်နေဂျာ စစ်ဆေးနေဆဲ၊ ထပ်မပို့ရ')}</p>`;
       if (typeof refreshSave === 'function') refreshSave();
@@ -1767,7 +1774,8 @@
     // 0.4.92 低5（第11任第四輪）：結案（含盤商、種子商結案／簽約）送出後在等主管確認時，同一位還能再送一次 → 後台出兩筆待確認。
     // state.closeWait 由打卡畫面的進度卡寫（renderProgress：後台最近一筆結案還「待主管確認」，或這支手機還有沒上傳的結案）
     const waitOf = cid => !!cid && !!state.closeWait && state.closeWait.cid === cid && !!state.closeWait.wait;
-    const WAIT_MSG = '這位已送結案、等主管確認中，不能再送一次（主管確認或退回後才能再送）／ပိတ်သိမ်းရန် ပို့ပြီးပါပြီ၊ မန်နေဂျာ စစ်ဆေးနေဆဲ၊ ထပ်မပို့ရ';
+    const WAIT_MSG = state.closeWait && state.closeWait.wait === 'checking' ? '正在查這位之前的結案紀錄，請等幾秒再按／ယခင် ပိတ်သိမ်းမှု စစ်နေသည်၊ စက္ကန့်အနည်းငယ် စောင့်ပါ' // 0.4.97 手機 4B
+      : '這位已送結案、等主管確認中，不能再送一次（主管確認或退回後才能再送）／ပိတ်သိမ်းရန် ပို့ပြီးပါပြီ၊ မန်နေဂျာ စစ်ဆေးနေဆဲ၊ ထပ်မပို့ရ';
     if (state.dealerClose) { // 0.4.42 盤商、種子商結案：洽談結果＋說明必填，送主管審核
       const sel = $('farmer').value;
       if (!sel || sel === '__new') return '請先選要結案的' + state.cat + '／ဖောက်သည် ရွေးပါ';
