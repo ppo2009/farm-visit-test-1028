@@ -483,31 +483,40 @@
     try {
       const r = await gasCall({ action: 'plantSave', cid, profile: ch.profile, clear: ch.clear }); // 業務BUG#3：改走 gasCall，有逾時；種植資料中1（第8任）：只送改過的欄位
       // 0.4.94 中4（第11任第五輪）：逾時不代表沒存到（後台常常其實已存好）→ 不叫業務馬上重按；記下送出的值，下次同步回來比對，已經是送出的值就說「剛才的修改已存好」
+      // 0.5.00（第13任，Antigravity 第 1 輪 3／0.4.99 審查手機低 3、4）：①逾時紀錄的新增、清除也走 Store.updateMeta 同一個交易（原本先讀再寫，
+      //   跟同步比對交錯時會把剛清掉的寫回去、同一位提示兩次）；②等回應期間換人登入或登出 → 只整理上一位的紀錄，不跳提示、不動現在畫面
+      const acct = cfg.account || '';
+      const editPending = async fn => {
+        const conv = raw => (Array.isArray(raw) ? raw.slice() : raw && raw.cid ? [raw] : []);
+        if (typeof Store.updateMeta === 'function') return Store.updateMeta('plantPending', raw => { const out = fn(conv(raw)); return out.length ? out : null; });
+        const out = fn(conv(await Store.getMeta('plantPending'))); return Store.setMeta('plantPending', out.length ? out : null);
+      };
+      const samePerson = async () => { const now = await getConfig(); return !!(now && now.deviceKey === cfg.deviceKey); };
+      // 0.5.00（Antigravity 第 2 輪 3）：等回應期間（最多 60 秒）換去改另一位農民 → 這位的結果不能寫進那位的提示、不能把那位正在改的表單關掉
+      const stillHere = async () => (await samePerson()) && state.plEditCid === cid;
+      const say = async msg => { if (await stillHere()) $n('plHint').textContent = msg; else if (await samePerson()) toast(msg); };
+      // 一位一筆（帳號＋客戶編號）；升版前存的舊格式（沒帳號）同一位也一起換掉（0.4.98 審查手機低1）
+      const notThis = pp => !(pp && pp.cid === cid && (!pp.account || pp.account === acct));
       if (r && r.timeout) {
-        try { // 0.4.98（第13任 手機8）：一位一筆（帳號＋客戶編號），同一位再逾時就換成這次的值；其他位的留著（記不下來不影響下面的提示）
-          const raw = await Store.getMeta('plantPending'), acct = cfg.account || '';
-          // 0.4.98 審查（手機 低1）：升版前存的舊格式（沒帳號）同一位也一起換掉（跟存好時清除同一規則），不然舊值剛好等於後台時會誤報「已存好」
-          const list = (Array.isArray(raw) ? raw : raw && raw.cid ? [raw] : []).filter(pp => !(pp && pp.cid === cid && (!pp.account || pp.account === acct)));
-          list.push({ account: acct, cid, profile: ch.profile, clear: ch.clear, at: Date.now() });
-          await Store.setMeta('plantPending', list);
+        try {
+          await editPending(list => { list = list.filter(notThis);
+            list.push({ account: acct, cid, profile: ch.profile, clear: ch.clear, at: Date.now() });
+            return list; });
         } catch (e) { /* 記不下來：只是之後不會自動提示已存好 */ }
-        $n('plHint').textContent = '網路太慢，可能已存好，請稍後到這位農民的進度看一下再決定要不要重按／အင်တာနက် နှေးသည်၊ သိမ်းပြီး ဖြစ်နိုင်သည်၊ ခဏနေမှ တိုးတက်မှုကို ကြည့်ပြီး ထပ်နှိပ်ရန် ဆုံးဖြတ်ပါ';
+        await say('網路太慢，可能已存好，請稍後到這位農民的進度看一下再決定要不要重按／အင်တာနက် နှေးသည်၊ သိမ်းပြီး ဖြစ်နိုင်သည်၊ ခဏနေမှ တိုးတက်မှုကို ကြည့်ပြီး ထပ်နှိပ်ရန် ဆုံးဖြတ်ပါ');
         return;
       }
-      if (!r || !r.ok) { $n('plHint').textContent = (r && r.message) || '存檔失敗，請再試一次／မအောင်မြင်'; return; }
-      // 0.4.99（審查手機低）：存檔最多等 60 秒，期間登出、換人登入 → 上一位的回應晚到，不能把他的客戶清單寫進新帳號（跟其他回應一樣先確認還是同一把金鑰）
-      if (Array.isArray(r.farmers)) { const nowCfg = await getConfig(); if (nowCfg && nowCfg.deviceKey === cfg.deviceKey) await Store.setMeta('farmers', r.farmers); }
-      { // 0.4.94 中4：這位這次存好了，先前逾時那筆不用再比（0.4.98 手機8：只拿掉這個帳號這一位的）
-        const raw = await Store.getMeta('plantPending'), acct = cfg.account || '';
-        const list = Array.isArray(raw) ? raw : raw && raw.cid ? [raw] : [];
-        const left = list.filter(pp => !(pp && pp.cid === cid && (!pp.account || pp.account === acct)));
-        if (left.length !== list.length) await Store.setMeta('plantPending', left.length ? left : null);
-      }
-      $n('plHint').textContent = '已存好，主管看得到／သိမ်းပြီး';
+      if (!r || !r.ok) { await say((r && r.message) || '存檔失敗，請再試一次／မအောင်မြင်'); return; }
+      try { await editPending(list => list.filter(notThis)); } catch (e) { /* 清不掉：下次比對到一樣會清 */ } // 0.4.94 中4：這位這次存好了，先前逾時那筆不用再比
+      // 0.4.99：存檔最多等 60 秒，期間登出、換人登入 → 上一位的回應晚到，不能把他的客戶清單寫進新帳號；0.5.00：提示、重畫也不做
+      if (!(await samePerson())) return;
+      if (Array.isArray(r.farmers)) await Store.setMeta('farmers', r.farmers);
+      const here = state.plEditCid === cid;
       toast('種植資料已存好／သိမ်းပြီး');
       $n('plHistory')._doneCid = null; // 0.4.80 低5：存好了要重讀紀錄
-      await fillCloseFarmers(); closePlantEdit(); showCloseProgress(); $n('plHint').textContent = '已存好，主管看得到／သိမ်းပြီး'; // 0.4.82 存好收起表單、重畫進度卡與 150 天進度
-    } catch (e) { $n('plHint').textContent = '網路不穩，沒存成功，請再按一次／ထပ်နှိပ်ပါ'; } finally { btn.disabled = false; }
+      await fillCloseFarmers();
+      if (here) { closePlantEdit(); showCloseProgress(); $n('plHint').textContent = '已存好，主管看得到／သိမ်းပြီး'; } // 0.4.82 存好收起表單、重畫進度卡；0.5.00：已經換去改別位就不關他的表單
+    } catch (e) { try { const now = await getConfig(); if (now && now.deviceKey === cfg.deviceKey && state.plEditCid === cid) $n('plHint').textContent = '網路不穩，沒存成功，請再按一次／ထပ်နှိပ်ပါ'; } catch (e2) { /* 畫面寫不了就算了 */ } } finally { btn.disabled = false; }
   }
   /* ───── 0.4.61 董事長：農民試作成功、失敗都要產生一份報表檔，所有人都看得到 ─────
      「我的進度」按「看試作報告」才向後台拿清單（要有網路；不在每次畫首頁時自動拿，省流量）；有 Word 的按一下下載
@@ -654,7 +663,8 @@
       const cst = (v.closingDetail && v.closingDetail.state) || v.closeHidden || (v.closeRejected ? '已退回' : v.closePending ? '待確認' : '');
       if ((v.closing || v.closeHidden) && (cst === '待確認' || cst === '已退回')) return;
       if (ymdValid(plantDate) && ymdValid(v.time) && String(v.time).slice(0, 10) < String(plantDate).slice(0, 10)) { early++; return; }
-      let st = STAGES.indexOf(v.stage) >= 0 ? v.stage : v.closing ? '採收' : '', guessed = false;
+      // 0.5.00（第13任，0.4.99 審查 Word 中4）：勾了種植失敗的結案＝沒收成，不當「採收」（後台 closeStage_ 也不回採收），改用推算
+      let st = STAGES.indexOf(v.stage) >= 0 ? v.stage : v.closing && !v.plantFail ? '採收' : '', guessed = false;
       if (!st) { st = stageGuess(plantDate, v.time); guessed = !!st; }
       if (!st) { const pdOk = ymdValid(plantDate), vOk = ymdValid(v.time); if (pdOk && vOk) early++; else if (!pdOk) noPd++; else badDay++; return; }
       by[st].push({ v, guessed });
@@ -2598,7 +2608,7 @@ ${state.cat}：${who}
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.4.99'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.00'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
