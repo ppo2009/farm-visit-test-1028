@@ -2083,6 +2083,8 @@
     if (state.rec) { state.rec.stop(); return; }
     // 0.4.87 中5（第11任 0.4.86 清單）：麥克風權限還沒回來時連按兩下會開兩個錄音器，第一個停不掉 → 一進來就設「啟動中」；處理錄音中也不能再開新的
     if (state.recStarting || state.recBusy || state.mediaLocked) return; // 0.4.91 中3：存檔等定位中也不開新錄音
+    // 0.4.94（第11任，第五輪審查順帶）：已經有一段錄音時再按，原本直接蓋掉 → 先確認，按取消就保留原本那段
+    if (state.audio && !confirm('會蓋掉剛才的錄音，確定重錄？\nယခင် အသံသွင်းချက် ပျက်သွားမည်။ ပြန်သွင်းမှာ သေချာပါသလား။')) return;
     if (!navigator.mediaDevices || !window.MediaRecorder) { toast('這支手機的瀏覽器不支援錄音／ဤဖုန်း အသံသွင်း မရ'); return; }
     state.recStarting = true;
     let stream, rec;
@@ -2099,6 +2101,7 @@
     rec.ondataavailable = ev => { if (ev.data.size) chunks.push(ev.data); };
     rec.onstop = async () => {
       clearInterval(state.recTimer);
+      { const rh = $n('recHint'); rh.textContent = `最長 ${MAX_REC_SEC} 秒／အများဆုံး ${MAX_REC_SEC} စက္ကန့်`; if (rh.classList) rh.classList.remove('warn'); } // 0.4.94
       stream.getTracks().forEach(t => t.stop());
       if (state.rec === rec) state.rec = null;
       if (gen !== state.formGen) return; // 錄到一半回首頁：這段錄音作廢，不能掉進下一筆拜訪（2026-11-11 抓到）
@@ -2120,10 +2123,17 @@
     rec.start(1000);
     btn.classList.add('rec'); btn.classList.remove('done');
     btn.querySelector('.label').textContent = '錄音中 0 秒・再按一下結束／ရပ်ရန် ထပ်နှိပ်';
+    // 0.4.94：錄音鈕旁倒數（剩幾秒），最後 10 秒變紅並跳一次提醒；到上限自己停，跟業務說錄滿了、要補充請用打字（原本到 90 秒默默停掉）
+    const hint = $n('recHint');
+    const showLeft = () => { const left = Math.max(0, MAX_REC_SEC - state.audioSec); const warn = left <= 10;
+      hint.textContent = warn ? `快錄滿了，剩 ${left} 秒／${left} စက္ကန့်သာ ကျန်` : `剩 ${left} 秒／${left} စက္ကန့် ကျန်`; if (hint.classList) hint.classList.toggle('warn', warn); };
+    showLeft();
     state.recTimer = setInterval(() => {
       state.audioSec++;
       btn.querySelector('.label').textContent = `錄音中 ${state.audioSec} 秒・再按結束／ရပ်ရန် ထပ်နှိပ်`;
-      if (state.audioSec >= MAX_REC_SEC) rec.stop();
+      showLeft();
+      if (MAX_REC_SEC - state.audioSec === 10) toast('錄音只剩 10 秒，要說的請快說完／၁၀ စက္ကန့်သာ ကျန်တော့သည်');
+      if (state.audioSec >= MAX_REC_SEC) { toast(`已錄滿 ${MAX_REC_SEC} 秒，錄音自動停了；要補充請用打字／${MAX_REC_SEC} စက္ကန့် ပြည့်ပြီ၊ ထပ်ဖြည့်ရန် စာရိုက်ပါ`); rec.stop(); }
     }, 1000);
     refreshSave();
   }

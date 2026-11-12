@@ -51,7 +51,10 @@
     '寫匯報給總經理': 'အထွေထွေမန်နေဂျာထံ အစီရင်ခံစာ ရေး', '送出匯報': 'အစီရင်ခံစာ ပို့', '我送出的匯報': 'ကျွန်ုပ် ပို့ခဲ့သော အစီရင်ခံစာ', '全部匯報': 'အစီရင်ခံစာ အားလုံး',
     '未讀': 'မဖတ်ရသေး', '已回覆': 'ပြန်စာ ပေးပြီး', '回覆': 'ပြန်စာ', '送出回覆': 'ပြန်စာ ပို့', '總經理回覆': 'အထွေထွေမန်နေဂျာ ပြန်စာ', '系統附上的數字': 'စနစ် ကိန်းဂဏန်း',
     '開通新帳號': 'အကောင့်သစ် ဖွင့်', '開通帳號': 'အကောင့် ဖွင့်', '業務、主管帳號': 'ဝန်ထမ်း၊ မန်နေဂျာ အကောင့်', '完成了': 'ပြီးပြီ', '派給主管的任務': 'မန်နေဂျာထံ ပေးသော လုပ်ငန်း',
-    '再送一次確認': 'ထပ်ပို့ပြီး အတည်ပြု', '放棄確認、改成新的一份': 'အသစ်တစ်စောင် ပြောင်းရေး'
+    '再送一次確認': 'ထပ်ပို့ပြီး အတည်ပြု', '放棄確認、改成新的一份': 'အသစ်တစ်စောင် ပြောင်းရေး',
+    // 0.4.94（第11任第五輪 4）主管第一天會按的鈕（緬文示意，待校對）
+    '確認結案': 'ပိတ်သိမ်း အတည်ပြု', '退回（不結案）': 'ပြန်ပို့ (မပိတ်သိမ်း)', '派給主管': 'မန်နေဂျာကို ပေး', '取消任務': 'လုပ်ငန်း ပယ်ဖျက်',
+    '啟用': 'ဖွင့်', '知道了': 'သိပြီ' // 「派給業務」「停用」上面已經有
   };
   const BI_PH = { '帳號': 'အကောင့်', '密碼': 'စကားဝှက်', '新密碼': 'စကားဝှက်အသစ်', '新密碼再輸入一次': 'ထပ်ရိုက်ပါ', '搜尋全部客戶：名字、電話、編號、作物': 'ဖောက်သည် ရှာရန်' };
   function biDom(root) {
@@ -302,12 +305,12 @@
       // 結案清單低9：盤商、種子商結案（有洽談結果）確認框原本寫農民、試作
       const cl = (state.data.closings || []).find(x => x.visitId === b.dataset.vid) || {};
       const dealer = !!cl.result, signed = cl.result === '已簽約'; // 0.4.75 董事長「盤商跟種子商變成以簽約才結案」
-      if (!confirm(ok ? (signed ? '確認這家店已簽約、結案？' + (cl.reason ? '（' + cl.reason.slice(0, 40) + '）' : '') + '確認後這家店改「已結束」，業務選單不再出現、不能再拜訪。' : dealer ? '確認這家店結案（' + cl.result.slice(0, 40) + '）？確認後這家店改「已結束」，業務選單不再出現、不能再拜訪。' : '確認這位農民結案？確認後不再提醒回訪，結案前就在進行的試作也會結束。') : '退回這筆結案？客戶照常追蹤，當作沒結案。')) return;
+      if (!confirm(ok ? (signed ? '確認這家店已簽約、結案？' + (cl.reason ? '（' + cl.reason.slice(0, 40) + '）' : '') + '確認後這家店改「已結束」，業務選單不再出現、不能再拜訪。' : dealer ? '確認這家店結案（' + cl.result.slice(0, 40) + '）？確認後這家店改「已結束」，業務選單不再出現、不能再拜訪。' : '確認這位農民結案？確認後不再提醒回訪，結案前就在進行的試作也會結束。') + '\n\nပိတ်သိမ်းမှုကို အတည်ပြုမလား။ အတည်ပြုပြီးနောက် ဤဖောက်သည် ပိတ်သိမ်းပြီး ဖြစ်မည်' : biText('退回這筆結案？客戶照常追蹤，當作沒結案。', 'ဤပိတ်သိမ်းမှုကို ပြန်ပို့မလား။ ဖောက်သည်ကို ဆက်လက် စောင့်ကြည့်မည် (မပိတ်သိမ်း)'))) return;
       $('panel').querySelectorAll('[data-closedecide]').forEach(x => { x.disabled = true; });
       let r;
       try { r = await api({ action: 'closeDecide', visitId: b.dataset.vid, decision: b.dataset.closedecide }); } catch (e) { r = { ok: false, message: '連不上伺服器' }; }
       if (r.closings) setData({ closings: r.closings });
-      state.closeMsg = r.ok ? (ok ? '已確認結案' : '已退回') : '⚠ ' + (r.message || '處理失敗');
+      state.closeMsg = r.ok ? (ok ? '已確認結案／ပိတ်သိမ်းမှု အတည်ပြုပြီး' : '已退回／ပြန်ပို့ပြီး') : '⚠ ' + (r.message || '處理失敗／မအောင်မြင်ပါ'); // 0.4.94 緬文
       state.closeMsgSeq = state.loadSeq + 1; // 0.4.88 低7：緊接著這次的重讀不清訊息，之後的讀取才清
       // 確認結案會改客戶狀態、試作：整份重讀；主管BUG#4：先重畫（按鈕恢復、看到成功訊息），重讀失敗也不會卡灰
       // 0.4.75（1號主管清單低7）：退回也重讀，拜訪紀錄、客戶履歷才會馬上變「結案（已退回）」
@@ -520,7 +523,7 @@
     // 0.4.77 董事長範例（玉米紙卡）：採收量測摘要，例如「玉米 5 穗 1.5kg 去殼・64 天」；沒填的不寫
     const msum = m => (m ? [m.variety, m.sampleCount !== '' && m.sampleCount != null ? m.sampleCount + (m.sampleUnit || '') : '', m.weightKg !== '' && m.weightKg != null ? m.weightKg + 'kg' : '', m.husk]
       .filter(x => x !== '' && x != null).join(' ') + (m.days !== '' && m.days != null ? '・' + m.days + ' 天' : '') : '');
-    return `<section class="closings"><h3><span class="pill p-red">待確認結案 ${list.length} 筆</span> <span class="sub">業務按了結案，確認後才真的結案；按錯就退回</span></h3>
+    return `<section class="closings"><h3><span class="pill p-red">待確認結案 ${list.length} 筆</span> <span class="sub">業務按了結案，確認後才真的結案；按錯就退回／ဝန်ထမ်း ပိတ်သိမ်းထားသည်၊ အတည်ပြုမှ ပိတ်သိမ်းမည်၊ မှားလျှင် ပြန်ပို့ပါ</span></h3>
       <ul class="list">${list.map(c => `<li><b><a href="javascript:void 0" data-go="${esc(c.cid)}">${esc(c.name)}</a></b>｜${esc(c.staff)}｜${esc(c.date)}${c.custEnded ? ' <span class="pill p-yel">客戶已經是「已結束」：確認＝維持結束，退回＝不記這筆結案（客戶仍是已結束）</span>' /* 主管BUG(2號)#6 */ : ''}${msum(c.measure) ? ' <span class="pill p-grn">' + esc(msum(c.measure)) + '</span>' : '' /* 0.4.77 採收量測 */}${c.group ? ' <span class="pill">' + esc(c.group) + (c.trialOutcome ? '・' + esc(c.trialCat || (c.group === '推廣農民' ? '推廣' : '試作')) + esc(c.trialOutcome) : '') + '</span>' /* 0.4.74 結案分類、試作結果；0.4.75 複查低3：照後台 trialCat 寫試作或推廣（舊後台沒送就看分類） */ : ''}${c.after && (c.after.visits || c.after.trials) ? '<br><span class="pill p-red">結案之後還有 ' + (c.after.visits || 0) + ' 筆拜訪' + (c.after.trials ? '、' + c.after.trials + ' 件新開始的試作（確認後新試作不會跟著結束）' : '') + '，請先看客戶履歷再決定</span>' /* 結案清單中1 */ : ''}<br>
         <span class="sub">${c.result ? esc(c.result) + (c.result === '已簽約' && c.reason ? '｜說明 ' + esc(c.reason) : '') /* 0.4.42 盤商、種子商洽談成功／失敗；0.4.75 已簽約＋說明 */ : !c.buyer && (c.price === '' || c.price == null) && (c.yield === '' || c.yield == null) ? '洽談結果沒記到（結案分頁少了「結果」欄，請在試算表按「第一次安裝／升級」）' /* 主管BUG#10 */ : `賣給 ${esc(c.buyer || '—')}（${esc(c.region || '地區未填')}）｜價格 ${esc(c.price)} ${esc(c.priceUnit || '')}｜產量 ${esc(c.yield)} ${esc(c.yieldUnit || '')}${c.phone ? '｜電話 ' + esc(c.phone) : ''}${c.reason ? '｜原因 ' + esc(c.reason) : ''}${c.progress ? '｜進度 ' + esc(c.progress) : ''}`}</span><br>
         <button class="btn primary" type="button" data-closedecide="confirm" data-vid="${esc(c.visitId)}">確認結案</button>
@@ -827,12 +830,12 @@
         <span class="sub">${esc(t.by || '')} ${esc(String(t.at).slice(5, 16))} 派</span></span><button class="btn" type="button" data-mytaskdone="${esc(t.id)}">完成了</button></li>`).join('') || '<li class="empty">沒有任務</li>'}</ul>` : '';
     const opt = s => `<option value="${esc(s.account)}"${f.staff === s.account ? ' selected' : ''}>${esc(s.name)}（${esc(s.account)}）</option>`;
     const custSel = toBoss
-      ? `<select id="tFarmer" aria-label="哪一位客戶（可以不選）"><option value="">— 不指定客戶 —</option>${allCust.map(c => `<option value="${esc(c.id)}"${f.cid === c.id ? ' selected' : ''}>${esc(c.name)}｜${esc(c.type || '農民')}${c.area ? '｜' + esc(c.area) : ''}</option>`).join('')}</select>`
-      : `<select id="tFarmer" aria-label="哪一位農民"><option value="">— 選擇農民 —</option>${farmers.map(c => `<option value="${esc(c.id)}"${f.cid === c.id ? ' selected' : ''}>${esc(c.name)}${c.area ? '｜' + esc(c.area) : ''}${c.staff ? '（' + esc(c.staff) + '）' : ''}</option>`).join('')}</select>`;
+      ? `<select id="tFarmer" aria-label="哪一位客戶（可以不選）"><option value="">— 不指定客戶／ဖောက်သည် မရွေး —</option>${allCust.map(c => `<option value="${esc(c.id)}"${f.cid === c.id ? ' selected' : ''}>${esc(c.name)}｜${esc(c.type || '農民')}${c.area ? '｜' + esc(c.area) : ''}</option>`).join('')}</select>`
+      : `<select id="tFarmer" aria-label="哪一位農民"><option value="">— 選擇農民／လယ်သမား ရွေးပါ —</option>${farmers.map(c => `<option value="${esc(c.id)}"${f.cid === c.id ? ' selected' : ''}>${esc(c.name)}${c.area ? '｜' + esc(c.area) : ''}${c.staff ? '（' + esc(c.staff) + '）' : ''}</option>`).join('')}</select>`;
     const form = staff.length || bosses.length ? `<h3>派出任務</h3><form class="taskform" id="taskForm">
         <select id="tStaff" aria-label="派給誰">${bosses.length ? `<optgroup label="業務">${staff.map(opt).join('')}</optgroup><optgroup label="主管">${bosses.map(opt).join('')}</optgroup>` : staff.map(opt).join('')}</select>
         ${custSel}
-        <input id="tText" maxlength="200" placeholder="${toBoss ? '任務內容，例如：這週整理 A 區價格、陪新業務跑一趟' : '任務內容，例如：送肥料樣品、量株高'}" value="${esc(f.text)}">
+        <input id="tText" maxlength="200" placeholder="${toBoss ? '任務內容，例如：這週整理 A 區價格、陪新業務跑一趟／လုပ်ငန်း အကြောင်းအရာ' : '任務內容，例如：送肥料樣品、量株高／လုပ်ငန်း အကြောင်းအရာ'}" value="${esc(f.text)}">
         <button class="btn" type="submit" id="tAdd">${toBoss ? '派給主管' : '派給業務'}</button>
         <span class="sub" id="tMsg" aria-live="polite">${esc(state.taskMsg || '')}</span></form>`
       : '<p class="empty">還沒有啟用的業務帳號，先在「更多 → 業務帳號」開通。</p>';
@@ -873,16 +876,16 @@
         let r;
         try { r = await api({ action: 'taskAdd', staff: state.tf.staff, cid: state.tf.cid, text: state.tf.text.trim(), rid: state.tf.rid }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再按一次（不會派成兩條）' }; }
         if (r.ok) { setData({ tasks: r.tasks }); state.tf.text = ''; state.tf.rid = ''; state.tf.ridKey = ''; state.taskMsg = toBoss ? '已派出（主管打開主管網頁「任務」就會看到）' : '已派出（業務手機下次同步就會看到）'; }
-        else state.taskMsg = '⚠ ' + (r.message || '派發失敗');
+        else state.taskMsg = '⚠ ' + (r.message || '派發失敗／မပေးနိုင်ပါ');
         render();
       });
     }
     $('panel').querySelectorAll('[data-taskcancel]').forEach(b => b.addEventListener('click', async () => {
-      if (!confirm('確定取消這條任務？對方畫面上會消失。')) return;
+      if (!confirm(biText('確定取消這條任務？對方畫面上會消失。', 'ဤလုပ်ငန်းကို ပယ်ဖျက်မလား။ တစ်ဖက်လူ၏ မျက်နှာပြင်မှ ပျောက်သွားမည်'))) return;
       b.disabled = true;
       let r;
       try { r = await api({ action: 'taskCancel', id: b.dataset.taskcancel }); } catch (e) { r = { ok: false, message: '連不上伺服器' }; }
-      if (r.ok) { setData({ tasks: r.tasks }); state.taskMsg = '已取消'; }
+      if (r.ok) { setData({ tasks: r.tasks }); state.taskMsg = '已取消／ပယ်ဖျက်ပြီး'; }
       else { if (r.tasks) setData({ tasks: r.tasks }); state.taskMsg = '⚠ ' + (r.message || '取消失敗'); } // 0.4.75（1號主管清單低6）：已經完成的照實說，清單也換成最新的
       render();
     }));
@@ -902,6 +905,8 @@
   }
 
   /* ───── 主管匯報（2026-11-12）：主管寫給總經理，系統附上這段期間的數字；總經理看、回覆 ───── */
+  /** 0.4.94（第11任第五輪 4）：確認框、提示框「中文＋空一行＋緬文」（緬文示意，待校對） */
+  const biText = (zh, mm) => zh + (mm ? '\n\n' + mm : '');
   function newRid() { const a = new Uint8Array(12); crypto.getRandomValues(a); return Array.from(a, x => x.toString(16).padStart(2, '0')).join(''); }
   /** 匯報內容：有中文翻譯就「中文翻譯」＋「緬文原文」都列（0.4.34 董事長：主管打緬文，總經理要看到緬文跟中文） */
   function briefTexts(b) {
@@ -949,13 +954,13 @@
     if (form) {
       $('bText').addEventListener('input', () => { if (!state.bf.sentText) state.bf.text = $('bText').value; });
       if ($('bNew')) $('bNew').addEventListener('click', () => {
-        if (!confirm('上一份可能已經送到總經理那邊。確定要改成新的一份？（之後送出會是另一份匯報）')) return;
+        if (!confirm(biText('上一份可能已經送到總經理那邊。確定要改成新的一份？（之後送出會是另一份匯報）', 'ယခင်တစ်စောင် ရောက်ပြီးဖြစ်နိုင်သည်။ အသစ်တစ်စောင် ပြောင်းရေးမလား'))) return;
         state.bf = { text: state.bf.sentText, rid: '', sentText: '' }; state.briefMsg = ''; render();
       });
       form.addEventListener('submit', async ev => {
         ev.preventDefault();
         const text = (state.bf.sentText || $('bText').value).trim();
-        if (!text) { state.briefMsg = '請先寫匯報內容'; render(); return; }
+        if (!text) { state.briefMsg = '請先寫匯報內容／အစီရင်ခံစာ ရေးပါ'; render(); return; }
         // 同一份內容重送用同一個送出代號，網路斷掉再按一次也不會變成兩份；送出時把內容一起記住（鎖住不能改）
         if (!state.bf.rid) state.bf.rid = newRid();
         state.bf.sentText = text;
@@ -1027,10 +1032,10 @@
     const roleSel = gm ? `<select id="aRole" aria-label="角色"><option value="業務"${f.role !== '主管' ? ' selected' : ''}>業務（用手機）</option><option value="主管"${f.role === '主管' ? ' selected' : ''}>主管（用主管網頁）</option></select>` : '';
     const form = `<h3>${gm ? '開通新帳號' : '開通新的業務帳號'}</h3><form class="taskform" id="acctForm" autocomplete="off">
         ${roleSel}
-        <input id="aAcct" maxlength="30" placeholder="帳號（英文小寫或數字，例如 tom）" value="${esc(f.account)}" autocapitalize="none" spellcheck="false" aria-label="帳號">
-        <input id="aName" maxlength="40" placeholder="姓名（顯示在拜訪紀錄上）" value="${esc(f.name)}" aria-label="姓名">
-        <input id="aRegion" maxlength="40" placeholder="負責地區（可以留空）" value="${esc(f.region)}" aria-label="負責地區">
-        <input id="aPw" maxlength="64" placeholder="密碼（6 個字以上，由你給他）" value="${esc(f.password)}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="密碼">
+        <input id="aAcct" maxlength="30" placeholder="帳號（英文小寫或數字，例如 tom）／အကောင့်" value="${esc(f.account)}" autocapitalize="none" spellcheck="false" aria-label="帳號">
+        <input id="aName" maxlength="40" placeholder="姓名（顯示在拜訪紀錄上）／အမည်" value="${esc(f.name)}" aria-label="姓名">
+        <input id="aRegion" maxlength="40" placeholder="負責地區（可以留空）／ဒေသ" value="${esc(f.region)}" aria-label="負責地區">
+        <input id="aPw" maxlength="64" placeholder="密碼（6 個字以上，由你給他）／စကားဝှက်" value="${esc(f.password)}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="密碼">
         <button class="btn" type="submit" id="aAdd">${gm ? '開通帳號' : '開通業務帳號'}</button>
         <span class="sub" id="aMsg" aria-live="polite">${esc(state.acctMsg || '')}</span></form>
         <p class="sub">${gm ? '總經理帳號請在試算表「農業CRM → 開帳號／重設密碼」開。' : '主管帳號由總經理開。'}</p>`;
@@ -1053,25 +1058,26 @@
         setData({ salesAccounts: r.accounts });
         state.acctMsg = '';
         load(); // 重新讀一次：任務的派給誰選單也會出現新帳號
-      } else state.acctMsg = '⚠ ' + (r.message || '沒有完成');
+      } else state.acctMsg = '⚠ ' + (r.message || '沒有完成／မပြီးပါ');
       render();
     };
     form.addEventListener('submit', async ev => {
       ev.preventDefault(); keep();
       const a = state.af.account.trim().toLowerCase();
-      if (!/^[a-z0-9._-]{2,30}$/.test(a)) { $('aMsg').textContent = '帳號只能用英文小寫、數字、點、底線、減號，2～30 字'; return; }
-      if (!state.af.name.trim()) { $('aMsg').textContent = '請填姓名'; return; }
-      if (state.af.password.length < 6) { $('aMsg').textContent = '請幫他設定密碼（6 個字以上）'; return; }
-      $('aAdd').disabled = true; $('aMsg').textContent = '開通中…';
+      if (!/^[a-z0-9._-]{2,30}$/.test(a)) { $('aMsg').textContent = '帳號只能用英文小寫、數字、點、底線、減號，2～30 字／အကောင့်တွင် အင်္ဂလိပ် အသေး၊ ဂဏန်း သာ'; return; }
+      if (!state.af.name.trim()) { $('aMsg').textContent = '請填姓名／အမည် ဖြည့်ပါ'; return; }
+      if (state.af.password.trim().length < 6) { $('aMsg').textContent = '請幫他設定密碼（6 個字以上）／စကားဝှက် ၆ လုံးအထက် သတ်မှတ်ပါ'; return; }
+      $('aAdd').disabled = true; $('aMsg').textContent = '開通中…／ဖွင့်နေသည်…';
       let r;
       try { r = await api({ action: 'accountAdd', account: a, name: state.af.name.trim(), region: state.af.region.trim(), password: state.af.password, role: state.af.role }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再試一次' }; }
       if (r.ok) state.af = { account: '', name: '', region: '', password: '', role: '業務' }; // 開好就把密碼從畫面清掉
       after(r);
     });
     $('panel').querySelectorAll('[data-acctreset]').forEach(b => b.addEventListener('click', async () => {
-      const np = prompt('幫「' + b.dataset.name + '」設定新密碼（6 個字以上）。\n他已登入的手機或電腦會全部登出，要用這組新密碼重新登入。');
+      const np0 = prompt(biText('幫「' + b.dataset.name + '」設定新密碼（6 個字以上）。\n他已登入的手機或電腦會全部登出，要用這組新密碼重新登入。', 'စကားဝှက်အသစ် သတ်မှတ်ပါ (၆ လုံးအထက်)။ ဝင်ထားသော ဖုန်း/ကွန်ပျူတာ အားလုံး ထွက်သွားမည်'));
+      const np = np0 == null ? null : np0.trim(); // 0.4.94：去前後空白（後台也會整理）
       if (np === null) return;
-      if (np.length < 6) { state.acctMsg = '⚠ 新密碼要 6 個字以上'; render(); return; }
+      if (np.length < 6) { state.acctMsg = '⚠ 新密碼要 6 個字以上／စကားဝှက် ၆ လုံးအထက်'; render(); return; }
       b.disabled = true;
       let r;
       try { r = await api({ action: 'accountReset', account: b.dataset.acctreset, password: np }); } catch (e) { r = { ok: false, message: '連不上伺服器' }; }
@@ -1080,12 +1086,12 @@
     // 主管BUG(2號)#12：停用／啟用（離職的業務要能關掉；停用後他的手機全部登出，資料都留著）
     $('panel').querySelectorAll('[data-acctactive]').forEach(b => b.addEventListener('click', async () => {
       const on = b.dataset.acctactive === 'on';
-      if (!confirm(on ? '要重新啟用「' + b.dataset.name + '」嗎？' : '要停用「' + b.dataset.name + '」嗎？\n停用後他的手機或電腦會全部登出、不能再登入；拜訪紀錄和客戶都會留著，之後可以再啟用。')) return;
+      if (!confirm(on ? biText('要重新啟用「' + b.dataset.name + '」嗎？', 'ပြန်ဖွင့်မလား') : biText('要停用「' + b.dataset.name + '」嗎？\n停用後他的手機或電腦會全部登出、不能再登入；拜訪紀錄和客戶都會留著，之後可以再啟用。', 'ပိတ်မလား။ ပိတ်လျှင် ဝင်၍မရတော့ပါ၊ မှတ်တမ်းများ ကျန်ရှိမည်'))) return;
       b.disabled = true;
       let r;
       try { r = await api({ action: 'accountActive', account: b.dataset.acct, active: on }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再試一次' }; }
-      if (r.ok) { setData({ salesAccounts: r.accounts }); state.acctMsg = (on ? '已啟用 ' : '已停用 ') + r.account; load(); }
-      else state.acctMsg = '⚠ ' + (r.message || '沒有完成');
+      if (r.ok) { setData({ salesAccounts: r.accounts }); state.acctMsg = (on ? '已啟用／ဖွင့်ပြီး ' : '已停用／ပိတ်ပြီး ') + r.account; load(); }
+      else state.acctMsg = '⚠ ' + (r.message || '沒有完成／မပြီးပါ');
       render();
     }));
   }

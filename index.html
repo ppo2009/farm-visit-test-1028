@@ -90,6 +90,7 @@ li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px
 .media2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .big.recsmall{min-height:44px;flex-direction:row;gap:8px;margin-top:8px;width:100%}
 .big.recsmall svg{width:20px;height:20px}
+.rechint{margin:4px 0 0;text-align:center;font-size:.8rem;color:var(--muted)}.rechint.warn{color:var(--chili);font-weight:700} /* 0.4.94 錄音上限、倒數（最後 10 秒紅字） */
 .meetswitch .btn2[aria-pressed="false"]{background:none}
 .progress h3{margin:0 0 6px;font-size:1rem;color:var(--paddy)}
 .progress h3 .who{display:inline-flex;flex-wrap:wrap;gap:4px 14px;margin-left:14px;font-weight:400;color:var(--ink,#222);font-size:.95rem} /* 0.4.49 姓名、電話、地址 */
@@ -637,6 +638,7 @@ footer{margin-top:18px;text-align:center}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
         <span class="label">錄音</span><span class="my">အသံ သွင်း</span>
       </button>
+    <p class="rechint" id="recHint">最長 90 秒／အများဆုံး 90 စက္ကန့်</p><!-- 0.4.94：錄音上限提示（放在錄音鈕正下方，不擠鈕裡的字），錄音中變倒數（app.js 依 MAX_REC_SEC 改字） -->
 
     <div id="noteBox">
       <label class="lab" for="note" id="noteLab">打字<span class="my">စာရိုက်</span></label>
