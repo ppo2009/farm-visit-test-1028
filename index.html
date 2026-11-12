@@ -131,6 +131,8 @@ details.profile{border:1px solid var(--line);border-radius:12px;padding:10px 12p
 details.profile summary{font-weight:700;cursor:pointer}
 .fields{display:grid;gap:10px;margin-top:10px}
 .fields .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
+.fields .row4{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;align-items:end} /* 0.4.71 地區｜鄉｜鎮｜GPS：電腦一排四格、手機 375 寬兩格兩排（140px 實測 375 會變一格一排） */
+#pGps{background:var(--surface,#f6f6f2);color:var(--muted)}
 .price-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px;border:1px solid var(--line);border-radius:10px;position:relative}
 .price-row .del{position:absolute;right:6px;top:-10px;border:1px solid var(--line);background:var(--surface);border-radius:99px;width:26px;height:26px;cursor:pointer}
 .btn2{border:1px solid var(--paddy);background:none;color:var(--paddy);border-radius:10px;padding:10px;font-weight:700;cursor:pointer;width:100%}
@@ -371,7 +373,7 @@ footer{margin-top:18px;text-align:center}
         <div><label class="lab" for="plNow">目前種植面積<small class="unit"></small><span class="my">လက်ရှိ စိုက်ဧက</span></label><input type="number" id="plNow" min="0" step="any" inputmode="decimal"></div>
         <div><label class="lab" for="plMax">可種植面積<small class="unit"></small><span class="my">စိုက်နိုင်သော ဧက</span></label><input type="number" id="plMax" min="0" step="any" inputmode="decimal"></div>
       </div>
-      <div><label class="lab" for="plFert">使用肥料<span class="my">သုံးသော မြေသြဇာ</span></label><input type="text" id="plFert" list="dlFerts" maxlength="120"></div>
+      <div><label class="lab" for="plFert">其他<span class="my">အခြား</span></label><input type="text" id="plFert" maxlength="120"></div><!-- 0.4.71 董事長：使用肥料改其他 -->
       <button type="button" class="save" id="plSave">存檔（上傳）<span class="my">သိမ်းမည်</span></button>
       <button type="button" class="link" id="plCancel">取消修改／မပြင်တော့</button>
     </div>
@@ -411,7 +413,13 @@ footer{margin-top:18px;text-align:center}
         <div><label class="lab" for="pName" id="pNameLab">名字<span class="my">အမည်</span></label><input type="text" id="pName" maxlength="60"></div>
         <div class="dealer-only"><label class="lab" for="pOwner">老闆名字<span class="my">ပိုင်ရှင် အမည်</span></label><input type="text" id="pOwner" maxlength="60"></div>
         <div><label class="lab" for="pPhone">電話<span class="my">ဖုန်း</span></label><input type="tel" id="pPhone" maxlength="30" inputmode="tel"></div>
-        <div><label class="lab" for="pArea">地區<span class="my">ဒေသ</span></label><select id="pArea"></select></div>
+        <!-- 0.4.71 董事長截圖：地區旁加「鄉」「鎮」（業務手打）、GPS 座標（拍照時自動帶入、不能手打）；窄螢幕自動換行 -->
+        <div class="row4">
+          <div><label class="lab" for="pArea">地區<span class="my">ဒေသ</span></label><select id="pArea"></select></div>
+          <div><label class="lab" for="pVillage">鄉<span class="my">ကျေးရွာ</span></label><input type="text" id="pVillage" maxlength="60"></div>
+          <div><label class="lab" for="pTown">鎮<span class="my">မြို့နယ်</span></label><input type="text" id="pTown" maxlength="60"></div>
+          <div><label class="lab" for="pGps">GPS 座標<span class="my">GPS တည်နေရာ</span></label><input type="text" id="pGps" readonly placeholder="拍照時自動帶入／ဓာတ်ပုံရိုက်လျှင် ဖြည့်မည်"></div>
+        </div>
         <div class="dealer-only"><label class="lab" for="pAddress">地址<span class="my">လိပ်စာ</span></label><input type="text" id="pAddress" maxlength="200"></div>
         <div class="dealer-only"><label class="lab" for="pBrand">品牌（賣哪些品牌）<span class="my">ရောင်းသော တံဆိပ်များ</span></label><input type="text" id="pBrand" list="dlBrands" maxlength="120"></div>
         <div class="farmer-only row2">
@@ -419,7 +427,8 @@ footer{margin-top:18px;text-align:center}
           <div><label class="lab" for="pAreaMax">可種植面積<small class="unit"></small><span class="my">စိုက်နိုင်သော ဧက</span></label><input type="number" id="pAreaMax" min="0" step="0.1" inputmode="decimal"></div>
         </div>
         <div class="farmer-only"><label class="lab" for="pPlantDate">種植日期<span class="my">စိုက်သည့်ရက်</span></label><input type="date" id="pPlantDate"></div>
-        <div class="farmer-only"><label class="lab" for="pFert">使用肥料<span class="my">သုံးသော မြေသြဇာ</span></label><input type="text" id="pFert" list="dlFerts" maxlength="120"></div>
+        <!-- 0.4.71 董事長：「使用肥料」改「其他」（資料照存在客戶清單「使用肥料」欄，不搬欄位） -->
+        <div><label class="lab" for="pFert">其他<span class="my">အခြား</span></label><input type="text" id="pFert" maxlength="120"></div><!-- 一般／試作／推廣農民、盤商、種子商都有 -->
       </div>
     </details>
 

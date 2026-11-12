@@ -245,7 +245,7 @@
     const u = o.areaUnit || '英畝', blank = '<span class="sub">未填 မဖြည့်ရသေး</span>';
     const val = x => (x === '' || x == null ? blank : esc(String(x)));
     const rows = [['種子公司', co], ['作物', f.crop ? cropText(f.crop) : ''], ['代碼', f.varCode], ['種植日期', f.plantDate],
-      ['目前種植面積', f.areaNow === '' || f.areaNow == null ? '' : `${f.areaNow} ${u}`], ['可種植面積', f.areaMax === '' || f.areaMax == null ? '' : `${f.areaMax} ${u}`], ['使用肥料', f.fertilizer]];
+      ['目前種植面積', f.areaNow === '' || f.areaNow == null ? '' : `${f.areaNow} ${u}`], ['可種植面積', f.areaMax === '' || f.areaMax == null ? '' : `${f.areaMax} ${u}`], ['其他', f.fertilizer]];
     return `<h3>目前種植資料／လက်ရှိ အချက်အလက်<span class="who"><b>${esc(f.name)}</b></span></h3><ul>${rows.map(([k, x]) => `<li>${k}：${val(x)}</li>`).join('')}</ul>`;
   }
   function setPlantEditing(on) {
@@ -754,9 +754,10 @@
     state.allCustomers = all;
   }
 
-  const PROFILE_INPUTS = { name: 'pName', owner: 'pOwner', phone: 'pPhone', area: 'pArea', address: 'pAddress', brand: 'pBrand', crop: 'pCrop', variety: 'pVariety', varCode: 'pVarCode', areaNow: 'pAreaNow', areaMax: 'pAreaMax', plantDate: 'pPlantDate', fertilizer: 'pFert' };
-  const DEALER_KEYS = ['name', 'owner', 'phone', 'area', 'address', 'brand'];
-  const FARMER_KEYS = ['name', 'phone', 'area', 'crop', 'variety', 'varCode', 'areaNow', 'areaMax', 'plantDate', 'fertilizer'];
+  // 0.4.71 董事長截圖：地區旁加「鄉」「鎮」（業務手打）；「使用肥料」改叫「其他」（資料照存使用肥料欄）；一般／試作／推廣農民、盤商、種子商都要有
+  const PROFILE_INPUTS = { name: 'pName', owner: 'pOwner', phone: 'pPhone', area: 'pArea', village: 'pVillage', town: 'pTown', address: 'pAddress', brand: 'pBrand', crop: 'pCrop', variety: 'pVariety', varCode: 'pVarCode', areaNow: 'pAreaNow', areaMax: 'pAreaMax', plantDate: 'pPlantDate', fertilizer: 'pFert' };
+  const DEALER_KEYS = ['name', 'owner', 'phone', 'area', 'village', 'town', 'address', 'brand', 'fertilizer'];
+  const FARMER_KEYS = ['name', 'phone', 'area', 'village', 'town', 'crop', 'variety', 'varCode', 'areaNow', 'areaMax', 'plantDate', 'fertilizer'];
   const activeKeys = () => (isDealerCat() ? DEALER_KEYS : FARMER_KEYS);
 
   // 業務BUG#1（2號小助手 2026-11-12）：換農民時上一位的打字、照片、錄音、種植失敗會留著，存檔就記到新農民身上
@@ -806,7 +807,8 @@
     if (prev && val !== prev && hasPrices) { $('priceRows').innerHTML = ''; addPriceRow(); refreshPriceBtn(); }
     state.farmerVal = val;
     const box = $('profileBox');
-    Object.values(PROFILE_INPUTS).forEach(id => { $(id).value = ''; });
+    Object.values(PROFILE_INPUTS).forEach(id => { $n(id).value = ''; }); // 0.4.71 用 $n：舊頁面沒有鄉、鎮也不當
+    $n('pGps').value = ''; // 0.4.71 GPS 座標：換客戶就清掉，拍照時再帶入
     $('pVarCo').value = ''; // 0.4.31：換客戶就重選公司，不帶上一位的
     state.original = null;
     state.cropOpen = false; // 0.4.44 換客戶：作物四格先收起來（沒填才自動展開）
@@ -819,11 +821,11 @@
       $('profileTitle').textContent = isDealerCat() ? `新${state.cat}資料／${CAT_MY[state.cat]} အသစ်` : '新農民資料／လယ်သမား အသစ်';
     } else {
       const c = (state.allCustomers || []).find(f => f.id === val) || {};
-      activeKeys().forEach(k => { const el = $(PROFILE_INPUTS[k]); el.value = c[k] == null ? '' : String(c[k]); });
+      activeKeys().forEach(k => { const el = $n(PROFILE_INPUTS[k]); el.value = c[k] == null ? '' : String(c[k]); });
       if ($('pArea').value !== String(c.area || '') && c.area) $('pArea').insertAdjacentHTML('beforeend', `<option>${esc(c.area)}</option>`), $('pArea').value = c.area;
       if (!isDealerCat()) { fillCrops(c.crop == null ? '' : String(c.crop)); fillVarieties(c.variety == null ? '' : String(c.variety)); } // 下拉選單：選單裡沒有的舊值也要放回去
       state.original = {};
-      activeKeys().forEach(k => { state.original[k] = $(PROFILE_INPUTS[k]).value; });
+      activeKeys().forEach(k => { state.original[k] = $n(PROFILE_INPUTS[k]).value; });
       if ('variety' in state.original) state.original.variety = varietyValue(); // 0.4.50 跟 collectProfile 用同一算法，沒改就不會誤判成有改
       box.open = false;
       $('profileTitle').textContent = '客戶資料（點開可修改）／ဖောက်သည် အချက်အလက် (နှိပ်ပြီး ပြင်နိုင်)';
@@ -1114,7 +1116,7 @@
   function collectProfile() {
     const val = $('farmer').value;
     const p = {};
-    activeKeys().forEach(k => { p[k] = $(PROFILE_INPUTS[k]).value.trim(); });
+    activeKeys().forEach(k => { p[k] = String($n(PROFILE_INPUTS[k]).value || '').trim(); });
     if ('variety' in p) p.variety = varietyValue(); // 0.4.50
     if (val === '__new') {
       p.type = isDealerCat() ? state.cat : '農民';
@@ -1249,6 +1251,12 @@
     return { blob, check, source };
   }
 
+  /** 0.4.71 董事長：新增客戶表單的「GPS 座標」在拍照時自動帶入（只顯示、不能手打；真正存進客戶清單的田區座標照舊由這筆拜訪的定位寫入） */
+  function fillGpsBox() {
+    if ($('farmer').value !== '__new') return;
+    const g = state.gps;
+    $n('pGps').value = g ? `${g.lat}, ${g.lng}${g.acc ? `（±${g.acc} m）` : ''}` : '沒有定位／တည်နေရာ မရ';
+  }
   async function addPhotos(files, source, btn) {
     const list = [...(files || [])];
     if (!list.length) return;
@@ -1268,6 +1276,7 @@
       state.busyPhotos = Math.max(0, state.busyPhotos - 1);
       if (!p) continue;
       state.photos.push(p);
+      if (source === '相機') fillGpsBox(); // 0.4.71 董事長：拍照時 GPS 座標自動帶入（新增客戶表單）
       renderThumbs(); refreshSave();
     }
     btn.classList.remove('busy');
@@ -1546,7 +1555,7 @@ ${state.cat}：${who}
     if (isDealerCat()) addPriceRow();
     $('farmer').value = '';
     $('profileBox').hidden = true;
-    Object.values(PROFILE_INPUTS).forEach(id => { $(id).value = ''; });
+    Object.values(PROFILE_INPUTS).forEach(id => { $n(id).value = ''; });
     resetTrialForm();
     state.dealerClose = false; $n('dcOutcome').value = ''; $n('dcNote').value = ''; applyCatLabels(); // 0.4.42 存完回到一般拜訪
     resetNoMeet();
@@ -1693,7 +1702,7 @@ ${state.cat}：${who}
       resetForm(); showHome();
     });
     $('farmer').addEventListener('change', onFarmerChange);
-    Object.values(PROFILE_INPUTS).forEach(id => $(id).addEventListener('input', refreshSave));
+    Object.values(PROFILE_INPUTS).forEach(id => $n(id).addEventListener('input', refreshSave)); // 0.4.71 $n：舊頁面沒有新欄位時初始化不中斷
     $('pArea').addEventListener('change', refreshSave);
     $('pCrop').addEventListener('change', () => fillVarieties('')); // 換作物就重選品種
     $('pVarCo').addEventListener('change', () => { fillVarieties(''); refreshSave(); }); // 0.4.31 換種子公司就重選品種
