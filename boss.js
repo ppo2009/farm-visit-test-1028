@@ -530,7 +530,7 @@
         <div class="box"><div class="photos">${v.photos.length ? v.photos.map(id => `<div class="photo" data-photo="${esc(id)}">載入中…</div>`).join('') : '<div class="photo">沒有照片</div>'}</div>
         <dl class="kv"><dt>${dealer ? '行情' : '作物'}</dt><dd>${esc(v.crop || '—')}</dd><dt>反應</dt><dd>${esc(v.feedback || '—')}</dd><dt>問題</dt><dd>${esc(v.issue || '—')}</dd><dt>下一步</dt><dd>${esc(v.next || '—')}</dd>
         <dt>摘要</dt><dd>${esc(v.summary || noSummaryText(v))}</dd>
-        ${v.closing ? `<dt>結案</dt><dd>${esc(v.closing)}</dd>` : ''}${v.plantFail ? `<dt>種植失敗</dt><dd>${esc(v.plantFail)}</dd>` : ''}${v.text ? `<dt>打字</dt><dd class="pre">${esc(v.text)}</dd>` : ''}${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') || '<p class="empty">這位客戶還沒有拜訪紀錄。</p>'}</div>`;
+        ${v.noMeet ? `<dt>沒拜訪</dt><dd><span class="pill p-yel">沒拜訪</span> ${esc(v.noMeet)}</dd>` : ''}${v.closing ? `<dt>結案</dt><dd>${esc(v.closing)}</dd>` : ''}${v.plantFail ? `<dt>種植失敗</dt><dd>${esc(v.plantFail)}</dd>` : ''}${v.text ? `<dt>打字</dt><dd class="pre">${esc(v.text)}</dd>` : ''}${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') || '<p class="empty">這位客戶還沒有拜訪紀錄。</p>'}</div>`;
   }
 
   /** 一張照片只下載一次（下載中的也共用同一個請求）；換了畫面，舊畫面的迴圈就停，不再下載別的客戶的照片（2026-11-11 抓到） */
@@ -692,9 +692,12 @@
         if (!toBoss && !state.tf.cid) { $('tMsg').textContent = '請選一位農民'; return; }
         if (!state.tf.text.trim()) { $('tMsg').textContent = '請填任務內容'; return; }
         $('tAdd').disabled = true; $('tMsg').textContent = '送出中…';
+        // 0.4.66 主管BUG(2號)#4：同一個內容（同人、同農民、同字）重按用同一個送出代號，斷線後再按不會派兩條；內容改了就換新代號
+        const key = state.tf.staff + '|' + state.tf.cid + '|' + state.tf.text.trim();
+        if (!state.tf.rid || state.tf.ridKey !== key) { state.tf.rid = newRid(); state.tf.ridKey = key; }
         let r;
-        try { r = await api({ action: 'taskAdd', staff: state.tf.staff, cid: state.tf.cid, text: state.tf.text.trim() }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再試一次' }; }
-        if (r.ok) { state.data.tasks = r.tasks; state.tf.text = ''; state.taskMsg = toBoss ? '已派出（主管打開主管網頁「任務」就會看到）' : '已派出（業務手機下次同步就會看到）'; }
+        try { r = await api({ action: 'taskAdd', staff: state.tf.staff, cid: state.tf.cid, text: state.tf.text.trim(), rid: state.tf.rid }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再按一次（不會派成兩條）' }; }
+        if (r.ok) { state.data.tasks = r.tasks; state.tf.text = ''; state.tf.rid = ''; state.tf.ridKey = ''; state.taskMsg = toBoss ? '已派出（主管打開主管網頁「任務」就會看到）' : '已派出（業務手機下次同步就會看到）'; }
         else state.taskMsg = '⚠ ' + (r.message || '派發失敗');
         render();
       });
