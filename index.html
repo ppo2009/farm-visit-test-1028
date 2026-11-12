@@ -68,7 +68,7 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
 @media (max-width:400px){.htabs{gap:2px}.htabs button{font-size:1rem;padding:6px 2px}}
 li.assigned{display:block}
 li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px}
-.progress{border:1.5px solid var(--paddy);border-radius:12px;padding:10px 12px;margin:8px 0;background:var(--surface)}
+.progress{border:1.5px solid var(--paddy);border-radius:12px;padding:12px 14px;margin:14px 0 18px;background:var(--surface);min-height:120px}
 .progress h3{margin:0 0 6px;font-size:1rem;color:var(--paddy)}
 .progress ul{margin:6px 0 0;padding-left:1.1em}
 .progress li{margin:4px 0}
@@ -240,8 +240,6 @@ footer{margin-top:18px;text-align:center}
       <label class="lab" for="farmer" id="farmerLab">1. 選擇農民<span class="my">လယ်သမား ရွေးပါ</span></label>
       <select id="farmer"></select>
     </div>
-    <!-- 0.4.35 董事長：選擇農民後跳出這位農民之前的進度；沒有進度就跳出新增（補齊）農民資料 -->
-    <div class="progress" id="progressBox" hidden aria-live="polite"></div>
     <!-- 0.4.35 董事長：「試作農民、一般農民怎麼沒有品種、編號選項」→ 作物、種子公司、品種（代碼）從收起來的客戶資料搬出來，選了農民就看得到 -->
     <div class="fields" id="cropBox" hidden>
       <div><label class="lab" for="pCrop">作物<span class="my">သီးနှံ</span></label><select id="pCrop"></select></div>
@@ -300,6 +298,10 @@ footer{margin-top:18px;text-align:center}
       <div><label class="lab" for="cPhone">5. 電話<span class="my">ဖုန်း</span></label><input type="tel" id="cPhone" maxlength="30" inputmode="tel" placeholder="例：09 123 456 789"></div>
       <p class="sub" id="closeHint">只能選自己負責的農民。存檔後這位農民就結案（不再提醒回訪）。<br>ကိုယ်တာဝန်ယူထားသော လယ်သမားသာ ရွေးနိုင်သည်။</p>
     </div>
+
+    <!-- 0.4.35 董事長：選擇農民後跳出這位農民之前的進度（農民進度表）；沒有進度就跳出新增（補齊）農民資料。
+         位置照董事長截圖：拍照／照片上傳／錄音下面、打字上面，空一大格 -->
+    <div class="progress" id="progressBox" hidden aria-live="polite"></div>
 
     <div id="noteBox">
       <label class="lab" for="note">打字<span class="my">စာရိုက်</span></label>

@@ -492,7 +492,8 @@
     const local = ((await Store.allVisits()) || []).filter(v => v.farmerId === cid).sort((a, b) => (b.deviceTime || 0) - (a.deviceTime || 0)).slice(0, 5);
     box.hidden = false;
     box.innerHTML = '<h3>之前的進度／ယခင် တိုးတက်မှု</h3><p class="sub">讀取中…／ဖတ်နေသည်</p>';
-    const remote = await fetchHistory(cid);
+    // 等後台最多 10 秒；等不到就用手機裡的（線上實測：請求有時遲遲不回，連取消都沒反應 → 不能只靠 AbortController）
+    const remote = await Promise.race([fetchHistory(cid), new Promise(r => setTimeout(() => r(null), 10000))]);
     if ($('farmer').value !== cid) return; // 讀的途中換了客戶
     const recent = remote ? remote : local.map(v => ({ time: new Date(v.deviceTime || 0).toISOString().slice(0, 10), staff: '我', cat: CAT_LABEL(v.category || ''), text: v.text || '', plantFail: '', closing: '' }));
     if (!c.lastVisit && !trials.length && !recent.length) {
