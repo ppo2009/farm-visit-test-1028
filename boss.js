@@ -187,7 +187,8 @@
 
   /* ───── 計算 ───── */
   const active = () => state.data.customers.filter(c => c.status !== '已結束' && c.status !== '暫停');
-  const dueState = c => !c.nextDue ? 'none' : c.nextDue < state.data.today ? 'late' : c.nextDue === state.data.today ? 'due' : 'ok';
+  // 主管BUG(2號)#8：暫停、已結束的客戶不算逾期／今天（原本地圖畫紅色大圓點、履歷寫逾期，跟總覽不一致）→ 'stop'，地圖畫灰色
+  const dueState = c => (c.status === '已結束' || c.status === '暫停') ? 'stop' : !c.nextDue ? 'none' : c.nextDue < state.data.today ? 'late' : c.nextDue === state.data.today ? 'due' : 'ok';
   const visitsOf = id => (state.hist[id] || state.data.visits.filter(v => v.cid === id)).slice().sort((a, b) => b.time.localeCompare(a.time));
   const weekNo = (c, date) => c.start ? Math.max(1, Math.ceil((s2d(date) - s2d(c.start)) / DAY / 7)) : null;
   /** 履歷裡一筆拜訪是「試作第幾週」：只算掛在試作底下、而且在那件試作期間內的（原本拿客戶最後一件試作的開始日算每一筆；第二輪自行審查 T8） */
@@ -322,7 +323,8 @@
   }
 
   // 結案那筆資料記成一般拜訪（統計照舊），畫面上標「結案」（董事長 2026-11-12）
-  const catPill = v => `<span class="pill p-grn">${esc(v.closing ? '結案' : (v.cat || '試作'))}</span> `;
+  // 主管BUG(2號)#9：被退回的結案標「結案（已退回）」灰底，不是綠色結案
+  const catPill = v => v.closing && v.closeRejected ? '<span class="pill">結案（已退回）</span> ' : `<span class="pill p-grn">${esc(v.closing ? '結案' : (v.cat || '試作'))}</span> `;
   /** 沒有摘要時要說清楚原因：處理中、處理失敗、沒送翻譯（原本處理失敗也寫「沒有需要翻譯的內容」；2026-11-11 抓到） */
   function noSummaryText(v) {
     if (v.status === '待處理') return '翻譯處理中，約 10 分鐘內完成';
@@ -401,7 +403,7 @@
     const list = state.data.closings || [];
     if (!list.length) return '';
     return `<section class="closings"><h3><span class="pill p-red">待確認結案 ${list.length} 筆</span> <span class="sub">業務按了結案，確認後才真的結案；按錯就退回</span></h3>
-      <ul class="list">${list.map(c => `<li><b><a href="javascript:void 0" data-go="${esc(c.cid)}">${esc(c.name)}</a></b>｜${esc(c.staff)}｜${esc(c.date)}<br>
+      <ul class="list">${list.map(c => `<li><b><a href="javascript:void 0" data-go="${esc(c.cid)}">${esc(c.name)}</a></b>｜${esc(c.staff)}｜${esc(c.date)}${c.custEnded ? ' <span class="pill p-yel">客戶已經是「已結束」：確認＝維持結束，退回＝不記這筆結案（客戶仍是已結束）</span>' /* 主管BUG(2號)#6 */ : ''}<br>
         <span class="sub">${c.result ? esc(c.result) /* 0.4.42 盤商、種子商洽談成功／失敗 */ : !c.buyer && (c.price === '' || c.price == null) && (c.yield === '' || c.yield == null) ? '洽談結果沒記到（結案分頁少了「結果」欄，請在試算表按「第一次安裝／升級」）' /* 主管BUG#10 */ : `賣給 ${esc(c.buyer || '—')}（${esc(c.region || '地區未填')}）｜價格 ${esc(c.price)} ${esc(c.priceUnit || '')}｜產量 ${esc(c.yield)} ${esc(c.yieldUnit || '')}${c.phone ? '｜電話 ' + esc(c.phone) : ''}${c.reason ? '｜原因 ' + esc(c.reason) : ''}${c.progress ? '｜進度 ' + esc(c.progress) : ''}`}</span><br>
         <button class="btn primary" type="button" data-closedecide="confirm" data-vid="${esc(c.visitId)}">確認結案</button>
         <button class="btn" type="button" data-closedecide="reject" data-vid="${esc(c.visitId)}">退回（不結案）</button></li>`).join('')}</ul>
@@ -448,7 +450,7 @@
     const mw = measureDue(t, c.lastVisit, d.today);
     if (mw) return { cls: 'p-red', text: `第 ${mw} 週該量測`, rank: 1.5 };
     if (t) { const w = weekNo({ start: t.start }, d.today); return { cls: 'p-yel', text: `${t.cat || '試作'}${w ? '第 ' + w + ' 週' : '中'}`, rank: 2 }; }
-    if (c.lastVisit && c.lastVisit >= addDays(d.today, -7)) return { cls: 'p-grn', text: `${md(c.lastVisit)} 拜訪`, rank: 3 };
+    if (c.lastVisit && c.lastVisit >= addDays(d.today, -6)) return { cls: 'p-grn', text: `${md(c.lastVisit)} 拜訪`, rank: 3 }; // 主管BUG(2號)#11：7 天＝今天往前 6 天（原本 -7 算了 8 天，跟「近 7 天拜訪次數」不一致）
     return null;
   }
   const NO_STAFF = '（未指派）';
@@ -501,7 +503,10 @@
     const f = state.cf;
     const sel = (key, label, values, all) => `<select data-cf="${key}" aria-label="${label}">${all ? `<option value="">${all}</option>` : ''}${values.map(v => { const [val, txt] = Array.isArray(v) ? v : [v, v]; return `<option value="${esc(val)}"${f[key] === val ? ' selected' : ''}>${esc(txt)}</option>`; }).join('')}</select>`;
     const uniq = arr => [...new Set(arr.filter(Boolean))];
-    const staffNames = uniq((state.data.staffList || []).map(s => s.name).concat(cs.map(c => c.staff || NO_STAFF)));
+    // 主管BUG(2號)#13：客戶的負責業務沒有帳號（已刪或打錯）時標「（沒有帳號）」，主管才知道要重新指派；照樣能篩，不然那些客戶篩不出來
+    const hasAcct = new Set((state.data.staffList || []).map(s => s.name));
+    const staffNames = uniq((state.data.staffList || []).map(s => s.name).concat(cs.map(c => c.staff || NO_STAFF)))
+      .map(n => (n === NO_STAFF || hasAcct.has(n) ? n : [n, n + '（沒有帳號）']));
     const tools = `<div class="custtools"><input type="search" id="custQ" placeholder="搜尋全部客戶：名字、電話、編號、作物" value="${esc(f.q)}" aria-label="搜尋客戶">
       <div class="filters">${sel('show', '顯示', [['attn', '要注意的'], ['all', '全部客戶']])}${sel('staff', '業務', staffNames, '全部業務')}${sel('area', '地區', uniq(cs.map(c => c.area)), '全部地區')}${sel('type', '類型', ['農民', '盤商', '種子商'], '全部類型')}</div>
       <span class="sub">要注意的＝逾期、今天該回訪、試作進行中、7 天內拜訪過</span></div>`;
@@ -518,7 +523,7 @@
         ${dealer ? kv('老闆', c.owner) + kv('地址', c.address) + kv('品牌', c.brand)
           : kv('作物', c.crop) + kv('品種', c.variety) + kv('代碼', c.varCode) + kv('目前種植面積', c.areaNow === '' || c.areaNow == null ? '' : c.areaNow + ' ' + (state.data.areaUnit || '英畝')) + kv('可種植面積', c.areaMax === '' || c.areaMax == null ? '' : c.areaMax + ' ' + (state.data.areaUnit || '英畝')) /* 主管BUG#11 */ + kv('種植日期', c.plantDate) + kv('使用肥料', c.fertilizer)
             + `<span>試作：${esc(c.trial || '—')}${c.start ? '（' + md(c.start) + ' 開始）' : ''}</span>`}<span>負責：${esc(c.staff || '—')}</span>
-        <span>下次回訪：${c.nextDue ? md(c.nextDue) : '—'} ${s === 'late' ? '<span class="pill p-red">逾期</span>' : s === 'due' ? '<span class="pill p-yel">今天</span>' : ''}</span>
+        <span>下次回訪：${c.nextDue ? md(c.nextDue) : '—'} ${s === 'late' ? '<span class="pill p-red">逾期</span>' : s === 'due' ? '<span class="pill p-yel">今天</span>' : s === 'stop' ? `<span class="pill">${esc(c.status)}</span>` : ''}</span>
         ${c.lat != null && c.lng != null ? `<a href="https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}" target="_blank" rel="noopener">田區導航 ↗</a>` : ''}</div>
       ${(state.data.trials || []).filter(t => t.cid === c.id).map(t => `<div class="card" style="margin-bottom:10px"><b>${esc(t.cat)} ${esc(t.id)}</b>：${esc(t.item || '—')}（${esc(t.start || '')} ～ ${esc(t.end || '進行中')}）
         <span class="pill ${t.status === '成功' ? 'p-grn' : t.status === '失敗' ? 'p-red' : 'p-yel'}">${esc(t.status)}</span>
@@ -544,17 +549,24 @@
     }
     return state.photoReq[id];
   }
+  // 主管BUG(2號)#14：原本一張一張等，老客戶照片多要等很久 → 同時抓 3 張（太多會被 Apps Script 擋；換畫面照樣停）
+  const PHOTO_PARALLEL = 3;
   async function loadPhotos() {
     const gen = state.renderGen;
-    for (const el of $('panel').querySelectorAll('[data-photo]')) {
-      if (gen !== state.renderGen) return;
-      const id = el.dataset.photo;
-      if (!id) continue;
-      const r = await getPhoto(id);
-      if (!el.isConnected) continue;
-      if (state.photos[id]) el.innerHTML = `<img src="${state.photos[id]}" alt="田間照片">`;
-      else el.textContent = (r && r.message) || '照片讀取失敗';
-    }
+    const els = [...$('panel').querySelectorAll('[data-photo]')];
+    let next = 0;
+    const worker = async () => {
+      while (next < els.length) {
+        if (gen !== state.renderGen) return;
+        const el = els[next++], id = el.dataset.photo;
+        if (!id) continue;
+        const r = await getPhoto(id);
+        if (!el.isConnected) continue;
+        if (state.photos[id]) el.innerHTML = `<img src="${state.photos[id]}" alt="田間照片">`;
+        else el.textContent = (r && r.message) || '照片讀取失敗';
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(PHOTO_PARALLEL, els.length) }, worker));
   }
 
   function renderMap() {
@@ -564,12 +576,12 @@
     const pad = 0.02, minLat = Math.min(...lats) - pad, maxLat = Math.max(...lats) + pad, minLng = Math.min(...lngs) - pad, maxLng = Math.max(...lngs) + pad;
     const W = 700, H = 420;
     const x = v => 50 + (v - minLng) / (maxLng - minLng) * (W - 160), y = v => 30 + (maxLat - v) / (maxLat - minLat) * (H - 60);
-    const color = s => s === 'late' ? 'var(--chili)' : s === 'due' ? 'var(--turmeric)' : 'var(--paddy)';
+    const color = s => s === 'late' ? 'var(--chili)' : s === 'due' ? 'var(--turmeric)' : s === 'stop' ? '#9a9a9a' : 'var(--paddy)';
     return `<div class="card map"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="田區位置圖">
       <rect width="${W}" height="${H}" fill="var(--bg)" rx="8"/>
       ${pts.map(c => { const s = dueState(c); return `<g data-go="${esc(c.id)}" style="cursor:pointer"><circle cx="${x(c.lng)}" cy="${y(c.lat)}" r="${s === 'late' ? 12 : 8}" fill="${color(s)}" fill-opacity=".85" stroke="var(--surface)" stroke-width="2"/>
         <text x="${x(c.lng) + 15}" y="${y(c.lat) + 4}" fill="var(--fg)" font-size="12" font-weight="700">${esc(c.name)}</text></g>`; }).join('')}
-      </svg><div class="legend"><span style="--c:var(--paddy)">已排定</span><span style="--c:var(--turmeric)">今天該去</span><span style="--c:var(--chili)">逾期（大圓點）</span></div></div>
+      </svg><div class="legend"><span style="--c:var(--paddy)">已排定</span><span style="--c:var(--turmeric)">今天該去</span><span style="--c:var(--chili)">逾期（大圓點）</span><span style="--c:#9a9a9a">暫停／已結束</span></div></div>
       <ul class="list" style="margin-top:10px">${pts.map(c => `<li>${esc(c.name)}・${esc(c.area || '')}　<a href="https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}" target="_blank" rel="noopener">用 Google 地圖導航 ↗</a></li>`).join('')}</ul>`;
   }
 
@@ -715,7 +727,11 @@
       b.disabled = true;
       let r;
       try { r = await api({ action: 'taskDone', done: [{ id: b.dataset.mytaskdone, at: Date.now() }] }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再試一次' }; }
-      if (r.ok && (r.done || []).indexOf(b.dataset.mytaskdone) >= 0) { state.taskMsg = '已完成'; await load(); return; }
+      if (r.ok && (r.done || []).indexOf(b.dataset.mytaskdone) >= 0) {
+        // 主管BUG(2號)#10：先在畫面上標完成、重畫（按鈕不會卡灰），再整份重讀；重讀失敗也看得到「已完成」
+        const t = (state.data.tasks || []).find(x => x.id === b.dataset.mytaskdone); if (t) t.status = '已完成';
+        state.taskMsg = '已完成'; render(); load(); return;
+      }
       state.taskMsg = '⚠ ' + (r.message || '沒有完成，請再按一次');
       render();
     }));
@@ -830,7 +846,7 @@
     const f = state.af || (state.af = { account: '', name: '', region: '', password: '', role: '業務' });
     // 業務、主管都只能用上面的人給的密碼（董事長 2026-11-12）：密碼是自己打的，這裡不再顯示密碼
     const pw = state.newPw; // { account, reset, disabled }
-    const box = pw ? `<div class="pwbox" role="status"><b>${pw.reset ? '已重設密碼' : '已開通帳號'}</b>${pw.disabled ? '<br><span class="err">⚠ 這個帳號目前是停用的，要在試算表「帳號」分頁勾選「啟用」，本人才登入得了。</span>' : ''}
+    const box = pw ? `<div class="pwbox" role="status"><b>${pw.reset ? '已重設密碼' : '已開通帳號'}</b>${pw.disabled ? '<br><span class="err">⚠ 這個帳號目前是停用的，要在下面清單按「啟用」，本人才登入得了。</span>' : ''}
         <div>帳號：<code>${esc(pw.account)}</code></div>
         <p class="sub">密碼就是你剛剛打的那一組，請當面或私訊告訴本人。本人只能用這組密碼，不能自己改；要換密碼請在下面按「重設密碼」。</p>
         <button class="btn" type="button" id="pwDone">知道了</button></div>` : '';
@@ -847,7 +863,8 @@
     const rows = list.map(a => `<li><b>${esc(a.name)}</b>${a.role === '主管' ? ' <span class="pill p-yel">主管</span>' : ''}<span class="sub">${esc(a.account)}${a.region ? '｜' + esc(a.region) : ''}</span>
         ${a.active ? '' : '<span class="pill">停用</span>'}
         <span class="sub">${a.lastLogin ? '最後登入 ' + esc(String(a.lastLogin).slice(5, 16)) : '還沒登入過'}</span>
-        <button class="btn" type="button" data-acctreset="${esc(a.account)}" data-name="${esc(a.name)}">重設密碼</button></li>`).join('');
+        <button class="btn" type="button" data-acctreset="${esc(a.account)}" data-name="${esc(a.name)}">重設密碼</button>
+        <button class="btn" type="button" data-acctactive="${a.active ? 'off' : 'on'}" data-acct="${esc(a.account)}" data-name="${esc(a.name)}">${a.active ? '停用' : '啟用'}</button></li>`).join(''); // 主管BUG(2號)#12
     return box + form + `<h3>${gm ? '業務、主管帳號' : '業務帳號'}（${list.length}）</h3><ul class="acctlist">${rows || '<li class="empty">還沒有帳號</li>'}</ul>`;
   }
   function bindAccounts() {
@@ -885,6 +902,17 @@
       let r;
       try { r = await api({ action: 'accountReset', account: b.dataset.acctreset, password: np }); } catch (e) { r = { ok: false, message: '連不上伺服器' }; }
       after(r);
+    }));
+    // 主管BUG(2號)#12：停用／啟用（離職的業務要能關掉；停用後他的手機全部登出，資料都留著）
+    $('panel').querySelectorAll('[data-acctactive]').forEach(b => b.addEventListener('click', async () => {
+      const on = b.dataset.acctactive === 'on';
+      if (!confirm(on ? '要重新啟用「' + b.dataset.name + '」嗎？' : '要停用「' + b.dataset.name + '」嗎？\n停用後他的手機或電腦會全部登出、不能再登入；拜訪紀錄和客戶都會留著，之後可以再啟用。')) return;
+      b.disabled = true;
+      let r;
+      try { r = await api({ action: 'accountActive', account: b.dataset.acct, active: on }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再試一次' }; }
+      if (r.ok) { state.data.salesAccounts = r.accounts; state.acctMsg = (on ? '已啟用 ' : '已停用 ') + r.account; load(); }
+      else state.acctMsg = '⚠ ' + (r.message || '沒有完成');
+      render();
     }));
   }
 

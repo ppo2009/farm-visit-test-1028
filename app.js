@@ -194,7 +194,7 @@
     const ul = document.getElementById('closeFarmerList');
     if (!ul) return;
     $n('closeFarmerCount').textContent = `我找到的農民：${list.length} 位／ကျွန်ုပ်ရှာတွေ့သော လယ်သမား ${list.length} ဦး`;
-    const now = new Date(), today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; // 手機的今天
+    const today = mmDay(0); // 業務BUG#4：緬甸的今天（原本用手機當地時區）
     const rows = [];
     for (const f of list) {
       const tr = [];
@@ -391,7 +391,7 @@
     const week = s => (isDay(s) ? Math.max(1, Math.ceil(dayDiff(s, today) / 7)) : null);
     // 最後拜訪日：伺服器的＋這支手機自己存的拜訪（還沒同步的也算，剛量完不會還叫你去量）
     const mine = await Store.allVisits();
-    const localDay = ms => { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+    const localDay = ms => mmDay(0, ms); // 業務BUG#4：拜訪日也用緬甸日期，跟伺服器的最後拜訪日同一把尺
     const lastOf = cid => [(people.find(f => f.id === cid) || {}).lastVisit || ''].concat(mine.filter(v => v.farmerId === cid).map(v => localDay(v.deviceTime))).sort().pop();
     /** 量測週：開始後第 2、4、8 週（boss.js 有同一組數字，要改兩邊一起改；2026-11-12 優化 4） */
     const measure = t => {
@@ -414,9 +414,16 @@
    */
   async function phoneToday(h) {
     const off = await Store.getMeta('clockOffset');
+    if (typeof off === 'number') state.clockOff = off; // 業務BUG#4：給同步用的 mmDay 用
     if (typeof off !== 'number' && h && h.today) return h.today;
     return new Date(Date.now() + (Number(off) || 0) + 6.5 * 3600000).toISOString().slice(0, 10);
   }
+  /**
+   * 業務BUG#4（1號 2026-11-12）：同步版的「緬甸今天＋N 天」（手機時間＋伺服器校正值換成 UTC+6:30）。
+   * 原本用 new Date() 取手機當地日期：手機時區不是緬甸時，選「明天」會被後台（用緬甸日期比）判成今天而丟掉。
+   * ms 有給就換算那個時間點的緬甸日期（手機記的拜訪時間）
+   */
+  const mmDay = (addDays, ms) => new Date((ms == null ? Date.now() : Number(ms)) + (Number(state.clockOff) || 0) + 6.5 * 3600000 + (addDays || 0) * 86400000).toISOString().slice(0, 10);
 
   /* ───── 農民任務：主管派、業務打勾（離線也能勾，有網路再送） ───── */
   async function renderTasks() {
@@ -664,9 +671,11 @@
     // 0.4.33 董事長：怕業務結案按錯 →「結案」只列自己負責的農民（手機剛新增還沒上傳的也算自己的）；其他類別照舊全部列
     // 0.4.64（2號 0.4.63 清單中#2）：從結案分頁進來的盤商、種子商結案也只列自己負責的（跟農民結案同一規則；後台也會擋）
     if (state.cat === '結案' || (state.closeOnly && isDealerCat())) { const me = String(((await getConfig()) || {}).name || ''); mine = mine.filter(f => f.pending || String(f.staff || '') === me); }
+    // 業務BUG#3（1號）：結案（農民結案、從結案分頁進來的盤商／種子商結案）不能新增客戶，選單不放「＋新增」
+    const closing = state.cat === '結案' || !!state.dealerClose || (state.closeOnly && isDealerCat());
     sel.innerHTML = '<option value="">— 請選擇 ရွေးပါ —</option>' +
       mine.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}${f.crop ? '｜' + esc(f.crop) : ''}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`).join('') +
-      `<option value="__new">${isDealerCat() ? `＋ 新增${state.cat}（${CAT_MY[state.cat]} အသစ်）` : '＋ 新增農民（ လယ်သမား အသစ် ）'}</option>`;
+      (closing ? '' : `<option value="__new">${isDealerCat() ? `＋ 新增${state.cat}（${CAT_MY[state.cat]} အသစ်）` : '＋ 新增農民（ လယ်သမား အသစ် ）'}</option>`);
     if (keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
     state.allCustomers = all;
   }
@@ -686,6 +695,11 @@
     || ['cPrice', 'cYield', 'cBuyer', 'cPhone', 'cReason', 'cProgress', 'dcNote'].some(filled)
     || collectPrices().length || state.trialMode);
   function clearVisitInput() {
+    // 1號清單高#1（第8任 2026-11-12）：換客戶也要換世代、照片計數歸零（跟 resetForm 一樣），
+    // 不然還在處理的照片、錄音處理完會掉進下一位客戶的拜訪。世代要在停錄音之前換，onstop 才會丟掉這段。
+    state.formGen++;
+    state.busyPhotos = 0;
+    $('photoBtn').classList.remove('busy'); $('albumBtn').classList.remove('busy');
     clearInterval(state.recTimer);
     if (state.rec) { try { state.rec.stop(); } catch (e) { /* 已經停了 */ } state.rec = null; }
     $('recBtn').classList.remove('rec', 'done');
@@ -700,10 +714,16 @@
   function onFarmerChange() {
     const val = $('farmer').value;
     const prev = state.farmerVal || '';
-    if (prev && val !== prev && visitDirty()) {
-      if (!confirm('換農民會清掉剛剛的照片、錄音、打字，確定要換？\nလယ်သမား ပြောင်းလျှင် ဓာတ်ပုံ၊ အသံ၊ စာ ပျောက်မည်။')) { $('farmer').value = prev; return; }
+    // 業務BUG#2（1號）：價格、沒見到的匯報、試作表單也算「填過」，換客戶前一起問；換了就清掉價格（不然會存到另一家盤商名下）
+    const hasPrices = state.cat === '盤商' && !state.dealerClose; // 只有盤商有價格列（種子商、結案沒有）
+    const pricesTyped = () => hasPrices && [...$('priceRows').querySelectorAll('.pc, .pv, .pp')].some(i => i.value.trim());
+    if (prev && val !== prev && (visitDirty() || pricesTyped() || filled('nmNote') || state.trialMode)) {
+      const ask = hasPrices ? '換店家會清掉剛剛的照片、錄音、打字、價格、匯報，確定要換？\nဆိုင် ပြောင်းလျှင် ဓာတ်ပုံ၊ အသံ၊ စာ၊ ဈေးနှုန်း ပျောက်မည်။'
+        : '換農民會清掉剛剛的照片、錄音、打字、匯報，確定要換？\nလယ်သမား ပြောင်းလျှင် ဓာတ်ပုံ၊ အသံ၊ စာ ပျောက်မည်။';
+      if (!confirm(ask)) { $('farmer').value = prev; return; }
       clearVisitInput();
     }
+    if (prev && val !== prev && hasPrices) { $('priceRows').innerHTML = ''; addPriceRow(); refreshPriceBtn(); }
     state.farmerVal = val;
     const box = $('profileBox');
     Object.values(PROFILE_INPUTS).forEach(id => { $(id).value = ''; });
@@ -839,7 +859,7 @@
     state.trialMode = m;
     $('trialStartForm').hidden = m !== 'start'; $('trialEndForm').hidden = m !== 'end';
     $('trialStartBtn').setAttribute('aria-pressed', String(m === 'start')); $('trialEndBtn').setAttribute('aria-pressed', String(m === 'end'));
-    if (m === 'start' && !$('tStart').value) { const d = new Date(); $('tStart').value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+    if (m === 'start' && !$('tStart').value) { $('tStart').value = mmDay(0); } // 業務BUG#4：緬甸的今天
     if (m === 'end' && !$('tYieldUnit').value) $('tYieldUnit').value = (state.options && state.options.yieldUnit) || '籃';
     $('failBox').hidden = !((m === 'end' && $('tOutcome').value === '失敗') || plantFailOn());
     $('harvestBox').hidden = $('tOutcome').value === '失敗'; // 0.4.38 成功／結束 → 收成報告；失敗 → 失敗紀錄
@@ -895,7 +915,7 @@
     // 沒見到人：不填拜訪內容、試作、種植失敗（照片仍可拍，當作有去過的證明）
     ['noteBox', 'trialBox', 'plantFailBox'].forEach(id => { if (on) $(id).hidden = true; });
     const pb = $('priceBox'); if (pb) pb.hidden = on || state.cat !== '盤商' || !!state.dealerClose; // 盤商沒見到：不記價格
-    if (on && !$('nmNext').value) { const d = new Date(Date.now() + 7 * 86400000); $('nmNext').value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+    if (on && !$('nmNext').value) { $('nmNext').value = mmDay(7); } // 業務BUG#4：緬甸日期 7 天後
   }
   function setNoMeet(on) {
     state.noMeet = !!on; state.meetChosen = true; // 0.4.44 按過其中一顆才展開
@@ -911,8 +931,8 @@
     if (noMeetShown() && !state.noMeet && !state.meetChosen) return '請先選：有見到嗎？／တွေ့ခဲ့သလား အရင်ရွေးပါ'; // 0.4.44
     if (!noMeetOn()) return '';
     if (!String($('nmNote').value || '').trim()) return '請寫匯報了什麼／အစီရင်ခံ ရေးပါ'; // 0.4.58 董事長：沒見到面要寫匯報，存給主管看
-    const v = $('nmNext').value, d = new Date(), today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    const max = new Date(Date.now() + 365 * 86400000), maxS = `${max.getFullYear()}-${pad(max.getMonth() + 1)}-${pad(max.getDate())}`;
+    // 業務BUG#4：跟後台同一把尺（緬甸日期：明天～一年內），手機時區不是緬甸也不會被後台丟掉
+    const v = $('nmNext').value, today = mmDay(0), maxS = mmDay(365);
     if (!/^\d{4}-\d\d-\d\d$/.test(v)) return '請選下次再訪日期／နောက်တစ်ကြိမ် ရက် ရွေးပါ';
     if (v <= today || v > maxS) return '下次再訪日期要在明天到一年內／မနက်ဖြန်မှ တစ်နှစ်အတွင်း ရွေးပါ';
     return '';
@@ -949,6 +969,9 @@
       return miss.length ? `結案要填：${miss.join('、')}／ပိတ်သိမ်းရန် ဖြည့်ပါ` : '';
     }
     if (state.cat !== '結案') return '';
+    // 業務BUG#3：農民結案只能選已經有的農民，不能在這裡新增（選單已拿掉「＋新增農民」，這裡再擋一次）
+    const sel0 = $('farmer').value;
+    if (!sel0 || sel0 === '__new') return '請先選要結案的農民／လယ်သမား ရွေးပါ';
     const miss = [['cPrice', '價格'], ['cYield', '產量'], ['cBuyer', '收購客戶']].filter(([id]) => !String($(id).value).trim()).map(([, n]) => n);
     if (miss.length) return `結案要填：${miss.join('、')}／ပိတ်သိမ်းရန် ဖြည့်ပါ`;
     // 2號 0.4.63 低#6：輸入框的 min=0 只有表單送出才擋，這裡自己檢查：價格、產量要大於 0（不能負數或 0）
