@@ -154,8 +154,9 @@
   }
 
   /* 首頁分頁（0.4.26）：記住上次看的分頁（只存在這支手機；存不了就每次從田間打卡開始） */
-  const HOME_TABS = ['punch', 'todo', 'assigned', 'mine'];
+  const HOME_TABS = ['punch', 'todo', 'mine', 'plant']; // 0.4.59 指派任務併進執行任務清單；第四格改種植資料（舊的「assigned」改開執行任務清單）
   function setHomeTab(tab) {
+    if (tab === 'assigned') tab = 'todo'; // 0.4.59 舊的指派任務分頁已併進執行任務清單
     if (HOME_TABS.indexOf(tab) < 0) tab = 'punch';
     state.homeTab = tab;
     HOME_TABS.forEach(t => {
@@ -205,6 +206,56 @@
       const b = $n('closeProgress'); if (b.scrollIntoView) b.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }));
   }
+  /* ───── 0.4.59 首頁「種植資料」分頁：選自己負責的農民，改種植資料直接存（不算拜訪） ───── */
+  function fillPlantFarmers() {
+    const sel = document.getElementById('plFarmer');
+    if (!sel) return; // 舊頁面沒有這個分頁
+    const list = (state.closeList || []).filter(f => !f.pending); // 剛新增還沒上傳的，後台還沒有這位
+    const keep = sel.value;
+    sel.innerHTML = '<option value="">— 請選擇 ရွေးပါ —</option>' + list.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}</option>`).join('');
+    sel.value = keep && list.some(f => f.id === keep) ? keep : '';
+    if (!sel.value) $n('plForm').hidden = true;
+  }
+  /** 選了農民：把他現在的種植資料填進表單 */
+  async function onPlantFarmer() {
+    const cid = $n('plFarmer').value, f = (state.closeList || []).find(x => x.id === cid);
+    $n('plForm').hidden = !f; $n('plHint').textContent = '';
+    if (!f) return;
+    const o = (await Store.getMeta('options')) || {};
+    document.querySelectorAll('.unit').forEach(el => { el.textContent = `（${o.areaUnit || '英畝'}）`; });
+    const crops = (o.crops || []).map(c => ({ value: c, text: cropText(c) })); crops.push({ value: '其他', text: '其他／အခြား' });
+    setSelect($n('plCrop'), crops, f.crop || '', '— 選擇作物 သီးနှံရွေးပါ —');
+    const cos = o.seedCompanies || [], v = String(f.variety || '');
+    const co = cos.find(c => v === c || v.indexOf(c + ' ') === 0) || '';
+    setSelect($n('plCo'), cos.map(c => ({ value: c, text: c })), co || (cos.length ? '' : v), '— 選擇種子公司 ကုမ္ပဏီရွေးပါ —');
+    $n('plCo').dataset.old = v; // 沒換公司就保留原本的品種（品種開頭是公司名）
+    $n('plCode').value = f.varCode || ''; $n('plDate').value = f.plantDate || '';
+    $n('plNow').value = f.areaNow == null ? '' : f.areaNow; $n('plMax').value = f.areaMax == null ? '' : f.areaMax;
+    $n('plFert').value = f.fertilizer || '';
+  }
+  /** 要送的種植資料（品種：沒換公司就留原本的；換了公司就記公司名；跟打卡畫面 varietyValue 同一規則） */
+  function collectPlant() {
+    const co = $n('plCo').value.trim(), old = $n('plCo').dataset.old || '';
+    const variety = !co ? old : (old && (old === co || old.indexOf(co + ' ') === 0) ? old : co);
+    return { crop: $n('plCrop').value, variety, varCode: $n('plCode').value.trim(), plantDate: $n('plDate').value,
+      areaNow: $n('plNow').value, areaMax: $n('plMax').value, fertilizer: $n('plFert').value.trim() };
+  }
+  async function savePlant() {
+    const cid = $n('plFarmer').value, cfg = await getConfig();
+    if (!cid) return;
+    if (!cfg || !cfg.deviceKey || (typeof navigator !== 'undefined' && navigator.onLine === false)) { $n('plHint').textContent = '要有網路才能存種植資料，請連上網路再按一次／အင်တာနက် လိုသည်'; return; }
+    const btn = $n('plSave'); btn.disabled = true; $n('plHint').textContent = '存檔中…／သိမ်းနေသည်';
+    try {
+      const res = await fetch(FARM_CONFIG.gasUrl, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'plantSave', deviceKey: cfg.deviceKey, cid, profile: collectPlant() }) });
+      const r = await res.json();
+      if (!r || !r.ok) { $n('plHint').textContent = (r && r.message) || '存檔失敗，請再試一次／မအောင်မြင်'; return; }
+      if (Array.isArray(r.farmers)) await Store.setMeta('farmers', r.farmers);
+      $n('plHint').textContent = '已存好，主管看得到／သိမ်းပြီး';
+      toast('種植資料已存好／သိမ်းပြီး');
+      await fillCloseFarmers(); await onPlantFarmer(); $n('plHint').textContent = '已存好，主管看得到／သိမ်းပြီး';
+    } catch (e) { $n('plHint').textContent = '網路不穩，沒存成功，請再按一次／ထပ်နှိပ်ပါ'; } finally { btn.disabled = false; }
+  }
   function showCloseProgress() {
     const sel = document.getElementById('closeFarmer'), cid = sel ? sel.value : '';
     renderProgress(cid, { box: $n('closeProgress'), current: () => !!sel && sel.value === cid, list: state.closeList || [], home: true });
@@ -222,6 +273,7 @@
     await renderTasks();
     await renderMyTrials(h);
     await fillCloseFarmers();
+    fillPlantFarmers(); // 0.4.59 種植資料分頁共用同一份「自己負責的農民」
     // 月計劃（2C）
     const plan = (h && h.plan) || [];
     $('planList').innerHTML = plan.map(p => `<li class="plan"><span>${esc(p.label)}<br><small>${esc(p.period)}　${p.done}／${p.target}</small>
@@ -1392,6 +1444,8 @@ ${state.cat}：${who}
       }
     }));
     $n('closeFarmer').addEventListener('change', showCloseProgress); // 0.4.57 結案選單挑農民 → 列出進度
+    $n('plFarmer').addEventListener('change', onPlantFarmer); // 0.4.59 種植資料
+    $n('plSave').addEventListener('click', savePlant);
     // 打卡畫面最下面「取消結案」：跟左上返回一樣，回首頁（還沒存的要先確認）
     $n('closeModeBtn').addEventListener('click', () => $('backBtn').click());
     $('relocateBtn').addEventListener('click', locate);

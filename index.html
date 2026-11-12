@@ -194,8 +194,9 @@ footer{margin-top:18px;text-align:center}
   <nav class="htabs" role="tablist" aria-label="首頁分頁">
     <button type="button" role="tab" id="htab-punch" data-htab="punch" aria-selected="true">田間打卡<span class="my">မှတ်တမ်း</span></button>
     <button type="button" role="tab" id="htab-todo" data-htab="todo" aria-selected="false">執行任務清單<span class="my">လုပ်ရန်</span><b class="tbadge" id="todoBadge" hidden></b></button>
-    <button type="button" role="tab" id="htab-assigned" data-htab="assigned" aria-selected="false">指派任務<span class="my">ပေးထားသော အလုပ်</span></button>
+    <!-- 0.4.59 董事長截圖：執行任務清單＋指派任務合併；我的進度往前一格；第四格改「種植資料」 -->
     <button type="button" role="tab" id="htab-mine" data-htab="mine" aria-selected="false">我的進度<span class="my">တိုးတက်မှု</span></button>
+    <button type="button" role="tab" id="htab-plant" data-htab="plant" aria-selected="false">種植資料<span class="my">စိုက်ပျိုးမှု အချက်အလက်</span></button>
   </nav>
 
   <!-- 分頁 1 田間打卡：照手稿左卡「農民」、右卡「盤商或種子商」，點了直接進打卡畫面（2026-11-12 規劃 D＋優化 1），下面是上傳狀態 -->
@@ -229,11 +230,9 @@ footer{margin-top:18px;text-align:center}
 
   <h2>日程清單<span class="my">သွားရန်ရက်စာရင်း</span><span class="sub">逾期＋未來 7 天要回訪的／ရက်ကျော်နှင့် နောက် ၇ ရက်အတွင်း ပြန်သွားရန်</span></h2>
   <ul id="scheduleList"></ul>
-  </div>
 
-  <!-- 分頁 3 指派任務：主管、總經理派給我的任務紀錄（誰派、什麼時候、做完沒）；打勾在「執行任務清單」 -->
-  <div class="hpanel" id="hp-assigned" role="tabpanel" aria-labelledby="htab-assigned" hidden>
-  <h2>指派任務<span class="my">ပေးထားသော အလုပ်</span><span class="sub">主管、總經理派給你的任務紀錄；做完請到「執行任務清單」打勾／ပြီးလျှင် 「လုပ်ရန်」 တွင် အမှန်ခြစ်ပါ</span></h2>
+  <!-- 0.4.59 原「指派任務」分頁併進來：主管、總經理派給我的任務紀錄（誰派、什麼時候、做完沒），打勾在上面任務清單 -->
+  <h2>指派任務紀錄<span class="my">ပေးထားသော အလုပ်</span><span class="sub">主管、總經理派給你的任務紀錄；做完請在上面任務清單打勾／ပြီးလျှင် အပေါ်တွင် အမှန်ခြစ်ပါ</span></h2>
   <ul id="assignedList"></ul>
   </div>
 
@@ -269,6 +268,32 @@ footer{margin-top:18px;text-align:center}
     <div class="stat"><b id="statTrials">—</b><span class="sub">試作 開始／完成<br>စမ်းသပ် စတင်／ပြီးဆုံး</span></div>
   </div>
   <p class="sub" id="statByCat"></p>
+  </div>
+
+  <!-- 分頁 4 種植資料（0.4.59 董事長：這邊改種植資料）：選自己負責的農民，改作物、種子公司、代碼、面積、種植日期、肥料；直接存，不算一次拜訪 -->
+  <div class="hpanel" id="hp-plant" role="tabpanel" aria-labelledby="htab-plant" hidden>
+  <h2>種植資料<span class="my">စိုက်ပျိုးမှု အချက်အလက်</span><span class="sub">選農民 → 改資料 → 存檔（要有網路；不算拜訪次數）／လယ်သမား ရွေး → ပြင် → သိမ်း</span></h2>
+  <div class="fields">
+    <div><label class="lab" for="plFarmer">選擇農民<span class="my">လယ်သမား ရွေးပါ</span></label>
+      <select id="plFarmer"><option value="">— 請選擇 ရွေးပါ —</option></select></div>
+    <div id="plForm" hidden>
+      <div class="row2">
+        <div><label class="lab" for="plCo">種子公司<span class="my">မျိုးစေ့ ကုမ္ပဏီ</span></label><select id="plCo"></select></div>
+        <div><label class="lab" for="plCrop">作物<span class="my">သီးနှံ</span></label><select id="plCrop"></select></div>
+      </div>
+      <div class="row2">
+        <div><label class="lab" for="plCode">代碼<span class="my">ကုဒ်</span></label><input type="text" id="plCode" maxlength="30"></div>
+        <div><label class="lab" for="plDate">種植日期<span class="my">စိုက်သည့်ရက်</span></label><input type="date" id="plDate"></div>
+      </div>
+      <div class="row2">
+        <div><label class="lab" for="plNow">目前種植面積<small class="unit"></small><span class="my">လက်ရှိ စိုက်ဧက</span></label><input type="number" id="plNow" min="0" step="any" inputmode="decimal"></div>
+        <div><label class="lab" for="plMax">可種植面積<small class="unit"></small><span class="my">စိုက်နိုင်သော ဧက</span></label><input type="number" id="plMax" min="0" step="any" inputmode="decimal"></div>
+      </div>
+      <div><label class="lab" for="plFert">使用肥料<span class="my">သုံးသော မြေသြဇာ</span></label><input type="text" id="plFert" list="dlFerts" maxlength="120"></div>
+      <button type="button" class="save" id="plSave">存檔（上傳）<span class="my">သိမ်းမည်</span></button>
+      <p class="sub" id="plHint"></p>
+    </div>
+  </div>
   </div>
 </section>
 
