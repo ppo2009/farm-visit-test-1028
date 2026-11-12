@@ -328,8 +328,12 @@
     el.innerHTML = `<option value="">${placeholder}</option>` + list.map(x => `<option value="${esc(x.value)}">${esc(x.text)}</option>`).join('');
     el.value = value || '';
   }
+  /* 0.4.40 董事長：作物選單顯示「中文／緬文」（存檔的值照舊是中文）。緬文出處見狀態檔；青花菜、洋香瓜網路查不到確證，待緬甸同仁校對 */
+  const CROP_MY = { 番茄: 'ခရမ်းချဉ်သီး', 西瓜: 'ဖရဲသီး', 南瓜: 'ရွှေဖရုံသီး', 絲瓜: 'သပွတ်သီး', 茄子: 'ခရမ်းသီး', 苦瓜: 'ကြက်ဟင်းခါးသီး',
+    辣椒: 'ငရုတ်သီး', 玉米: 'ပြောင်းဖူး', 花椰菜: 'ပန်းဂေါ်ဖီ', 青花菜: 'ပန်းဂေါ်ဖီစိမ်း', 洋香瓜: 'သခွားမွှေးသီး', 扁蒲: 'ဘူးသီး', 水稻: 'စပါး' };
+  const cropText = c => (CROP_MY[c] && !/[က-႟]/.test(c) ? `${c}／${CROP_MY[c]}` : c); // 試算表已經寫了緬文的不重複加
   function fillCrops(keep) {
-    const crops = (state.options ? state.options.crops : []).map(c => ({ value: c, text: c }));
+    const crops = (state.options ? state.options.crops : []).map(c => ({ value: c, text: cropText(c) }));
     crops.push({ value: '其他', text: '其他／အခြား' });
     setSelect($('pCrop'), crops, keep, '— 選擇作物 သီးနှံရွေးပါ —');
   }
@@ -370,7 +374,13 @@
     // 0.4.32 董事長 2026-11-12：打卡畫面上方按鈕寫「一般拜訪農民／試作農民／推廣農民」（只改這裡，統計、紀錄照舊叫一般拜訪、試作、推廣）
     const SWITCH_LABEL = { 農戶: '一般拜訪農民', 試作: '試作農民', 推廣: '推廣農民' };
     $('catSwitch').dataset.group = groupOf(cat);
-    $('catSwitch').innerHTML = CAT_GROUPS[groupOf(cat)].map(c => `<button type="button" data-setcat="${esc(c)}" aria-pressed="${c === cat}">${esc(SWITCH_LABEL[c] || CAT_LABEL(c))}<span class="my">${esc(CAT_MY[c] || '')}</span></button>`).join('');
+    // 0.4.40 董事長：結案不放上方，改成畫面最下面的「結案（送主管審核）」；在結案畫面時同一顆按鈕變「取消結案」
+    $('closeModeBtn').hidden = groupOf(cat) !== 'farmer';
+    $('closeModeBtn').innerHTML = cat === '結案'
+      ? '← 取消結案<span class="my">ပိတ်သိမ်းမှု ပယ်ဖျက်</span>'
+      : '結案（送主管審核）<span class="my">ပိတ်သိမ်း (မန်နေဂျာ စစ်ဆေးရန်)</span>';
+    $('saveBtn').innerHTML = cat === '結案' ? '結案送主管審核（自動上傳）<span class="my">မန်နေဂျာ စစ်ဆေးရန် ပို့မည်</span>' : '儲存（自動上傳）<span class="my">သိမ်းမည်</span>';
+    $('catSwitch').innerHTML = CAT_GROUPS[groupOf(cat)].filter(c => c !== '結案').map(c => `<button type="button" data-setcat="${esc(c)}" aria-pressed="${c === cat}">${esc(SWITCH_LABEL[c] || CAT_LABEL(c))}<span class="my">${esc(CAT_MY[c] || '')}</span></button>`).join('');
     $('catSwitch').querySelectorAll('[data-setcat]').forEach(b => b.addEventListener('click', () => { state.catManual = true; setCat(b.dataset.setcat); }));
   }
   /** 換類別：同一組農民（一般／試作／推廣）客戶清單一樣，只重算試作區；盤商↔種子商客戶清單不同，要重讀 */
@@ -1202,6 +1212,13 @@
     $('albumInput').addEventListener('change', e => addPhotos(e.target.files, '相簿', $('albumBtn')).finally(() => { e.target.value = ''; }));
     $('recBtn').addEventListener('click', toggleRec);
     $('saveBtn').addEventListener('click', save);
+    // 0.4.40 最下面的結案按鈕：進結案畫面（捲回最上面填）；在結案畫面再按就回到進來時的類別
+    $('closeModeBtn').addEventListener('click', async () => {
+      state.catManual = true;
+      const back = state.entryCat && state.entryCat !== '結案' && groupOf(state.entryCat) === 'farmer' ? state.entryCat : '農戶';
+      await setCat(state.cat === '結案' ? back : '結案');
+      $('visit').scrollIntoView({ block: 'start' });
+    });
     $('relocateBtn').addEventListener('click', locate);
     $('addPriceBtn').addEventListener('click', () => addPriceRow());
     $('trialStartBtn').addEventListener('click', () => setTrialMode(state.trialMode === 'start' ? null : 'start'));

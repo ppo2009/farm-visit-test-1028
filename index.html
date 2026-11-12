@@ -52,8 +52,10 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
 .catswitch{display:flex;gap:6px}
 .farmermenu{display:grid;gap:8px;margin-top:10px;padding:10px;border:2px solid var(--paddy);border-radius:16px;background:var(--surface)}
 .farmermenu button{min-height:56px;border:1.5px solid var(--paddy);background:var(--paddy-soft);color:var(--paddy);border-radius:12px;font-weight:700;font-size:1.05rem;cursor:pointer}
-/* 0.4.32 農民那組按鈕寬度照字數分（一般拜訪農民 6 字、試作農民 4、推廣農民 4、結案 2），長的不會被擠成兩行 */
-.catswitch[data-group="farmer"]{display:grid;grid-template-columns:6.6fr 4.6fr 4.6fr 2.6fr}
+/* 0.4.32 農民那組按鈕寬度照字數分（一般拜訪農民 6 字、試作農民 4、推廣農民 4），長的不會被擠成兩行；0.4.40 結案搬到畫面最下面 */
+.catswitch[data-group="farmer"]{display:grid;grid-template-columns:6.6fr 4.6fr 4.6fr}
+.closemode{display:block;width:100%;margin-top:18px;border-color:#9a6a00;color:#9a6a00}
+.closemode[hidden]{display:none}
 .catswitch[data-group="farmer"] button{padding-left:2px;padding-right:2px}
 .catswitch button{flex:1;min-height:48px;border:1.5px solid var(--paddy);background:none;color:var(--paddy);border-radius:12px;font-weight:700;cursor:pointer;padding:6px 4px;word-break:keep-all;overflow-wrap:anywhere;min-width:0}
 /* 0.4.24（2026-11-12 業務面線上檢查）：375 點寬手機「一般拜訪」被拆成「一般拜／訪」兩行 → 中文詞不從中間斷（真的放不下才斷），窄手機字縮小一點 */
@@ -413,6 +415,8 @@ footer{margin-top:18px;text-align:center}
 
     <button type="button" class="save" id="saveBtn" disabled>儲存（自動上傳）<span class="my">သိမ်းမည်</span></button>
     <p class="sub" id="saveHint"></p>
+    <!-- 0.4.40 董事長：結案從上方類別按鈕搬到最下面；按了進結案畫面，送出後要主管審核通過才正式結案 -->
+    <button type="button" class="btn2 closemode" id="closeModeBtn" hidden>結案（送主管審核）<span class="my">ပိတ်သိမ်း (မန်နေဂျာ စစ်ဆေးရန်)</span></button>
   </div>
 </section>
 
