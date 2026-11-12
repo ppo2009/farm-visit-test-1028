@@ -68,6 +68,11 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
 @media (max-width:400px){.htabs{gap:2px}.htabs button{font-size:1rem;padding:6px 2px}}
 li.assigned{display:block}
 li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px}
+.progress{border:1.5px solid var(--paddy);border-radius:12px;padding:10px 12px;margin:8px 0;background:var(--surface)}
+.progress h3{margin:0 0 6px;font-size:1rem;color:var(--paddy)}
+.progress ul{margin:6px 0 0;padding-left:1.1em}
+.progress li{margin:4px 0}
+#cropBox{margin:8px 0}
 .mirrors{max-width:520px;margin:0 auto 10px;text-align:left;border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--surface)}
 .mirrors summary{cursor:pointer;font-weight:700;color:var(--paddy);min-height:32px}
 .mirrors li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)}
@@ -235,6 +240,15 @@ footer{margin-top:18px;text-align:center}
       <label class="lab" for="farmer" id="farmerLab">1. 選擇農民<span class="my">လယ်သမား ရွေးပါ</span></label>
       <select id="farmer"></select>
     </div>
+    <!-- 0.4.35 董事長：選擇農民後跳出這位農民之前的進度；沒有進度就跳出新增（補齊）農民資料 -->
+    <div class="progress" id="progressBox" hidden aria-live="polite"></div>
+    <!-- 0.4.35 董事長：「試作農民、一般農民怎麼沒有品種、編號選項」→ 作物、種子公司、品種（代碼）從收起來的客戶資料搬出來，選了農民就看得到 -->
+    <div class="fields" id="cropBox" hidden>
+      <div><label class="lab" for="pCrop">作物<span class="my">သီးနှံ</span></label><select id="pCrop"></select></div>
+      <!-- 0.4.31 董事長 2026-11-12 手稿「品種＝Company name＋代碼，有選單」：先選種子公司，再選品種（品種含代碼） -->
+      <div><label class="lab" for="pVarCo">種子公司<span class="my">မျိုးစေ့ ကုမ္ပဏီ</span></label><select id="pVarCo"></select></div>
+      <div><label class="lab" for="pVariety">品種（代碼）<span class="my">မျိုး (ကုဒ်)</span></label><select id="pVariety"></select></div>
+    </div>
     <details class="profile" id="profileBox" hidden>
       <summary id="profileTitle">客戶資料／ဖောက်သည် အချက်အလက်</summary>
       <div class="fields">
@@ -246,12 +260,6 @@ footer{margin-top:18px;text-align:center}
         <div><label class="lab" for="pArea">地區<span class="my">ဒေသ</span></label><select id="pArea"></select></div>
         <div class="dealer-only"><label class="lab" for="pAddress">地址<span class="my">လိပ်စာ</span></label><input type="text" id="pAddress" maxlength="200"></div>
         <div class="dealer-only"><label class="lab" for="pBrand">品牌（賣哪些品牌）<span class="my">ရောင်းသော တံဆိပ်များ</span></label><input type="text" id="pBrand" list="dlBrands" maxlength="120"></div>
-        <div class="farmer-only" style="display:grid;gap:10px">
-          <div><label class="lab" for="pCrop">作物<span class="my">သီးနှံ</span></label><select id="pCrop"></select></div>
-          <!-- 0.4.31 董事長 2026-11-12 手稿「品種＝Company name＋代碼，有選單」：先選種子公司，再選品種（品種含代碼） -->
-      <div><label class="lab" for="pVarCo">種子公司<span class="my">မျိုးစေ့ ကုမ္ပဏီ</span></label><select id="pVarCo"></select></div>
-      <div><label class="lab" for="pVariety">品種（代碼）<span class="my">မျိုး (ကုဒ်)</span></label><select id="pVariety"></select></div>
-        </div>
         <div class="farmer-only row2">
           <div><label class="lab" for="pAreaNow">目前種植面積<small class="unit"></small><span class="my">လက်ရှိ စိုက်ဧက</span></label><input type="number" id="pAreaNow" min="0" step="0.1" inputmode="decimal"></div>
           <div><label class="lab" for="pAreaMax">可種植面積<small class="unit"></small><span class="my">စိုက်နိုင်သော ဧက</span></label><input type="number" id="pAreaMax" min="0" step="0.1" inputmode="decimal"></div>
