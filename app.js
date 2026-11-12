@@ -365,7 +365,7 @@
     const cat = state.cat;
     $('visitTitle').textContent = isDealerCat() ? '盤商或種子商 ကုန်သည် / မျိုးစေ့ဆိုင်' : '農民 လယ်သမား';
     $('farmerLab').innerHTML = isDealerCat() ? `1. 選擇${cat}<span class="my">${cat === '種子商' ? 'မျိုးစေ့ဆိုင်' : 'ကုန်သည်'} ရွေးပါ</span>` : '1. 選擇農民<span class="my">လယ်သမား ရွေးပါ</span>';
-    $('priceBox').hidden = !isDealerCat();
+    $('priceBox').hidden = cat !== '盤商'; // 0.4.41 董事長：種子商那邊不需要價格，只有盤商有
     document.querySelectorAll('.dealer-only').forEach(el => { el.hidden = !isDealerCat(); });
     document.querySelectorAll('.farmer-only').forEach(el => { el.hidden = isDealerCat(); });
     $('closeBox').hidden = cat !== '結案';
@@ -942,7 +942,7 @@
     refreshPriceBtn();
   }
   function collectPrices() {
-    if (!isDealerCat()) return [];
+    if (state.cat !== '盤商') return []; // 0.4.41 董事長：種子商不用價格（從盤商切過來時藏起來的價格也不送）
     return [...$('priceRows').querySelectorAll('.price-row')].map(r => ({
       crop: r.querySelector('.pc').value.trim(), variety: r.querySelector('.pv').value.trim(),
       price: r.querySelector('.pp').value.trim(), unit: r.querySelector('.pu').value.trim()
