@@ -3,6 +3,10 @@
 (function () {
   const { Store, runSync, post, rememberServer, pruneLocalCustomers, updateTaskDone } = FarmCore;
   const $ = id => document.getElementById(id);
+  /* 0.4.42 第6任線上實測：手機有時拿到舊版頁面＋新版程式（快取混版），新加的元件找不到就整個畫面空白。
+     新元件一律用 $n：找不到就給一個不顯示的假元件，舊頁面照樣能用（重新整理後就是新版） */
+  const NO_EL = () => ({ hidden: true, value: '', innerHTML: '', textContent: '', dataset: {}, selectedIndex: 0, options: [], addEventListener() {}, scrollIntoView() {}, setAttribute() {} });
+  const $n = id => document.getElementById(id) || NO_EL();
   const pad = n => String(n).padStart(2, '0');
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const MAX_REC_SEC = 90;
@@ -376,12 +380,12 @@
     $('catSwitch').dataset.group = groupOf(cat);
     // 0.4.40 董事長：結案不放上方，改成畫面最下面的「結案（送主管審核）」；在結案畫面時同一顆按鈕變「取消結案」
     if (groupOf(cat) !== 'dealer') state.dealerClose = false; // 0.4.42 盤商、種子商的結案模式只在那一組
-    $('dealerCloseBox').hidden = !state.dealerClose;
-    $('closeModeBtn').hidden = false;
-    $('closeModeBtn').innerHTML = cat === '結案' || state.dealerClose
+    $n('dealerCloseBox').hidden = !state.dealerClose;
+    $n('closeModeBtn').hidden = false;
+    $n('closeModeBtn').innerHTML = cat === '結案' || state.dealerClose
       ? '← 取消結案<span class="my">ပိတ်သိမ်းမှု ပယ်ဖျက်</span>'
       : '結案（送主管審核）<span class="my">ပိတ်သိမ်း (မန်နေဂျာ စစ်ဆေးရန်)</span>';
-    $('noteLab').innerHTML = isDealerCat() ? '討論進度<span class="my">ဆွေးနွေးမှု တိုးတက်မှု</span>' : '打字<span class="my">စာရိုက်</span>'; // 0.4.42 董事長：盤商、種子商有見到就記討論進度
+    $n('noteLab').innerHTML = isDealerCat() ? '討論進度<span class="my">ဆွေးနွေးမှု တိုးတက်မှု</span>' : '打字<span class="my">စာရိုက်</span>'; // 0.4.42 董事長：盤商、種子商有見到就記討論進度
     $('saveBtn').innerHTML = cat === '結案' || state.dealerClose ? '結案送主管審核（自動上傳）<span class="my">မန်နေဂျာ စစ်ဆေးရန် ပို့မည်</span>' : '儲存（自動上傳）<span class="my">သိမ်းမည်</span>';
     $('catSwitch').innerHTML = CAT_GROUPS[groupOf(cat)].filter(c => c !== '結案').map(c => `<button type="button" data-setcat="${esc(c)}" aria-pressed="${c === cat}">${esc(SWITCH_LABEL[c] || CAT_LABEL(c))}<span class="my">${esc(CAT_MY[c] || '')}</span></button>`).join('');
     $('catSwitch').querySelectorAll('[data-setcat]').forEach(b => b.addEventListener('click', () => { state.catManual = true; setCat(b.dataset.setcat); }));
@@ -665,7 +669,7 @@
     return miss.length ? `結案要填：${miss.join('、')}／ပိတ်သိမ်းရန် ဖြည့်ပါ` : '';
   }
   function collectClosing() {
-    if (state.dealerClose) return { outcome: $('dcOutcome').value, note: $('dcNote').value.trim() }; // 0.4.42 盤商、種子商
+    if (state.dealerClose) return { outcome: $n('dcOutcome').value, note: $n('dcNote').value.trim() }; // 0.4.42 盤商、種子商
     if (state.cat !== '結案') return null;
     return { region: $('cRegion').value, price: $('cPrice').value.trim(), yield: $('cYield').value.trim(), buyer: $('cBuyer').value.trim(), phone: $('cPhone').value.trim() };
   }
@@ -1011,8 +1015,8 @@
 မန်နေဂျာထံ ပိတ်သိမ်းရန် ပို့မှာ သေချာပါသလား
 
 ${state.cat}：${who}
-洽談結果：${$('dcOutcome').value}
-說明：${$('dcNote').value.trim()}`)) { refreshSave(); return; }
+洽談結果：${$n('dcOutcome').value}
+說明：${$n('dcNote').value.trim()}`)) { refreshSave(); return; }
     }
     const sel = $('farmer').value;
     const isNew = sel === '__new';
@@ -1117,7 +1121,7 @@ ${state.cat}：${who}
     $('profileBox').hidden = true;
     Object.values(PROFILE_INPUTS).forEach(id => { $(id).value = ''; });
     resetTrialForm();
-    state.dealerClose = false; $('dcOutcome').value = ''; $('dcNote').value = ''; applyCatLabels(); // 0.4.42 存完回到一般拜訪
+    state.dealerClose = false; $n('dcOutcome').value = ''; $n('dcNote').value = ''; applyCatLabels(); // 0.4.42 存完回到一般拜訪
     resetNoMeet();
     refreshSave();
   }
@@ -1252,10 +1256,10 @@ ${state.cat}：${who}
     $('recBtn').addEventListener('click', toggleRec);
     $('saveBtn').addEventListener('click', save);
     // 0.4.40 最下面的結案按鈕：進結案畫面（捲回最上面填）；在結案畫面再按就回到進來時的類別
-    $('closeModeBtn').addEventListener('click', async () => {
+    $n('closeModeBtn').addEventListener('click', async () => {
       if (isDealerCat()) { // 0.4.42 盤商、種子商：不換類別，切換結案模式（洽談成功或失敗都送主管審核）
         state.dealerClose = !state.dealerClose;
-        if (state.dealerClose) { state.noMeet = false; $('dcOutcome').value = ''; $('dcNote').value = ''; }
+        if (state.dealerClose) { state.noMeet = false; $n('dcOutcome').value = ''; $n('dcNote').value = ''; }
         applyCatLabels(); refreshNoMeet(); refreshSave();
         $('visit').scrollIntoView({ block: 'start' });
         return;
