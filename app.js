@@ -72,9 +72,11 @@
       if (np !== np2) { msg.textContent = '兩次輸入的新密碼不一樣／စကားဝှက်နှစ်ခု မတူပါ'; msg.className = 'sub err'; return; }
       payload.newPassword = np;
     }
-    const others = (await Store.allVisits()).filter(v => v.status === 'pending' && v.account && v.account !== account.toLowerCase());
+    // 業務BUG#8：後台比對帳號會去掉所有空白（0.4.39，打「Myint Ko Ko」也能登入 myintkoko），這裡要用同一套，不然被當成別人擋下
+    const acctKey = account.toLowerCase().replace(/\s+/g, '');
+    const others = (await Store.allVisits()).filter(v => v.status === 'pending' && v.account && v.account !== acctKey);
     // 前一個人還沒送出的任務打勾也要擋：換人後那些打勾永遠送不出去，新的人也登出不了（自行審查 S1）
-    const otherTicks = ((await Store.getMeta('taskDone')) || []).filter(t => t.account && t.account !== account.toLowerCase());
+    const otherTicks = ((await Store.getMeta('taskDone')) || []).filter(t => t.account && t.account !== acctKey);
     if (!others.length && otherTicks.length) {
       msg.textContent = `這支手機還有 ${otherTicks.length} 個「${otherTicks[0].account}」的任務打勾沒上傳，請先用 ${otherTicks[0].account} 登入，等它傳完再換人。`;
       msg.className = 'sub err'; return;
@@ -657,7 +659,8 @@
     const keep = sel.value;
     let mine = all.filter(f => types.indexOf(f.type || '農民') >= 0);
     // 0.4.33 董事長：怕業務結案按錯 →「結案」只列自己負責的農民（手機剛新增還沒上傳的也算自己的）；其他類別照舊全部列
-    if (state.cat === '結案') { const me = String(((await getConfig()) || {}).name || ''); mine = mine.filter(f => f.pending || String(f.staff || '') === me); }
+    // 0.4.64（2號 0.4.63 清單中#2）：從結案分頁進來的盤商、種子商結案也只列自己負責的（跟農民結案同一規則；後台也會擋）
+    if (state.cat === '結案' || (state.closeOnly && isDealerCat())) { const me = String(((await getConfig()) || {}).name || ''); mine = mine.filter(f => f.pending || String(f.staff || '') === me); }
     sel.innerHTML = '<option value="">— 請選擇 ရွေးပါ —</option>' +
       mine.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}${f.crop ? '｜' + esc(f.crop) : ''}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`).join('') +
       `<option value="__new">${isDealerCat() ? `＋ 新增${state.cat}（${CAT_MY[state.cat]} အသစ်）` : '＋ 新增農民（ လယ်သမား အသစ် ）'}</option>`;
@@ -673,6 +676,12 @@
   // 業務BUG#1（2號小助手 2026-11-12）：換農民時上一位的打字、照片、錄音、種植失敗會留著，存檔就記到新農民身上
   const FAIL_IDS = ['fWeather', 'fTemp', 'fFert', 'fWater', 'fPest', 'fPestNote', 'fReason'];
   const visitDirty = () => !!(state.photos.length || state.busyPhotos || state.audio || state.rec || $('note').value.trim() || $('plantFail').checked);
+  /** 業務BUG#5：返回首頁前要確認的「填了東西」——除了照片錄音打字，還有沒見到匯報、新客戶資料、結案欄位、盤商結案說明、價格、試作表單 */
+  const filled = id => !!String(($n(id).value) || '').trim();
+  const formDirty = () => !!(visitDirty() || filled('nmNote')
+    || ($('farmer').value === '__new' && Object.values(PROFILE_INPUTS).some(filled))
+    || ['cPrice', 'cYield', 'cBuyer', 'cPhone', 'cReason', 'cProgress', 'dcNote'].some(filled)
+    || collectPrices().length || state.trialMode);
   function clearVisitInput() {
     clearInterval(state.recTimer);
     if (state.rec) { try { state.rec.stop(); } catch (e) { /* 已經停了 */ } state.rec = null; }
@@ -757,7 +766,9 @@
     // 等後台最多 10 秒；等不到就用手機裡的（線上實測：請求有時遲遲不回，連取消都沒反應 → 不能只靠 AbortController）
     const remote = await Promise.race([fetchHistory(cid), new Promise(r => setTimeout(() => r(null), 10000))]);
     if (!current()) return; // 讀的途中換了客戶
-    const recent = remote ? remote : local.map(v => ({ time: new Date(v.deviceTime || 0).toISOString().slice(0, 10), staff: '我', cat: CAT_LABEL(v.category || ''), text: v.text || '', plantFail: '', closing: '' }));
+    // 業務BUG#6：沒網路時用手機本地日期（toISOString 是世界標準時間，緬甸 00:00～06:30 打的卡會顯示成前一天）
+    const dayOf = ms => { const d = new Date(ms || 0), p2 = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`; };
+    const recent = remote ? remote : local.map(v => ({ time: dayOf(v.deviceTime), staff: '我', cat: CAT_LABEL(v.category || ''), text: v.text || '', plantFail: '', closing: '' }));
     if (o.home && !c.lastVisit && !trials.length && !recent.length) { box.innerHTML = H3 + '<p>這位農民還沒有拜訪紀錄。<br><span class="my">မှတ်တမ်း မရှိသေး</span></p>'; return; }
     if (!c.lastVisit && !trials.length && !recent.length) {
       // 沒有任何進度：跳出新增（補齊）農民資料
@@ -1262,12 +1273,21 @@
     const hasContent = noMeetOn() || state.photos.length || state.audio || $('note').value.trim() || collectPrices().length || state.trialMode || ((state.cat === '結案' || state.dealerClose) && !closeProblem()) || (sel && sel !== '__new' && collectProfile());
     $('note').placeholder = noteExample().join('\n'); // 範例跟著農民進度換
     const tp = noMeetProblem() || trialProblem() || closeProblem();
-    const ok = sel && nameOk && !state.rec && !state.busyPhotos && !tp && (isNew || hasContent);
+    const ok = sel && nameOk && !state.rec && !state.busyPhotos && !tp && (isNew || hasContent) && !state.saving; // 業務BUG#4：存檔途中（等定位最多 15 秒）不能再按
     $('saveBtn').disabled = !ok;
     $('saveHint').textContent = !sel ? '' : !nameOk ? '請先填名字／အမည် အရင်ဖြည့်ပါ' : state.rec ? '錄音中，先按一下結束錄音／အသံသွင်းနေသည်၊ အရင် ရပ်ပါ' : state.busyPhotos ? `照片處理中（還有 ${state.busyPhotos} 張）… ဓာတ်ပုံ ပြင်ဆင်နေ` : tp ? tp : !ok ? `拍照、上傳照片、錄音、打字${state.cat === '盤商' ? '、記價格' : ''}${$('farmer').value === '__new' || SHOW_PROFILE_ON_VISIT ? '（或改客戶資料）' : ''}至少做一樣／ဓာတ်ပုံ၊ အသံ၊ စာ တစ်ခုခု လုပ်ပါ` : '';
   }
 
+  /**
+   * 業務BUG#4（2號小助手推論，第7任讀程式確認）：存檔要等定位最多 15 秒，這段時間打字會觸發 refreshSave 把按鈕又打開，
+   * 再按一次就跑第二個 save，兩筆不同編號都存下來。→ 外面包一層「存檔中」鎖：同時只跑一個，結束（不管成功、取消、失敗）一定解鎖
+   */
   async function save() {
+    if (state.saving) return;
+    state.saving = true;
+    try { await saveOnce(); } finally { state.saving = false; refreshSave(); }
+  }
+  async function saveOnce() {
     $('saveBtn').disabled = true;
     const cfg = await getConfig();
     if (!cfg || !cfg.deviceKey) { showLogin('請先登入／အရင် ဝင်ပါ'); return; }
@@ -1529,8 +1549,8 @@ ${state.cat}：${who}
     initHomeTabs();
     $('syncBadge').addEventListener('click', () => { setHomeTab('punch'); const q = document.querySelector('.queue'); if (q && q.scrollIntoView) q.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
     $('backBtn').addEventListener('click', () => {
-      const dirty = state.photos.length || state.audio || $('note').value.trim();
-      if (dirty && !confirm('還沒儲存，確定要回首頁？剛剛的照片、錄音、打字會不見。\nမသိမ်းရသေးပါ။ ပြန်သွားလျှင် ဓာတ်ပုံ၊ အသံ၊ စာ ပျောက်မည်။')) return;
+      const dirty = formDirty(); // 業務BUG#5
+      if (dirty && !confirm('還沒儲存，確定要回首頁？剛剛填的資料（照片、錄音、打字、匯報、結案欄位等）會不見。\nမသိမ်းရသေးပါ။ ပြန်သွားလျှင် ဖြည့်ထားသည်များ ပျောက်မည်။')) return;
       if (state.rec) state.rec.stop();
       resetForm(); showHome();
     });
@@ -1552,8 +1572,8 @@ ${state.cat}：${who}
       const cat = b.dataset.closecat;
       state.closeNext = true;
       if (cat !== '結案') state.lockNext = true; // 盤商、種子商結案：另一種也鎖
-      const pick = cat === '結案' ? $n('closeFarmer').value : ''; // 上面選單挑了農民：進結案畫面直接帶這位
-      await openVisit(cat, pick || undefined);
+      // 0.4.64（2號 0.4.63 清單中#1）：結案已經是獨立分頁，不再自動帶「我的進度」看過的農民，免得結錯人；進結案畫面再自己選
+      await openVisit(cat);
       if (cat !== '結案') { // 0.4.42 盤商、種子商：不換類別，打開結案模式（洽談成功或失敗都送主管審核）
         state.dealerClose = true; state.noMeet = false; $n('dcOutcome').value = ''; $n('dcNote').value = '';
         applyCatLabels(); refreshNoMeet(); refreshSave();

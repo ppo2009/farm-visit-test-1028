@@ -212,8 +212,10 @@
     $('moreBtn').setAttribute('aria-expanded', String(!$('moreTabs').hidden));
     $('moreBtn').setAttribute('aria-selected', String(inMore));
     // 手機上分頁列會橫向捲動：選到的分頁捲進畫面裡
+    // 主管BUG#3（1號 0.4.63）：只在換分頁時捲，同一頁重畫（標已讀、載完履歷、派任務）不要把人拉回分頁列
     const curTab = document.querySelector('.tab[data-tab][aria-selected="true"]');
-    if (curTab && curTab.scrollIntoView) curTab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (state.tab !== state.lastTab && curTab && curTab.scrollIntoView) curTab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    state.lastTab = state.tab;
     // 主管匯報分頁的紅點：總經理＝還沒看過的匯報
     const unread = state.data.role === '總經理' ? (state.data.briefs || []).filter(b => !b.read).length : 0;
     $('briefBadge').hidden = !unread; $('briefBadge').textContent = unread ? String(unread) : '';
@@ -237,7 +239,7 @@
       try { r = await api({ action: 'closeDecide', visitId: b.dataset.vid, decision: b.dataset.closedecide }); } catch (e) { r = { ok: false, message: '連不上伺服器' }; }
       if (r.closings) state.data.closings = r.closings;
       state.closeMsg = r.ok ? (ok ? '已確認結案' : '已退回') : '⚠ ' + (r.message || '處理失敗');
-      if (r.ok && ok) { load(); return; } // 確認結案會改客戶狀態、試作：整份重讀
+      if (r.ok && ok) { render(); load(); return; } // 確認結案會改客戶狀態、試作：整份重讀；主管BUG#4：先重畫（按鈕恢復、看到成功訊息），重讀失敗也不會卡灰
       render();
     }));
     $('panel').querySelectorAll('[data-play]').forEach(el => el.addEventListener('click', () => playAudio(el)));
@@ -514,13 +516,13 @@
           : kv('作物', c.crop) + kv('品種', c.variety) + kv('代碼', c.varCode) + kv('目前種植面積', c.areaNow) + kv('可種植面積', c.areaMax) + kv('種植日期', c.plantDate) + kv('使用肥料', c.fertilizer)
             + `<span>試作：${esc(c.trial || '—')}${c.start ? '（' + md(c.start) + ' 開始）' : ''}</span>`}<span>負責：${esc(c.staff || '—')}</span>
         <span>下次回訪：${c.nextDue ? md(c.nextDue) : '—'} ${s === 'late' ? '<span class="pill p-red">逾期</span>' : s === 'due' ? '<span class="pill p-yel">今天</span>' : ''}</span>
-        ${c.lat ? `<a href="https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}" target="_blank" rel="noopener">田區導航 ↗</a>` : ''}</div>
+        ${c.lat != null && c.lng != null ? `<a href="https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}" target="_blank" rel="noopener">田區導航 ↗</a>` : ''}</div>
       ${(state.data.trials || []).filter(t => t.cid === c.id).map(t => `<div class="card" style="margin-bottom:10px"><b>${esc(t.cat)} ${esc(t.id)}</b>：${esc(t.item || '—')}（${esc(t.start || '')} ～ ${esc(t.end || '進行中')}）
         <span class="pill ${t.status === '成功' ? 'p-grn' : t.status === '失敗' ? 'p-red' : 'p-yel'}">${esc(t.status)}</span>
         ${t.hasReport ? ` <button class="btn" type="button" data-report="${esc(t.id)}">⬇ 試作報告（Word）</button>` : ''}
         ${t.conclusion ? `<div class="sub pre" style="margin-top:6px">結論：${esc(t.conclusion)}</div>` : ''}</div>`).join('')}
       <div class="timeline">${list.map(v => `<div class="entry">${catPill(v)}<b>${esc(v.time)}</b>${!dealer && visitWeek(v) ? `　試作第 ${visitWeek(v)} 週` : ''} <span class="sub">${esc(v.staff)}</span>
-        <div class="sub">${v.lat ? `📍 <a href="${esc(v.nav)}" target="_blank" rel="noopener">${v.lat.toFixed(5)}, ${v.lng.toFixed(5)}（導航）</a>` : '📍 <span style="color:var(--chili)">無定位</span>'}
+        <div class="sub">${v.lat != null && v.lng != null ? `📍 <a href="${esc(v.nav)}" target="_blank" rel="noopener">${v.lat.toFixed(5)}, ${v.lng.toFixed(5)}（導航）</a>` : '📍 <span style="color:var(--chili)">無定位</span>'}
         　📷 ${v.check ? esc(v.check) : '現場拍攝'}</div>
         <div class="box"><div class="photos">${v.photos.length ? v.photos.map(id => `<div class="photo" data-photo="${esc(id)}">載入中…</div>`).join('') : '<div class="photo">沒有照片</div>'}</div>
         <dl class="kv"><dt>${dealer ? '行情' : '作物'}</dt><dd>${esc(v.crop || '—')}</dd><dt>反應</dt><dd>${esc(v.feedback || '—')}</dd><dt>問題</dt><dd>${esc(v.issue || '—')}</dd><dt>下一步</dt><dd>${esc(v.next || '—')}</dd>
@@ -663,9 +665,12 @@
       return `<h3>${esc(s.name)}（${esc(s.account)}）　<span class="sub">${list.length}／${max} 條沒完成</span></h3><ol class="tasks">${list.map(t => taskLine(t, canCancel)).join('') || '<li class="empty">沒有任務</li>'}</ol>`;
     };
     // 收任務的帳號查不到（被改名、刪掉）：只有總經理看得到、能取消（R8-07）
-    const orphan = isGM() ? tasks.filter(t => t.status === '待辦' && !t.role) : [];
+    // 主管BUG#5（1號 0.4.63）：帳號停用的人不在 staffList／bossList，他沒做完的任務原本整條消失、取消不了，卻還佔 10 條上限
+    // → 不在名單裡的待辦都列出來：總經理看全部；主管看派給業務的（後台 taskCancel_ 本來就允許主管取消業務的任務）
+    const listed = new Set(staff.concat(bosses).map(s => String(s.account)));
+    const orphan = tasks.filter(t => t.status === '待辦' && !listed.has(String(t.account)) && (isGM() || t.role === '業務'));
     const open = staff.map(s => block(s, true)).join('') + (bosses.length ? '<h3>派給主管的任務</h3>' + bosses.map(s => block(s, true)).join('') : '')
-      + (orphan.length ? `<h3>收任務的帳號查不到 <span class="sub">（帳號可能被改名或刪掉；只有總經理能取消）</span></h3><ol class="tasks">${orphan.map(t => taskLine(t, true).replace('</li>', ` <span class="sub">｜${esc(t.staff)}（${esc(t.account)}）</span></li>`)).join('')}</ol>` : '');
+      + (orphan.length ? `<h3>帳號停用或查不到的人沒做完的任務 <span class="sub">（帳號停用、改名或刪掉；可以按取消，免得佔掉 10 條上限）</span></h3><ol class="tasks">${orphan.map(t => taskLine(t, true).replace('</li>', ` <span class="sub">｜${esc(t.staff)}（${esc(t.account)}）</span></li>`)).join('')}</ol>` : '');
     // 完成清單：主管看不到總經理派給別的主管的任務
     const done = tasks.filter(t => t.status !== '待辦' && (t.role !== '主管' || isGM() || t.account === d.account)).sort((a, b) => String(b.doneAt).localeCompare(String(a.doneAt)));
     return myBox + form + open + `<h3>最近 30 天完成或取消的</h3><ul>${done.map(t => `<li>${t.status === '已完成' ? '<span class="pill p-grn">完成</span>' : '<span class="pill">取消</span>'}
