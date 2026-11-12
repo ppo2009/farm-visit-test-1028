@@ -32,7 +32,9 @@
     '工作進度明細': 'လုပ်ငန်း တိုးတက်မှု', '田區地圖': 'လယ်ကွက် မြေပုံ', '拜訪紀錄表': 'သွားရောက်မှု မှတ်တမ်း', '業務帳號': 'ဝန်ထမ်း အကောင့်',
     '逾期未回訪': 'ရက်ကျော် မသွားရသေး', '今天該回訪': 'ယနေ့ သွားရန်', '近 7 天拜訪次數': '၇ ရက်အတွင်း သွားရောက်မှု', '追蹤中的客戶': 'စောင့်ကြည့်ဆဲ ဖောက်သည်',
     '每位業務': 'ဝန်ထမ်း တစ်ဦးချင်း', '逾期': 'ရက်ကျော်', '最新拜訪': 'နောက်ဆုံး သွားရောက်မှု', '沒有': 'မရှိ', '各地區': 'ဒေသအလိုက်',
-    '要注意的': 'သတိပြုရန်', '快採收待盯': 'ရိတ်သိမ်းခါနီး စောင့်ကြည့်ရန်', // 0.4.82 緬文示意，待校對 '全部客戶': 'ဖောက်သည် အားလုံး', '全部業務': 'ဝန်ထမ်း အားလုံး', '全部地區': 'ဒေသ အားလုံး', '全部類型': 'အမျိုးအစား အားလုံး',
+    '要注意的': 'သတိပြုရန်', '快採收待盯': 'ရိတ်သိမ်းခါနီး စောင့်ကြည့်ရန်',
+    '全部客戶': 'ဖောက်သည် အားလုံး', '全部業務': 'ဝန်ထမ်း အားလုံး', '全部地區': 'ဒေသ အားလုံး', '全部類型': 'အမျိုးအစား အားလုံး', // 0.4.88 中2：「快採收待盯」的緬文是 0.4.82 示意待校對；註解原本寫在這四個詞條前面，把它們變成註解
+
     '全部結果': 'ရလဒ် အားလုံး', '全部類別': 'အမျိုးအစား အားလုံး',
     '農民': 'လယ်သမား', '盤商': 'ကုန်သည်', '種子商': 'မျိုးစေ့ဆိုင်', '試作': 'စမ်းသပ်', '推廣': 'မြှင့်တင်', '農戶': 'ပုံမှန်', '一般拜訪': 'ပုံမှန်သွားရောက်', '結案': 'ပိတ်သိမ်း',
     '系統': 'စနစ်', '達成': 'ပြည့်မီ', '進行中': 'လုပ်ဆောင်ဆဲ', '成功': 'အောင်မြင်', '失敗': 'မအောင်မြင်', '結束': 'ပြီးဆုံး', '取消': 'ပယ်ဖျက်', '完成': 'ပြီး', '停用': 'ပိတ်ထား',
@@ -102,14 +104,26 @@
     set(v) { try { if (v) localStorage.setItem(KEY_NAME, v); else localStorage.removeItem(KEY_NAME); } catch (e) { /* 無痕模式存不了 */ } }
   };
 
+  // 0.4.88 中4：請求一定有時間上限（網路卡住不回應也不斷線時，不能永遠白畫面）。照片、錄音、報告檔比較大，給 90 秒
+  const API_TIMEOUT_MS = 30000, API_FILE_TIMEOUT_MS = 90000;
   async function api(payload) {
     const sentKey = state.key;
-    const res = await fetch(FARM_CONFIG.gasUrl, {
-      method: 'POST', redirect: 'follow',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(Object.assign({ deviceKey: sentKey }, payload))
-    });
-    const data = await res.json();
+    const ms = ['photo', 'audio', 'report'].indexOf(payload.action) >= 0 ? API_FILE_TIMEOUT_MS : API_TIMEOUT_MS;
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    let timedOut = false;
+    const timer = ctl ? setTimeout(() => { timedOut = true; ctl.abort(); }, (typeof window !== 'undefined' && window.BOSS_TEST_TIMEOUT_MS) || ms) : null;
+    let data;
+    try {
+      const res = await fetch(FARM_CONFIG.gasUrl, {
+        method: 'POST', redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(Object.assign({ deviceKey: sentKey }, payload)), signal: ctl ? ctl.signal : undefined
+      });
+      data = await res.json();
+    } catch (e) {
+      if (timedOut) { const t = new Error('逾時'); t.timeout = true; throw t; }
+      throw e;
+    } finally { if (timer) clearTimeout(timer); }
     // 請求還在路上時登出或換了別人登入：這個回應是上一個人的，丟掉（不回來，呼叫的地方就不會把它寫進新的人的畫面）
     // （自行審查 S7：原本會把上一位的匯報清單蓋到新的人畫面上，或登出後 state.data 是 null 而出錯）
     if (payload.action !== 'login' && state.key !== sentKey) return new Promise(() => {});
@@ -175,31 +189,49 @@
     Object.assign(state, { progReq: {}, histReq: {}, photoReq: {}, prog: {}, hist: {}, photos: {}, audios: {} });
     Object.assign(state, { tab: 'today', trial: null, briefOpen: '', bf: null, replyDraft: {}, tf: null, af: null, newPw: null,
       taskMsg: '', briefMsg: '', acctMsg: '', moreOpen: false, cf: { q: '', staff: '', area: '', type: '', show: 'attn' },
-      closeMsg: '', rf: {}, pm: '', grpOpen: {}, lastTab: '' }); // 主管BUG#9：換人登入不留上一位的結案訊息、篩選、月份、展開狀態
-    try { if (player) player.pause(); player = null; playingId = ''; } catch (e) { /* 還沒播過 */ }
+      closeMsg: '', rf: {}, pm: '', grpOpen: {}, lastTab: '', replyRid: {}, loadedAt: 0, closeMsgSeq: 0 }); // 主管BUG#9：換人登入不留上一位的結案訊息、篩選、月份、展開狀態
+    try { if (player) player.pause(); player = null; playingId = ''; playingBtn = null; } catch (e) { /* 還沒播過 */ }
     try { if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel(); } catch (e) { /* 不支援朗讀 */ }
     showLogin();
   }
 
+  /** 0.4.88 中4：還沒有畫面（剛打開頁面自動讀取）時，顯示看得見的「讀取中」；失敗時同一塊顯示原因＋「重試」 */
+  function showBoot(msg, failed) {
+    const b = $('boot');
+    if (!b) return;
+    $('login').hidden = true; $('app').hidden = true; b.hidden = false;
+    $('bootMsg').textContent = msg; $('bootMsg').className = failed ? 'sub err' : 'sub';
+    $('bootRetry').hidden = !failed; $('bootLogin').hidden = !failed;
+  }
+  const hideBoot = () => { const b = $('boot'); if (b) b.hidden = true; };
+  const mmToday = () => new Date(Date.now() + 390 * 60000).toISOString().slice(0, 10); // 緬甸日期（UTC+6:30）
   async function load() {
-    if (!state.key) { showLogin(); return; }
+    if (!state.key) { hideBoot(); showLogin(); return; }
     $('loginMsg').textContent = '讀取中…';
+    if (!state.data) showBoot('讀取中…／ဖတ်နေသည်…', false);
+    else $('updated').textContent = '讀取中…';
     const seq = ++state.loadSeq, gen = state.dataGen;
     let data;
     try { data = await api({ action: 'boss' }); }
-    catch (e) { data = { ok: false, code: 'NETWORK', message: '連不上伺服器，請確認網路後重新整理' }; }
+    catch (e) { data = { ok: false, code: 'NETWORK', message: e && e.timeout ? '伺服器超過 30 秒沒有回應（網路太慢或卡住），請按「重試」' : '連不上伺服器，請確認網路後按「重試」' }; }
     // 0.4.75（1號主管清單低5）：Apps Script 同時處理好幾個請求，回來順序不一定 → 不是最新那次的結果丟掉；
     // 出發後畫面資料被動作改過（例如剛確認結案）→ 這份可能是改之前的，不採用，重讀一次
     if (seq !== state.loadSeq) return;
     if (gen !== state.dataGen && state.data) { load(); return; }
     if (!data.ok) {
-      if (data.code === 'BAD_LOGIN' || data.code === 'NOT_BOSS') { logout(); showLogin(data.message || '登入失敗'); return; }
+      if (data.code === 'BAD_LOGIN' || data.code === 'NOT_BOSS') { hideBoot(); logout(); showLogin(data.message || '登入失敗'); return; }
       // 已經有畫面時，暫時的錯誤只顯示在上方，不要把人踢回登入頁
-      if (state.data) { $('updated').textContent = '⚠ ' + (data.message || '更新失敗') + '（顯示的是上次的資料）'; return; }
+      if (state.data) { $('updated').textContent = '⚠ ' + (data.message || '更新失敗') + '（顯示的是上次的資料，按「重新整理」再試）'; return; }
+      if ($('boot')) { showBoot('⚠ ' + (data.message || '讀取失敗'), true); return; } // 0.4.88 中4：原因＋重試
       showLogin(data.message || '讀取失敗'); return;
     }
+    hideBoot();
     state.hist = {}; state.prog = {};
     state.data = data;
+    state.loadedAt = Date.now(); // 0.4.88 低8：切回頁面時判斷要不要重讀
+    if (seq > (state.closeMsgSeq || 0)) state.closeMsg = ''; // 0.4.88 低7：讀完新資料，上一次結案的提示清掉（按完確認緊接著那次重讀不清，才看得到「已確認結案」）
+    // 0.4.88 低3：進度明細的月份不在最近 6 個月（例如頁面開著跨月）→ 改回本月
+    if (state.pm && monthsBack(6).indexOf(state.pm) < 0) state.pm = '';
     // 客戶頁沒有指定客戶時，顯示篩選結果的第一位（custSelected），不再固定第一位客戶
     $('login').hidden = true; $('app').hidden = false;
     $('who').textContent = data.name + (data.role === '總經理' ? '（總經理）' : '（主管）');
@@ -276,13 +308,15 @@
       try { r = await api({ action: 'closeDecide', visitId: b.dataset.vid, decision: b.dataset.closedecide }); } catch (e) { r = { ok: false, message: '連不上伺服器' }; }
       if (r.closings) setData({ closings: r.closings });
       state.closeMsg = r.ok ? (ok ? '已確認結案' : '已退回') : '⚠ ' + (r.message || '處理失敗');
+      state.closeMsgSeq = state.loadSeq + 1; // 0.4.88 低7：緊接著這次的重讀不清訊息，之後的讀取才清
       // 確認結案會改客戶狀態、試作：整份重讀；主管BUG#4：先重畫（按鈕恢復、看到成功訊息），重讀失敗也不會卡灰
       // 0.4.75（1號主管清單低7）：退回也重讀，拜訪紀錄、客戶履歷才會馬上變「結案（已退回）」
       if (r.ok && ok) { render(); load(); return; }
       if (r.ok && !ok) { render(); load(); return; } // 低7：退回
+      if (r.code === 'DONE_ALREADY') { render(); load(); return; } // 0.4.88 低6：別人已經處理過 → 重讀，畫面才會是最新的客戶狀態、拜訪紀錄
       render();
     }));
-    bindMedia($('panel'));
+    bindMedia($('panel')); syncPlayer($('panel')); // 0.4.88 中8：重畫後舊錄音接到新按鈕，找不到就停
     $('panel').querySelectorAll('[data-filter]').forEach(el => el.addEventListener('change', () => { state.rf[el.dataset.filter] = el.value; render(); }));
     $('panel').querySelectorAll('[data-month]').forEach(el => el.addEventListener('change', () => { state.pm = el.value; render(); }));
     if (state.tab === 'progress') loadProgress(state.pm);
@@ -329,28 +363,51 @@
   let player = null, playingId = '', playingBtn = null;
   const PLAY_LABEL = '▶ 聽原始錄音（緬甸語）';
   const playHtml = () => esc(PLAY_LABEL) + `<span class="my">${BI[PLAY_LABEL]}</span>`; // 0.4.75（1號主管清單低9）：還原時連緬文小字一起還原
+  /** 0.4.88 中7／中8：停掉正在播的錄音，按鈕恢復（朗讀前、登出時用） */
+  function stopAudio() {
+    try { if (player) player.pause(); } catch (e) { /* 已經停了 */ }
+    if (playingBtn && playingBtn.isConnected !== false) playingBtn.innerHTML = playHtml();
+    player = null; playingId = ''; playingBtn = null;
+  }
+  /** 0.4.88 中8：整頁或履歷重畫後，正在播的那段如果畫面上還有按鈕，就接到新按鈕（照播、按鈕寫「停止」）；畫面上找不到了就停掉，不讓它在背景一直播 */
+  function syncPlayer(root) {
+    if (!player && !playingBtn) return;
+    const nb = playingId && root && root.querySelector ? root.querySelector(`[data-play="${CSS && CSS.escape ? CSS.escape(playingId) : playingId}"]`) : null;
+    if (nb) { playingBtn = nb; nb.textContent = '⏸ 停止'; return; }
+    if (playingBtn && playingBtn.isConnected) return; // 按鈕還在（重畫的不是它那一塊）
+    try { if (player) player.pause(); } catch (e) { /* 已經停了 */ }
+    player = null; playingId = ''; playingBtn = null;
+  }
   async function playAudio(btn) {
     const id = btn.dataset.play;
-    if (player && playingId === id) { player.pause(); player = null; playingId = ''; btn.innerHTML = playHtml(); return; }
+    if (player && playingId === id) { player.pause(); player = null; playingId = ''; playingBtn = null; btn.innerHTML = playHtml(); return; }
+    try { if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel(); } catch (e) { /* 不支援朗讀 */ } // 0.4.88 中7：播錄音先停朗讀，不要兩個同時出聲
     // 換聽另一段：上一段停掉，按鈕也要恢復（原本會一直停在「停止」；2026-11-11 抓到）
     if (player) player.pause();
     if (playingBtn && playingBtn !== btn) playingBtn.innerHTML = playHtml();
     player = null; playingId = ''; playingBtn = btn;
     btn.textContent = '讀取錄音中…';
-    try {
-      if (!state.audios[id]) {
-        const r = await api({ action: 'audio', fileId: id });
-        if (!r.ok) { btn.textContent = r.message || '錄音讀取失敗'; return; }
-        state.audios[id] = `data:${r.mime};base64,${r.data}`;
-      }
+    if (!state.audios[id]) {
+      let r;
+      try { r = await api({ action: 'audio', fileId: id }); } catch (e) { r = { ok: false, message: e && e.timeout ? '讀錄音超過時間沒回應，請再按一次' : '連不上伺服器，錄音沒讀到，請再按一次' }; } // 0.4.88 低1：斷線跟不能播分開
       if (playingBtn !== btn) return; // 讀取期間又按了別段
+      if (!r.ok) { btn.textContent = r.message || '錄音讀取失敗'; playingBtn = null; return; }
+      state.audios[id] = `data:${r.mime};base64,${r.data}`;
+    }
+    if (playingBtn !== btn) return; // 讀取期間又按了別段
+    try {
       player = new Audio(state.audios[id]);
       playingId = id;
       const me = player;
-      player.onended = () => { btn.innerHTML = playHtml(); if (player === me) { player = null; playingId = ''; } };
+      player.onended = () => { if (playingBtn) playingBtn.innerHTML = playHtml(); if (player === me) { player = null; playingId = ''; playingBtn = null; } };
       await player.play();
-      btn.textContent = '⏸ 停止';
-    } catch (e) { btn.textContent = '這支手機無法播放這段錄音'; }
+      if (player === me && playingBtn) playingBtn.textContent = '⏸ 停止';
+    } catch (e) {
+      // 0.4.88 低1：被下一段（或停止、朗讀）打斷的不是「不能播」
+      if (e && e.name === 'AbortError') { if (playingBtn === btn) { btn.innerHTML = playHtml(); player = null; playingId = ''; playingBtn = null; } return; } // 狀態一起清，下一次按才是「播放」不是「停止」
+      btn.textContent = e && e.name === 'NotAllowedError' ? '瀏覽器擋住播放，請再按一次' : '這支手機無法播放這段錄音';
+      if (playingBtn === btn) { player = null; playingId = ''; playingBtn = null; }
+    }
   }
 
   function speak(btn) {
@@ -358,6 +415,7 @@
     const inHist = Object.keys(state.hist || {}).map(k => (state.hist[k] || []).find(x => x.id === btn.dataset.speak)).find(Boolean);
     const v = inHist || state.data.visits.find(x => x.id === btn.dataset.speak);
     if (!v || !('speechSynthesis' in window)) { btn.textContent = '這個瀏覽器不支援朗讀'; return; }
+    stopAudio(); // 0.4.88 中7：朗讀先停錄音
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(`${v.name}。${v.summary}。問題：${v.issue || '無'}。下一步：${v.next || '無'}。`);
     u.lang = 'zh-TW'; u.rate = 0.95;
@@ -398,6 +456,8 @@
   const MEASURE_WEEKS = [2, 4, 8], MEASURE_EARLY = 3;
   function measureDue(t, lastVisit, today) {
     if (!t || t.status !== '進行中' || !/^\d{4}-\d\d-\d\d/.test(String(t.start || ''))) return null;
+    const cs = custOf(t.cid).status; // 0.4.88 中3：客戶暫停、已結束不算該量測（跟後台派量測任務只算往來中的農民一致）
+    if (cs === '暫停' || cs === '已結束' || cs === '已結案') return null;
     const days = daysBetween(t.start, today);
     const w = MEASURE_WEEKS.filter(x => days >= x * 7).pop();
     if (!w) return null;
@@ -409,7 +469,7 @@
     const d = state.data, w1 = addDays(d.today, -6), w2 = addDays(d.today, -13);
     const days = d.visits.filter(v => v.staff === name).map(v => v.time.slice(0, 10));
     const oldest = d.visits.map(v => v.time.slice(0, 10)).sort()[0];
-    return { now: days.filter(x => x >= w1).length, prev: days.filter(x => x >= w2 && x < w1).length, partial: d.visits.length >= 500 && oldest > w2 };
+    return { now: days.filter(x => x >= w1).length, prev: days.filter(x => x >= w2 && x < w1).length, partial: d.visits.length >= 500 && oldest >= w2 }; // 0.4.88 低4：最舊那筆剛好是上週第一天，那天可能被 500 筆截掉一半，也算可能不全
   }
   function staffCards() {
     const d = state.data, staff = d.staffList || [];
@@ -543,7 +603,7 @@
     const c = custSelected();
     d.dataset.cid = c ? c.id : '';
     d.innerHTML = custDetailHtml();
-    bindGo(d); bindMedia(d); biDom(d);
+    bindGo(d); bindMedia(d); biDom(d); syncPlayer(d); // 0.4.88 中8
     const box = $('custList');
     if (box) box.querySelectorAll('.crow[data-go]').forEach(b => b.setAttribute('aria-current', String(!!c && b.dataset.go === c.id)));
     loadPhotos(); loadHistory();
@@ -789,7 +849,7 @@
       + (orphan.length ? `<h3>帳號停用或查不到的人沒做完的任務 <span class="sub">（帳號停用、改名或刪掉；可以按取消，免得佔掉 10 條上限）</span></h3><ol class="tasks">${orphan.map(t => taskLine(t, true).replace('</li>', ` <span class="sub">｜${esc(t.staff)}（${esc(t.account)}）</span></li>`)).join('')}</ol>` : '');
     // 完成清單：主管看不到總經理派給別的主管的任務
     const done = tasks.filter(t => t.status !== '待辦' && (t.role !== '主管' || isGM() || t.account === d.account)).sort((a, b) => String(b.doneAt).localeCompare(String(a.doneAt)));
-    return myBox + form + open + `<h3>最近 30 天完成或取消的</h3><ul>${done.map(t => `<li>${t.status === '已完成' ? '<span class="pill p-grn">完成</span>' : '<span class="pill">取消</span>'}
+    return myBox + form + open + `<h3>最近 30 天完成或取消的</h3><ul class="donetasks">${done.map(t => `<li>${t.status === '已完成' ? '<span class="pill p-grn">完成</span>' : '<span class="pill">取消</span>'}
       ${t.cid ? `<b>${esc(t.name)}</b>：` : ''}${t.by === '系統建議' ? '<span class="pill p-yel">系統</span> ' : ''}${esc(t.text)}<span class="sub">｜${esc(t.staff)}${t.role === '主管' ? '（主管）' : ''}｜${esc(String(t.doneAt).slice(5, 16))}${t.doneBy === '系統（已拜訪）' ? '（去拜訪後自動完成）' : ''}${t.status === '取消' ? '（' + esc(t.doneBy) + ' 取消）' : ''}</span></li>`).join('') || '<li class="empty">還沒有</li>'}</ul>`;
   }
   function bindTasks() {
@@ -941,9 +1001,13 @@
         ev.preventDefault();
         if (!ta.value.trim()) { state.briefMsg = '請先寫回覆內容'; render(); return; }
         f.querySelector('button').disabled = true;
+        // 0.4.88 中1：重送判斷改用送出代號 rid（同匯報、派任務）。同一段內容重按用同一個 rid（網路斷掉再按不會變兩段）；內容改了就換新 rid。
+        // 原本後台用「跟上一則最後一行一樣」判斷重送，總經理補一句一樣的話會被吞掉、畫面卻寫已回覆
+        const text = ta.value.trim(), rr = state.replyRid || (state.replyRid = {});
+        if (!rr[id] || rr[id].text !== text) rr[id] = { rid: newRid(), text: text };
         let r;
-        try { r = await api({ action: 'briefReply', id: id, text: ta.value.trim() }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再試一次' }; }
-        if (r.ok) { setData({ briefs: r.briefs, briefUnread: briefUnreadOf(r) }); delete state.replyDraft[id]; state.briefMsg = '已回覆'; } else state.briefMsg = '⚠ ' + (r.message || '回覆失敗');
+        try { r = await api({ action: 'briefReply', id: id, text: text, rid: rr[id].rid }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再試一次（不會變成兩段）' }; }
+        if (r.ok) { setData({ briefs: r.briefs, briefUnread: briefUnreadOf(r) }); delete state.replyDraft[id]; delete rr[id]; state.briefMsg = '已回覆'; } else state.briefMsg = '⚠ ' + (r.message || '回覆失敗');
         render();
       });
     });
@@ -1027,12 +1091,18 @@
   }
 
   /** 讀某個月的工作進度：「工作進度明細」看選的月份，「總覽」業務卡片看本月；讀到了，正在看的那頁才重畫 */
+  const PROG_RETRY_MS = 30000; // 0.4.88 低2：讀失敗的月份，過 30 秒再畫面時重讀（不是永遠失敗；也不會失敗就一直狂打）
   async function loadProgress(m) {
-    if (!m || state.prog[m] || state.progReq[m]) return;
+    const old = state.prog[m];
+    if (!m || state.progReq[m] || (old && !(old.failedAt && Date.now() - old.failedAt > PROG_RETRY_MS))) return;
     state.progReq[m] = true;
+    const key = state.key;
     let r;
-    try { r = await api({ action: 'progress', month: m }); } catch (e) { r = { ok: false, message: '連不上伺服器' }; } finally { delete state.progReq[m]; }
-    state.prog[m] = r;
+    try { r = await api({ action: 'progress', month: m }); } catch (e) { r = { ok: false, message: e && e.timeout ? '讀進度超過 30 秒沒回應，等一下會再試' : '連不上伺服器，等一下會再試' }; } finally { delete state.progReq[m]; }
+    if (key !== state.key) return;
+    // 0.4.88 低2：登入失效、不是主管 → 回登入頁（原本只在進度那格寫錯誤，畫面其他地方照用舊資料）
+    if (r && (r.code === 'BAD_LOGIN' || r.code === 'NOT_BOSS')) { logout(); showLogin(r.message || '登入已失效，請重新登入'); return; }
+    state.prog[m] = r && r.ok ? r : Object.assign({}, r, { ok: false, failedAt: Date.now() });
     if ((state.tab === 'progress' && state.pm === m) || (state.tab === 'today' && monthsBack(1)[0] === m)) render();
   }
 
@@ -1055,6 +1125,15 @@
   });
   $('reload').addEventListener('click', load);
   $('logout').addEventListener('click', logout);
+  // 0.4.88 中4：開頁自動讀取失敗時的「重試」「改用帳號登入」
+  if ($('bootRetry')) $('bootRetry').addEventListener('click', load);
+  if ($('bootLogin')) $('bootLogin').addEventListener('click', () => { hideBoot(); logout(); });
+  // 0.4.88 低8：頁面開著過了緬甸午夜、或離開超過 10 分鐘再切回來 → 重讀（「今天」、逾期才會對）
+  const STALE_MS = 10 * 60000;
+  if (typeof document.addEventListener === 'function') document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !state.key || !state.data) return;
+    if (Date.now() - (state.loadedAt || 0) > STALE_MS || state.data.today !== mmToday()) load();
+  });
   $('loginForm').addEventListener('submit', onLogin);
   // 總經理BUG(2號)低6：帳號欄改成別人＝不是剛剛被要求改密碼的那位，收起改密碼欄
   $('acct').addEventListener('input', () => { if (state.mustChange && $('acct').value.trim().toLowerCase() !== state.mustChangeAcct) clearMustChange(); });
@@ -1062,5 +1141,5 @@
   renderMirrors();
   state.key = keyStore.get();
   if (state.key) load(); else showLogin();
-  window.__bossTest = { state, render, load, logout }; // 本機測試用
+  window.__bossTest = { state, render, load, logout, measureDue, weekCompare, syncPlayer, stopAudio, mmToday }; // 本機測試用（0.4.88 多開幾個給測試）
 })();
