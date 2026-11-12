@@ -890,7 +890,8 @@
   function collectClosing() {
     if (state.dealerClose) return { outcome: $n('dcOutcome').value, note: $n('dcNote').value.trim() }; // 0.4.42 盤商、種子商
     if (state.cat !== '結案') return null;
-    return { region: $('cRegion').value, price: $('cPrice').value.trim(), yield: $('cYield').value.trim(), buyer: $('cBuyer').value.trim(), phone: $('cPhone').value.trim() };
+    return { region: $('cRegion').value, price: $('cPrice').value.trim(), yield: $('cYield').value.trim(), buyer: $('cBuyer').value.trim(), phone: $('cPhone').value.trim(),
+      reason: $n('cReason').value.trim(), progress: $n('cProgress').value.trim() }; // 0.4.62 董事長：結案加原因、進度（可不填；舊頁面沒有這兩格送空白）
   }
   /** 「打字」的範例：依這位農民現在的進度換（董事長 2026-11-12：業務報告依農民進度寫範例） */
   function noteExample() {
@@ -1327,6 +1328,7 @@ ${state.cat}：${who}
     const pbx = $('progressBox'); if (pbx) { pbx.hidden = true; pbx.innerHTML = ''; }
     state.cropOpen = false; $('cropBox').hidden = true; $n('cropSum').hidden = true;
     ['cPrice', 'cYield', 'cBuyer', 'cPhone'].forEach(id => { $(id).value = ''; });
+    ['cReason', 'cProgress'].forEach(id => { $n(id).value = ''; }); // 0.4.62 原因、進度也清掉
     $('cRegion').innerHTML = '<option value="">— 選擇地區 ဒေသရွေးပါ —</option>' + ((state.options && state.options.regions) || []).map(x => `<option>${esc(x)}</option>`).join('');
     state.busyPhotos = 0;
     clearInterval(state.recTimer);

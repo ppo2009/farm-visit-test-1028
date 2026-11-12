@@ -90,6 +90,7 @@ li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px
 #cropBox{margin:8px 0}
 #cropBox.croprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end}
 #cropBox.croprow[hidden]{display:none}
+.closerow{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;align-items:end} /* 0.4.62 結案七欄同一列，窄螢幕自動換行 */
 .meetswitch{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .meetswitch .btn2[aria-pressed="true"]{background:var(--paddy);color:var(--surface)}
 #meetNo[aria-pressed="true"]{background:var(--turmeric);border-color:var(--turmeric)}
@@ -375,13 +376,16 @@ footer{margin-top:18px;text-align:center}
     <!-- 結案：農民收成賣掉後（董事長 2026-11-12 手稿：選擇農民、拍照、圖片上傳、賣給 1 地區 2 價格 3 產量 4 收購客戶 5 電話） -->
     <div id="closeBox" class="trial" hidden>
       <span class="lab">賣給<span class="my">ရောင်းချသည့်နေရာ</span></span>
+      <!-- 0.4.62 董事長截圖：1～5 排成同一列（窄螢幕自動換行），後面加「原因」「進度」 -->
+      <div class="closerow" id="closeRow">
       <div><label class="lab" for="cRegion">1. 地區<span class="my">ဒေသ</span></label><select id="cRegion"></select></div>
-      <div class="row2">
         <div><label class="lab" for="cPrice">2. 價格（必填）<span class="my">ဈေးနှုန်း (မဖြစ်မနေ)</span><small class="cunit-price"></small></label><input type="number" id="cPrice" min="0" step="any" inputmode="decimal" placeholder="例 12000"></div>
         <div><label class="lab" for="cYield">3. 產量（必填）<span class="my">အထွက်နှုန်း (မဖြစ်မနေ)</span><small class="cunit-yield"></small></label><input type="number" id="cYield" min="0" step="any" inputmode="decimal" placeholder="例 60"></div>
-      </div>
       <div><label class="lab" for="cBuyer">4. 收購客戶（必填）<span class="my">ဝယ်သူ (မဖြစ်မနေ)</span></label><input type="text" id="cBuyer" maxlength="80" placeholder="例：Golden 糧行／U Aung"></div>
       <div><label class="lab" for="cPhone">5. 電話<span class="my">ဖုန်း</span></label><input type="tel" id="cPhone" maxlength="30" inputmode="tel" placeholder="例：09 123 456 789"></div>
+      <div><label class="lab" for="cReason">6. 原因<span class="my">အကြောင်းရင်း</span></label><input type="text" id="cReason" maxlength="300" placeholder="例：收成完、全部賣掉／ရိတ်ပြီး ရောင်းပြီး"></div>
+      <div><label class="lab" for="cProgress">7. 進度<span class="my">တိုးတက်မှု</span></label><input type="text" id="cProgress" maxlength="300" placeholder="例：已收成 8 成，剩下下週賣／၈၀% ရိတ်ပြီး"></div>
+      </div>
       <p class="sub" id="closeHint">只能選自己負責的農民。存檔後這位農民就結案（不再提醒回訪）。<br>ကိုယ်တာဝန်ယူထားသော လယ်သမားသာ ရွေးနိုင်သည်။</p>
     </div>
 
