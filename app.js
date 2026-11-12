@@ -154,7 +154,7 @@
   }
 
   /* 首頁分頁（0.4.26）：記住上次看的分頁（只存在這支手機；存不了就每次從田間打卡開始） */
-  const HOME_TABS = ['punch', 'todo', 'mine', 'plant']; // 0.4.59 指派任務併進執行任務清單；第四格改種植資料（舊的「assigned」改開執行任務清單）
+  const HOME_TABS = ['punch', 'todo', 'mine', 'close', 'plant']; // 0.4.60 結案獨立一個分頁 // 0.4.59 指派任務併進執行任務清單；第四格改種植資料（舊的「assigned」改開執行任務清單）
   function setHomeTab(tab) {
     if (tab === 'assigned') tab = 'todo'; // 0.4.59 舊的指派任務分頁已併進執行任務清單
     if (HOME_TABS.indexOf(tab) < 0) tab = 'punch';

@@ -66,7 +66,7 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
 @media (max-width:400px){.catswitch{gap:4px}.catswitch button{font-size:1rem;padding:6px 2px}.farmermenu{gap:6px;padding:8px}.farmermenu button{font-size:.95rem;padding:6px 2px}}
 /* 首頁分頁標籤（0.4.26，董事長給的範例：一排文字分頁，選到的那個加框） */
 /* 寬度照中文字數分（4、6、4、4 字）：緬文小字比較長，用內容寬度分會把中文擠成兩行（0.4.29 字體 16px 後實測） */
-.htabs{display:grid;grid-template-columns:4fr 6fr 4fr 4fr;gap:2px;border-bottom:1px solid var(--line);margin:4px 0 14px;overflow:visible}
+.htabs{display:grid;grid-template-columns:4fr 6fr 4fr 3fr 4fr;gap:2px;border-bottom:1px solid var(--line);margin:4px 0 14px;overflow:visible}
 .htabs button{flex:1 1 auto;min-width:0;min-height:52px;border:1.5px solid transparent;border-bottom:0;border-radius:10px 10px 0 0;background:none;color:var(--muted);font-weight:700;font-size:1rem;cursor:pointer;padding:6px 2px;word-break:keep-all;overflow-wrap:anywhere;line-height:1.25;position:relative;margin-bottom:-1px}
 .htabs button .my{display:block;font-weight:400;font-size:.7rem}
 .htabs button[aria-selected="true"]{border-color:var(--paddy);color:var(--paddy);background:var(--surface)}
@@ -196,6 +196,8 @@ footer{margin-top:18px;text-align:center}
     <button type="button" role="tab" id="htab-todo" data-htab="todo" aria-selected="false">執行任務清單<span class="my">လုပ်ရန်</span><b class="tbadge" id="todoBadge" hidden></b></button>
     <!-- 0.4.59 董事長截圖：執行任務清單＋指派任務合併；我的進度往前一格；第四格改「種植資料」 -->
     <button type="button" role="tab" id="htab-mine" data-htab="mine" aria-selected="false">我的進度<span class="my">တိုးတက်မှု</span></button>
+    <!-- 0.4.60 董事長截圖：三顆結案按鈕搬到自己的「結案」分頁（我的進度和種植資料中間） -->
+    <button type="button" role="tab" id="htab-close" data-htab="close" aria-selected="false">結案<span class="my">ပိတ်သိမ်း</span></button>
     <button type="button" role="tab" id="htab-plant" data-htab="plant" aria-selected="false">種植資料<span class="my">စိုက်ပျိုးမှု အချက်အလက်</span></button>
   </nav>
 
@@ -238,20 +240,13 @@ footer{margin-top:18px;text-align:center}
 
   <!-- 分頁 4 我的進度：我的試作、月計劃、工作進度 -->
   <div class="hpanel" id="hp-mine" role="tabpanel" aria-labelledby="htab-mine" hidden>
-  <!-- 0.4.57 董事長：結案從打卡畫面最下面搬到「我的進度」；選一種進結案畫面，送主管審核 -->
-  <h2>結案（送主管審核）<span class="my">ပိတ်သိမ်း (မန်နေဂျာ စစ်ဆေးရန်)</span><span class="sub">農民收成賣掉、盤商或種子商洽談成功／失敗時，選一種去結案／ရွေးပြီး ပိတ်သိမ်းပါ</span></h2>
-  <!-- 0.4.57 董事長：裡面要有找到哪幾個農民、農民的進度是什麼；點一位＝下面選單選他、列出完整進度 -->
+  <!-- 0.4.57 董事長：裡面要有找到哪幾個農民、農民的進度是什麼；點一位＝下面選單選他、列出完整進度（0.4.60 結案按鈕搬去「結案」分頁） -->
+  <h2>我找到的農民<span class="my">ကျွန်ုပ်ရှာတွေ့သော လယ်သမား</span><span class="sub">點一位或用選單選，下面列出進度／နှိပ်ပြီး တိုးတက်မှု ကြည့်ပါ</span></h2>
   <p class="sub" id="closeFarmerCount">我找到的農民／ကျွန်ုပ်ရှာတွေ့သော လယ်သမား</p>
   <ul id="closeFarmerList"></ul>
-  <!-- 0.4.57 董事長：結案下面有選單可以挑農民，列出農民的進度 -->
   <div><label class="lab" for="closeFarmer">選擇農民（看進度）<span class="my">လယ်သမား ရွေးပါ (တိုးတက်မှု ကြည့်ရန်)</span></label>
     <select id="closeFarmer"><option value="">— 請選擇 ရွေးပါ —</option></select></div>
   <div class="progress" id="closeProgress" hidden aria-live="polite"></div>
-  <div class="farmermenu closepick" id="closePick">
-    <button type="button" data-closecat="結案">農民結案<span class="my">လယ်သမား</span></button>
-    <button type="button" data-closecat="盤商">盤商結案<span class="my">ကုန်သည်</span></button>
-    <button type="button" data-closecat="種子商">種子商結案<span class="my">မျိုးစေ့ဆိုင်</span></button>
-  </div>
 
   <h2>我的試作<span class="my">ကျွန်ုပ်၏ စမ်းသပ်ကွက်များ</span><span class="sub">進行中的試作、推廣，點一下去拜訪／လုပ်ဆောင်ဆဲ စမ်းသပ်ကွက်၊ နှိပ်ပြီး သွားရောက်ပါ</span></h2>
   <ul id="trialList"></ul>
@@ -270,7 +265,18 @@ footer{margin-top:18px;text-align:center}
   <p class="sub" id="statByCat"></p>
   </div>
 
-  <!-- 分頁 4 種植資料（0.4.59 董事長：這邊改種植資料）：選自己負責的農民，改作物、種子公司、代碼、面積、種植日期、肥料；直接存，不算一次拜訪 -->
+  <!-- 分頁 4 結案（0.4.60 董事長截圖：三顆結案按鈕獨立一個分頁）：選一種進結案畫面，送主管審核 -->
+  <div class="hpanel" id="hp-close" role="tabpanel" aria-labelledby="htab-close" hidden>
+  <!-- 0.4.60 董事長：結案是一顆按鈕，底下就是農民、盤商、種子行的結案 -->
+  <p class="sub">選一種去結案，送主管審核／ရွေးပြီး ပိတ်သိမ်းပါ (မန်နေဂျာ စစ်ဆေးရန်)</p>
+  <div class="farmermenu closepick" id="closePick">
+    <button type="button" data-closecat="結案">農民結案<span class="my">လယ်သမား</span></button>
+    <button type="button" data-closecat="盤商">盤商結案<span class="my">ကုန်သည်</span></button>
+    <button type="button" data-closecat="種子商">種子商結案<span class="my">မျိုးစေ့ဆိုင်</span></button>
+  </div>
+  </div>
+
+  <!-- 分頁 5 種植資料（0.4.59 董事長：這邊改種植資料）：選自己負責的農民，改作物、種子公司、代碼、面積、種植日期、肥料；直接存，不算一次拜訪 -->
   <div class="hpanel" id="hp-plant" role="tabpanel" aria-labelledby="htab-plant" hidden>
   <h2>種植資料<span class="my">စိုက်ပျိုးမှု အချက်အလက်</span><span class="sub">選農民 → 改資料 → 存檔（要有網路；不算拜訪次數）／လယ်သမား ရွေး → ပြင် → သိမ်း</span></h2>
   <div class="fields">
