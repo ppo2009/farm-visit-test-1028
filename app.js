@@ -127,7 +127,8 @@
     if (pending || ticks) { toast(`還有 ${[pending ? pending + ' 筆拜訪' : '', ticks ? ticks + ' 個任務打勾' : ''].filter(Boolean).join('、')}沒上傳，先連上網路等它傳完再登出／မတင်ရသေးသော မှတ်တမ်းရှိသည်၊ အင်တာနက်ချိတ်ပြီး တင်ပြီးမှ ထွက်ပါ`); return; }
     if (!confirm('確定要登出嗎？之後要再輸入帳號密碼。\nထွက်မှာ သေချာပါသလား။ နောက်တစ်ကြိမ် အကောင့်နှင့် စကားဝှက် ပြန်ထည့်ရမည်။')) return;
     // 0.4.75 董事長「右上角登出，而且實際上也要登出」：先請後台停用這支手機的裝置金鑰（最多等 5 秒；沒網路、逾時、舊後台不認得、出錯都照樣登出）
-    try { await Promise.race([gasCall({ action: 'logout' }), new Promise(r => setTimeout(r, 5000))]); } catch (e) { /* 照樣清本機、回登入頁 */ }
+    const lb = $n('logoutBtn'), lbl = lb.innerHTML; lb.disabled = true; lb.textContent = '登出中…／ထွက်နေသည်'; // 0.4.80 低1：等後台時不讓重按
+    try { await Promise.race([gasCall({ action: 'logout' }), new Promise(r => setTimeout(r, 5000))]); } catch (e) { /* 照樣清本機、回登入頁 */ } finally { lb.disabled = false; lb.innerHTML = lbl; }
     await Store.setMeta('config', null);
     showLogin();
   }
@@ -200,7 +201,7 @@
   const growLabel = g => (g ? `${g.pct}%` : '未填種植日期');
   function growHtml(g) { // 進度條＋百分比＋第 N 天／150 天（跟「主管訂的目標」同一種進度條）
     if (!g) return '<p class="sub">未填種植日期，算不出種植進度（到「種植資料」分頁補填）／စိုက်ပျိုးသည့်ရက် မဖြည့်ရသေး</p>';
-    return `<div class="grow"><span class="lab">種植進度 စိုက်ပျိုးမှု တိုးတက်မှု：<b>${g.pct}%</b>　${g.future ? '還沒到種植日期' : `第 ${g.days} 天／${GROW_DAYS} 天`}${g.full ? `（已滿 ${GROW_DAYS} 天）` : ''}</span>`
+    return `<div class="grow"><span class="lab">種植進度 စိုက်ပျိုးမှု တိုးတက်မှု：<b>${g.pct}%</b>　${g.future ? '還沒到種植日期／မစိုက်ရသေး' : `第 ${g.days} 天／${GROW_DAYS} 天 <span class="my">ရက် ${g.days}／${GROW_DAYS}</span>`}${g.full ? `（已滿 ${GROW_DAYS} 天 <span class="my">ပြည့်</span>）` : ''}</span>`
       + `<span class="bar"><i style="width:${g.pct}%"></i></span></div>`;
   }
   /** 農民分三類，跟結案 group 同一套（closeTrialGroup）：有進行中試作＝試作農民、推廣＝推廣農民、都沒有＝一般農民；盤商、種子商照類型 */
@@ -221,6 +222,7 @@
       .filter(f => f.pending || String(f.staff || '') === me);
     state.mineAll = allMine;
     state.closeList = allMine.filter(f => (f.type || '農民') === '農民');
+    state.endedMine = ((await Store.getMeta('endedMine')) || []).filter(f => (f.type || '農民') === '農民' && !state.closeList.some(x => x.id === f.id)); // 0.4.80 中3
     const today = mmDay(0); // 業務BUG#4：緬甸的今天（0.4.75 種植進度也用這個日期算）
     const groupOf = {}, growOfId = {};
     for (const f of allMine) { groupOf[f.id] = await mineGroupOf(f); if ((f.type || '農民') === '農民') growOfId[f.id] = growOf(f.plantDate, today); }
@@ -243,19 +245,24 @@
     if (gl) {
       const farmers = state.closeList.slice().sort((a, b) => { const ga = growOfId[a.id], gb = growOfId[b.id]; return (gb ? gb.pct : -1) - (ga ? ga.pct : -1); });
       gl.innerHTML = farmers.map(f => { const g = growOfId[f.id];
-        return `<li class="plan"><span>${esc(f.name)}<br><small>${esc(groupOf[f.id])}・${g ? (g.future ? '還沒到種植日期' : `第 ${g.days} 天／${GROW_DAYS} 天`) : '未填種植日期'}</small><span class="bar"><i style="width:${g ? g.pct : 0}%"></i></span></span>`
-          + `${!g ? '<span class="pill wait">未填 မဖြည့်ရ</span>' : g.full ? `<span class="pill ok">已滿 ${GROW_DAYS} 天</span>` : `<span class="pill wait">${g.pct}%</span>`}</li>`; }).join('')
+        return `<li class="plan"><span>${esc(f.name)}<br><small>${esc(groupOf[f.id])}・${g ? (g.future ? '還沒到種植日期／မစိုက်ရသေး' : `第 ${g.days} 天／${GROW_DAYS} 天（ရက် ${g.days}）`) : '未填種植日期／ရက် မဖြည့်ရ'}</small><span class="bar"><i style="width:${g ? g.pct : 0}%"></i></span></span>`
+          + `${!g ? '<span class="pill wait">未填 မဖြည့်ရ</span>' : g.full ? `<span class="pill ok">已滿 ${GROW_DAYS} 天 ပြည့်</span>` : `<span class="pill wait">${g.pct}%</span>`}</li>`; }).join('')
         || '<li class="empty">還沒有自己負責的農民／လယ်သမား မရှိသေး</li>';
     }
   }
   /* ───── 0.4.59 首頁「種植資料」分頁：選自己負責的農民，改種植資料直接存（不算拜訪） ───── */
+  /** 0.4.80 中3：種植資料選單的人＝自己負責的農民＋自己負責、已結案的（ended 標記；只在這一頁） */
+  const plantPool = () => (state.closeList || []).concat((state.endedMine || []).map(f => Object.assign({}, f, { ended: true })));
   function fillPlantFarmers() {
     const sel = document.getElementById('plFarmer');
     if (!sel) return; // 舊頁面沒有這個分頁
     const list = (state.closeList || []).filter(f => !f.pending); // 剛新增還沒上傳的，後台還沒有這位
+    const ended = state.endedMine || [];
     const keep = sel.value;
-    sel.innerHTML = '<option value="">— 請選擇 ရွေးပါ —</option>' + list.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}</option>`).join('');
-    sel.value = keep && list.some(f => f.id === keep) ? keep : '';
+    const opt = (f, tail) => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}${tail}</option>`;
+    sel.innerHTML = '<option value="">— 請選擇 ရွေးပါ —</option>' + list.map(f => opt(f, '')).join('')
+      + (ended.length ? `<optgroup label="已結案／ပိတ်သိမ်းပြီး">${ended.map(f => opt(f, '（已結案）')).join('')}</optgroup>` : '');
+    sel.value = keep && (list.some(f => f.id === keep) || ended.some(f => f.id === keep)) ? keep : '';
     if (!sel.value) { $n('plForm').hidden = true; $n('plCard').hidden = true; $n('plBtns').hidden = true; renderPlantHistory(); }
   }
   /** 0.4.61 董事長「選擇農民後下面的資料應該是自動載入，不是要填寫的」：唯讀卡片（沒填的寫「未填」） */
@@ -273,11 +280,15 @@
   }
   /* ───── 0.4.77 董事長「目前種植資料要有從頭到尾紀錄的文字、圖片」「修改種植資料改為生成 WORD 檔」 ───── */
   /** 種植資料的完整紀錄：在這一頁、選了農民才讀（由舊到新，只有這一頁這樣排）；其他情況收起 */
-  function renderPlantHistory() {
+  function renderPlantHistory(force) {
     const sel = $('plFarmer'), cid = sel ? sel.value : '';
     const el = $('plHistory') || $n('plHistory'); // 舊頁面沒有這一塊：給不顯示的假元件
-    if (!cid || state.homeTab !== 'plant') { el.hidden = true; el.innerHTML = ''; el._tok = null; return; }
-    renderHistory(cid, el, { list: state.closeList || [], current: () => !!sel && sel.value === cid && state.homeTab === 'plant', showTrials: true, oldFirst: true, closeFirst: true, timeline: true }); // 0.4.77 最上面放結案
+    if (!cid) { el.hidden = true; el.innerHTML = ''; el._tok = null; el._doneCid = null; return; }
+    if (state.homeTab !== 'plant') { el.hidden = true; el._tok = null; return; } // 0.4.80 低5：離開分頁只藏起來（還在讀的取消，讀完的留著）
+    if (!force && el._doneCid === cid && el.innerHTML) { el.hidden = false; return; } // 同一位已經讀完：直接顯示，不重新下載
+    el._doneCid = null;
+    const p = renderHistory(cid, el, { list: plantPool(), current: () => !!sel && sel.value === cid && state.homeTab === 'plant', showTrials: true, oldFirst: true, closeFirst: true, timeline: true }); // 0.4.77 最上面放結案
+    if (p && p.then) p.then(() => { if (sel.value === cid && state.homeTab === 'plant' && !el.hidden && el.innerHTML && el._tok) el._doneCid = cid; });
   }
   /** 產生 Word 檔失敗時給業務看的話（沒網路、逾時、舊後台、後台說的原因） */
   const farmerReportErr = r => (r && r.offline ? '產生 Word 檔要有網路，請連上網路再按一次／အင်တာနက် လိုသည်'
@@ -289,7 +300,7 @@
     const cid = $n('plFarmer').value;
     if (!cid || btn.disabled) return;
     const label = btn.innerHTML;
-    btn.disabled = true; btn.textContent = '產生中…／ထုတ်နေသည်'; $n('plHint').textContent = '';
+    btn.disabled = true; btn.textContent = '產生中…照片多時要 1～2 分鐘／ထုတ်နေသည်၊ ၁～၂ မိနစ် ကြာနိုင်'; $n('plHint').textContent = ''; // 0.4.80 中2
     try {
       const r = await gasCall({ action: 'farmerReport', cid });
       if (!r || !r.ok || !r.data) { const m = farmerReportErr(r); toast(m); $n('plHint').textContent = m; return; }
@@ -302,12 +313,13 @@
   }
   /** 選了農民：先顯示目前種植資料（唯讀），表單也先填好，按「修改」才打開 */
   async function onPlantFarmer() {
-    const cid = $n('plFarmer').value, f = (state.closeList || []).find(x => x.id === cid);
+    const cid = $n('plFarmer').value, f = plantPool().find(x => x.id === cid); // 0.4.80 中3：已結案的也找得到
     $n('plHint').textContent = '';
     if (!f) { $n('plForm').hidden = true; $n('plCard').hidden = true; $n('plBtns').hidden = true; renderPlantHistory(); return; }
     const o0 = (await Store.getMeta('options')) || {};
     $n('plCard').innerHTML = plantCardHtml(f, o0);
     setPlantEditing(false);
+    $n('plEditBtn').hidden = !!f.ended; // 0.4.80 中3：已結案的只能看、產生 Word，不能修改
     renderPlantHistory(); // 0.4.77 卡片下面列這位農民從頭到尾的紀錄
     const o = (await Store.getMeta('options')) || {};
     document.querySelectorAll('.unit').forEach(el => { el.textContent = `（${o.areaUnit || '英畝'}）`; });
@@ -387,6 +399,7 @@
       if (Array.isArray(r.farmers)) await Store.setMeta('farmers', r.farmers);
       $n('plHint').textContent = '已存好，主管看得到／သိမ်းပြီး';
       toast('種植資料已存好／သိမ်းပြီး');
+      $n('plHistory')._doneCid = null; // 0.4.80 低5：存好了要重讀紀錄
       await fillCloseFarmers(); await onPlantFarmer(); $n('plHint').textContent = '已存好，主管看得到／သိမ်းပြီး';
     } catch (e) { $n('plHint').textContent = '網路不穩，沒存成功，請再按一次／ထပ်နှိပ်ပါ'; } finally { btn.disabled = false; }
   }
@@ -397,7 +410,7 @@
     const cfg = await getConfig();
     if (!cfg || !cfg.deviceKey || (typeof navigator !== 'undefined' && navigator.onLine === false)) return { ok: false, offline: true };
     // 1號第2任 0.4.73 讀碼中1（第8任）：照片、錄音（myFile）用 base64 傳，長錄音在緬甸網路 20 秒常傳不完 → 跟報告檔一樣給 60 秒
-    const ms = payload && payload.action === 'farmerReport' ? 120000 : payload && (payload.action === 'trialReportFile' || payload.action === 'myFile') ? 60000 : 20000; // 0.4.77 種植紀錄 Word 含全部照片，給 120 秒
+    const ms = payload && payload.action === 'farmerReport' ? 150000 : payload && (payload.action === 'trialReportFile' || payload.action === 'myFile') ? 60000 : 20000; // 0.4.77 種植紀錄 Word 含全部照片，給 120 秒
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctl && typeof setTimeout === 'function' ? setTimeout(() => ctl.abort(), ms) : null;
     try {
@@ -515,22 +528,22 @@
   /** 生長過程時間軸：每個階段列那個階段的拜訪（日期＋文字摘要＋照片，照片按了才下載）；沒標階段的用種植日期推算並標「（推算）」 */
   function growthTimelineHtml(visits, plantDate) {
     const by = {}; STAGES.forEach(s => { by[s] = []; });
-    let skipped = 0;
+    let noPd = 0, early = 0; // 0.4.80 低3：沒有種植日期、拜訪早於種植日期，分開數
     (visits || []).slice().reverse().forEach(v => { // 後台新到舊 → 這裡由舊到新
       if (v.noMeet && !(v.photos || []).length) return; // 沒見到、沒照片的不算生長紀錄
       if (!v.text && !(v.photos || []).length && !v.closing) return;
       let st = STAGES.indexOf(v.stage) >= 0 ? v.stage : v.closing ? '採收' : '', guessed = false;
       if (!st) { st = stageGuess(plantDate, v.time); guessed = !!st; }
-      if (!st) { skipped++; return; }
+      if (!st) { if (/^\d{4}-\d\d-\d\d$/.test(String(plantDate || '').slice(0, 10))) early++; else noPd++; return; }
       by[st].push({ v, guessed });
     });
     const short = t => { const s = String(t || ''); return s.length > 80 ? s.slice(0, 80) + '…' : s; };
     const li = STAGES.map(st => { const es = by[st];
       return `<li class="${es.length ? 'has' : ''}"><span class="gst">${st} <span class="my">${STAGE_MY[st]}</span></span>`
-        + (es.length ? es.map(({ v, guessed }) => `<div class="gent"><b>${esc(String(v.time || '').slice(0, 10))}</b>${guessed ? '<small>（推算）</small>' : ''}${v.text ? '　' + esc(short(v.text)) : v.closing ? '　' + esc(short(v.closing)) : ''}`
+        + (es.length ? es.map(({ v, guessed }) => `<div class="gent"><b>${esc(String(v.time || '').slice(0, 10))}</b>${guessed ? '<small>（推算 ခန့်မှန်း）</small>' : ''}${v.text ? '　' + esc(short(v.text)) : v.closing ? '　' + esc(short(v.closing)) : ''}`
           + `${(v.photos || []).length ? `<div class="pgrid">${v.photos.map((id, i) => `<button type="button" class="btn2 small" data-hph="${esc(id)}">📷 照片 ${i + 1}</button>`).join('')}</div>` : ''}</div>`).join('')
           : '<div class="gent"><small>還沒有照片／ဓာတ်ပုံ မရှိသေး</small></div>') + '</li>'; }).join('');
-    return `<h3>生長過程／ကြီးထွားမှု အဆင့်ဆင့်</h3>${skipped ? `<p class="sub">有 ${skipped} 筆舊拜訪沒標階段、也沒有種植日期，無法排進來</p>` : ''}<ol class="growtl">${li}</ol>`;
+    return `<h3>生長過程／ကြီးထွားမှု အဆင့်ဆင့်</h3>${noPd ? `<p class="sub">有 ${noPd} 筆拜訪沒標階段、也沒有種植日期，無法推算／အဆင့် မသိနိုင်</p>` : ''}${early ? `<p class="sub">有 ${early} 筆拜訪早於種植日期，無法推算階段／စိုက်ရက်မတိုင်မီ</p>` : ''}<ol class="growtl">${li}</ol>`;
   }
   /* 0.4.77 董事長「種植資料要詳細列出結案的照片、文字、重量、之前田間報告」＋範例紙卡：結案區塊（照片排格子、量測卡一行一項） */
   const MEASURE_ROWS = [['variety', '品種', 'မျိုး'], ['sample', '樣本', 'နမူနာ'], ['weight', '總重量', 'အလေးချိန်'], ['length', '長度', 'အရှည်'], ['rows', '穗行數', 'အစေ့တန်း'],
@@ -549,8 +562,8 @@
   function closeBlockHtml(v) {
     const d = v.closingDetail && typeof v.closingDetail === 'object' ? v.closingDetail : null;
     const pill = v.closeRejected || (d && d.state === '已退回') ? '<span class="pill late">主管已退回 ပြန်ပို့</span>' : v.closePending || (d && d.state === '待確認') ? '<span class="pill wait">待主管確認 စစ်ဆေးဆဲ</span>' : '<span class="pill ok">已結案 ပိတ်သိမ်းပြီး</span>';
-    const rows = d ? [['賣給地區', d.region], ['價格', d.price !== '' && d.price != null ? `${d.price} ${d.priceUnit || ''}` : ''], ['產量（重量）', d.yield !== '' && d.yield != null ? `${d.yield} ${d.yieldUnit || ''}` : ''],
-      ['收購客戶', d.buyer], ['電話', d.phone], ['原因', d.reason], ['進度', d.progress], ['試作結果', d.trialOutcome || (d.trialResult && d.trialResult.outcome) || '']].filter(([, x]) => x !== '' && x != null) : [];
+    const rows = d ? [['賣給地區 ရောင်းသည့်ဒေသ', d.region], ['價格 ဈေးနှုန်း', d.price !== '' && d.price != null ? `${d.price} ${d.priceUnit || ''}` : ''], ['產量（重量） အထွက်', d.yield !== '' && d.yield != null ? `${d.yield} ${d.yieldUnit || ''}` : ''],
+      ['收購客戶 ဝယ်သူ', d.buyer], ['電話 ဖုန်း', d.phone], ['原因 အကြောင်းရင်း', d.reason], ['進度 တိုးတက်မှု', d.progress], ['試作結果 ရလဒ်', d.trialOutcome || (d.trialResult && d.trialResult.outcome) || '']].filter(([, x]) => x !== '' && x != null) : [];
     return `<div class="vclose"><b>${esc(v.time || '')}</b> ${pill}${v.staff ? '｜' + esc(v.staff) : ''}`
       + (rows.length ? `<ul>${rows.map(([k, x]) => `<li>${k}：<b>${esc(String(x).trim())}</b></li>`).join('')}</ul>` : (v.closing ? `<p>${esc(v.closing)}</p>` : ''))
       + `${v.text ? `<p>${esc(v.text)}</p>` : ''}${v.typed && v.typed !== v.text ? `<p><small>打字原文 မူရင်း：${esc(v.typed)}</small></p>` : ''}`
@@ -564,22 +577,22 @@
     const head = o.showAddr ? `<p class="sub">${addr ? '📍 ' + esc(addr) : ''}${r.address ? `${addr ? '　' : '📍 '}${esc(r.address)}` : ''}${r.phone ? `　📞 ${esc(String(r.phone).replace(/^'/, ''))}` : ''}</p>` : '';
     const tl = o.oldFirst ? (r.trials || []).slice().reverse() : (r.trials || []); // 0.4.77 種植資料頁：由舊到新（從頭到尾）
     const trials = tl.map(t => `<li><span class="pill ${TRIAL_PILL[t.status] || 'wait'}">${esc(t.status || '—')}</span> <b>${esc(catBi(t.cat || '試作'))}</b>：${esc(t.item || '（未填品項）')}${t.crop ? '（' + esc(t.crop) + '）' : ''}`
-      + `<br><small>${esc(t.start || '?')}～${esc(t.end || (t.status === '進行中' ? '進行中' : '?'))}${t.yield !== '' ? `・產量 ${esc(t.yield)} ${esc(t.yieldUnit)}` : ''}${t.comment ? '・農民評價：' + esc(t.comment) : ''}</small>`
-      + `${t.reason ? `<br><small>失敗原因 အကြောင်းရင်း：${esc(t.reason)}</small>` : ''}${t.conclusion ? `<br><small>結論：${esc(t.conclusion)}</small>` : ''}</li>`).join('');
+      + `<br><small>${esc(t.start || '?')}～${esc(t.end || (t.status === '進行中' ? '進行中' : '?'))}${t.yield !== '' ? `・產量 အထွက် ${esc(t.yield)} ${esc(t.yieldUnit)}` : ''}${t.comment ? '・農民評價 သုံးသပ်ချက်：' + esc(t.comment) : ''}</small>`
+      + `${t.reason ? `<br><small>失敗原因 အကြောင်းရင်း：${esc(t.reason)}</small>` : ''}${t.conclusion ? `<br><small>結論 နိဂုံး：${esc(t.conclusion)}</small>` : ''}</li>`).join('');
     const all = r.visits || [], cv = o.closeFirst ? all.find(v => v.closing) : null; // 0.4.77 種植資料頁：後台新到舊，第一筆有結案的就是最近一筆結案
     const rest = cv ? all.filter(v => v !== cv) : all;
     const vl = o.oldFirst ? rest.slice().reverse() : rest;
     const visits = vl.map(v => `<li><b>${esc(v.time)}</b>｜${esc(histCatBi(v.cat))}${v.staff ? '｜' + esc(v.staff) : ''}`
       // 1號第2任讀碼中2（第8任）：text 是中文摘要，業務自己打的（常是緬文）看不到 → 摘要跟打字原文不一樣時，原文另外列一行
       + `${v.text ? `<br>${esc(v.text)}` : ''}${v.typed && v.typed !== v.text ? `<br><small>打字原文 မူရင်း：${esc(v.typed)}</small>` : ''}${v.noMeet ? `<br><span class="pill wait">沒見到</span> ${esc(v.noMeet)}` : ''}${v.prices ? `<br><small>價格：${esc(v.prices)}</small>` : ''}`
-      + `${v.plantFail ? `<br><span class="pill late">種植失敗</span> ${esc(v.plantFail)}` : ''}${v.closing ? `<br><small>結案：${esc(v.closing)}</small>` : ''}`
+      + `${v.plantFail ? `<br><span class="pill late">種植失敗</span> ${esc(v.plantFail)}` : ''}${v.closing ? `<br><small>結案 ပိတ်သိမ်း：${esc(v.closing)}</small>` : ''}`
       + `${(v.photos || []).length || v.audio ? '<br>' : ''}${(v.photos || []).map((id, i) => `<button type="button" class="btn2 small" data-hph="${esc(id)}">📷 照片 ${i + 1}</button>`).join(' ')}`
       + `${v.audio ? ` <button type="button" class="btn2 small" data-hau="${esc(v.audio)}">🔊 錄音</button>` : ''}</li>`).join('');
     const closeTop = o.closeFirst ? `<h3>結案／ပိတ်သိမ်း</h3>${cv ? closeBlockHtml(cv) : '<p class="sub">還沒結案／မပိတ်သိမ်းရသေး</p>'}` : '';
     const tlTop = o.timeline ? growthTimelineHtml(all, o.plantDate) : ''; // 0.4.78 生長過程時間軸（種植資料、田間打卡、結案共用）
     return `${tlTop}${closeTop}<h3>${o.closeFirst ? '之前的田間報告／ယခင် ကွင်းဆင်း အစီရင်ခံစာ' : '過往紀錄／ယခင် မှတ်တမ်း'}</h3>${head}`
-      + (trials ? `<p class="sub">試作／推廣（成功、失敗）：</p><ul>${trials}</ul>` : (o.showTrials ? '<p class="sub">沒有試作、推廣紀錄／စမ်းသပ်မှု မရှိ</p>' : ''))
-      + `<p class="sub">拜訪紀錄 共 ${r.total || 0} 筆${r.more ? '（只列最近 50 筆）' : ''}${o.oldFirst ? '，由舊到新' : ''}；照片、錄音按了才下載：</p>`
+      + (trials ? `<p class="sub">試作／推廣（成功、失敗）／စမ်းသပ်မှု ရလဒ်：</p><ul>${trials}</ul>` : (o.showTrials ? '<p class="sub">沒有試作、推廣紀錄／စမ်းသပ်မှု မရှိ</p>' : ''))
+      + `<p class="sub">拜訪紀錄 共 ${r.total || 0} 筆${r.more ? '（只列最近 50 筆）' : ''}${o.oldFirst ? '，由舊到新' : ''}；照片、錄音按了才下載／ဓာတ်ပုံ၊ အသံ နှိပ်မှ ဒေါင်းမည်：</p>`
       + (visits ? `<ul>${visits}</ul>` : '<p>還沒有拜訪紀錄／မှတ်တမ်း မရှိသေး</p>');
   }
   async function renderHistory(cid, el, opts) {
@@ -980,6 +993,7 @@
   }
 
   async function loadFarmers() {
+    state.myName = String(((await getConfig()) || {}).name || ''); // 0.4.80 已簽約要比對負責業務
     state.farmers = (await Store.getMeta('farmers')) || [];
     const local = (await Store.getMeta('localCustomers')) || [];
     const all = state.farmers.concat(local.filter(l => !state.farmers.some(f => f.id === l.id)));
@@ -1000,7 +1014,7 @@
       const gOf = {};
       for (const f of mine) gOf[f.id] = (await activeTrialFor(f.id, '試作')) ? '試作農民' : (await activeTrialFor(f.id, '推廣')) ? '推廣農民' : '一般農民';
       const hit = mine.filter(f => gOf[f.id] === state.closeGroup), rest = mine.filter(f => gOf[f.id] !== state.closeGroup);
-      body = `<optgroup label="${esc(state.closeGroup)}">${hit.map(optOf).join('') || '<option value="" disabled>（沒有）</option>'}</optgroup>`
+      body = `<optgroup label="${esc(state.closeGroup)}">${hit.map(optOf).join('') || '<option value="" disabled>（沒有／မရှိ）</option>'}</optgroup>`
         + (rest.length ? `<optgroup label="其他農民／အခြား လယ်သမား">${rest.map(optOf).join('')}</optgroup>` : '');
     }
     sel.innerHTML = '<option value="">— 請選擇 ရွေးပါ —</option>' + body +
@@ -1142,7 +1156,7 @@
     // 第8任（1號提醒 dayOf）：改用緬甸日期 mmDay，手機時區不是緬甸也不會差一天（跟伺服器的日期同一把尺）
     const dayOf = ms => mmDay(0, ms || 0);
     const recent = remote ? remote : local.map(v => ({ time: dayOf(v.deviceTime), staff: '我', cat: CAT_LABEL(v.category || ''), text: v.text || '', plantFail: '', closing: '' }));
-    if (o.home && !c.lastVisit && !trials.length && !recent.length) { box.innerHTML = H3 + '<p>這位農民還沒有拜訪紀錄。<br><span class="my">မှတ်တမ်း မရှိသေး</span></p>'; return; }
+    if (o.home && !c.lastVisit && !trials.length && !recent.length) { box.innerHTML = H3 + `<p>這位${c.type && c.type !== '農民' ? '客戶' : '農民'}還沒有拜訪紀錄。<br>` + '<span class="my">မှတ်တမ်း မရှိသေး</span></p>'; return; }
     if (!c.lastVisit && !trials.length && !recent.length) {
       // 沒有任何進度：跳出新增（補齊）農民資料
       box.innerHTML = SHOW_PROFILE_ON_VISIT ? H3 + '<p>這位農民還沒有拜訪紀錄，請先把下面的農民資料填完整（跟新增農民一樣）。<br><span class="my">မှတ်တမ်း မရှိသေး၊ လယ်သမား အချက်အလက် ဖြည့်ပါ</span></p>'
@@ -1303,11 +1317,15 @@
   const DC_NOTE_PH = { sign: '寫簽約內容，例如簽了什麼、從什麼時候開始：簽 A 品牌種子代理，12 月起每月進 50 包\nဥပမာ - A တံဆိပ် ကိုယ်စားလှယ် စာချုပ်၊ ဒီဇင်ဘာမှ စတင်',
     old: '例：談成，下個月開始進 A 品牌種子／沒談成，老闆只賣自己的品牌\nဥပမာ - သဘောတူပြီ / မအောင်မြင်' };
   /** 「已簽約」勾選什麼時候出現：盤商、種子商、選了已經有的客戶、按了「有見到」、不是舊的結案模式 */
-  const dealerSignShown = () => { const s = $('farmer').value; return isDealerCat() && !state.dealerClose && !!s && s !== '__new' && !!state.meetChosen && !noMeetOn(); };
+  const dealerSignBase = () => { const s = $('farmer').value; return isDealerCat() && !state.dealerClose && !!s && s !== '__new' && !!state.meetChosen && !noMeetOn(); };
+  /** 0.4.80 高1：這家是不是我負責的（負責業務空白照舊算可以，跟後台 ownDc 同一規則） */
+  const dealerIsMine = () => { const c = (state.allCustomers || []).find(x => x.id === $('farmer').value) || {}; return !String(c.staff || '') || String(c.staff) === String(state.myName || ''); };
+  const dealerSignShown = () => dealerSignBase() && dealerIsMine();
   const dealerSignOn = () => dealerSignShown() && !!$n('dcSigned').checked;
   function refreshDealerSign() {
     const lab = $n('dcSignedLab'), cb = $n('dcSigned');
     lab.hidden = !dealerSignShown();
+    $n('dcSignNote').hidden = !(dealerSignBase() && !dealerIsMine()); // 0.4.80 別人負責的：說清楚為什麼沒有「已簽約」
     if (lab.hidden) cb.checked = false; // 換成農民、沒見到、換人：勾選一起取消
     if (state.dealerClose) return; // 舊的結案模式自己管結案框
     const on = dealerSignOn();
@@ -1394,7 +1412,10 @@
     const c = (state.allCustomers || []).find(f => f.id === cid) || {};
     MEASURE_IDS.forEach(id => { $n(id).value = ''; });
     $n('mCountUnit').value = '穗'; $n('mLenUnit').value = '英寸';
-    $n('mVariety').value = c.variety || ''; $n('mSow').value = ymdOk(c.plantDate) ? c.plantDate : ''; $n('mHarvest').value = mmDay(0);
+    { const cos = (state.options && state.options.seedCompanies) || [], v0 = String(c.variety || ''), co = cos.find(x => v0 === x || v0.indexOf(x + ' ') === 0);
+      $n('mVariety').value = !co ? v0 : v0.slice(co.length).trim(); } // 0.4.80 低6：不要把種子公司名當品種
+    $n('mSow').value = ymdOk(c.plantDate) && c.plantDate <= mmDay(0) ? c.plantDate : ''; // 0.4.80 中1：種植日期在未來就不預帶
+    $n('mHarvest').value = mmDay(0);
     $n('mRowsBox').hidden = !/玉米|corn|maize|ပြောင်း/i.test(String(c.crop || ''));
     calcMeasureDays();
   }
@@ -1402,6 +1423,7 @@
   function measureProblem() {
     const neg = [['mCount', '樣本數'], ['mWeight', '總重量'], ['mLength', '長度'], ['mRows', '穗行數']].filter(([id]) => String($n(id).value).trim() !== '' && !(Number($n(id).value) >= 0)).map(([, n]) => n);
     if (neg.length) return `${neg.join('、')}不能是負數／အနှုတ် မဖြစ်ရ`;
+    if (!MEASURE_FILLED.some(id => String($n(id).value).trim() !== '')) return ''; // 0.4.80 中1：沒量就不檢查日期（預帶的日期不能擋結案）
     const a = $n('mSow').value, b = $n('mHarvest').value;
     if (ymdOk(a) && ymdOk(b) && b < a) return '採收日不能早於播種日／ရိတ်သိမ်းရက်သည် မျိုးချရက်ထက် မစောရ';
     if (ymdOk(b) && b > mmDay(0)) return '採收日不能晚於今天／ရိတ်သိမ်းရက်သည် ယနေ့ထက် နောက်မကျရ';
@@ -1435,7 +1457,7 @@
     if (bad.length) return `${bad.join('、')}要大於 0／၀ ထက် ကြီးရမည်`;
     // 0.4.74 董事長「要，先填結果」：有進行中的試作／推廣 → 結果必填；失敗要填失敗紀錄。還沒查完不能送（不然會送出沒帶結果的結案）
     if (typeof document !== 'undefined' && document.getElementById('closeTrialBox')) { // 舊頁面沒有結果欄：照舊不擋（後台照舊寫「結束」）
-      if (document.getElementById('measureBox')) { const mp = measureProblem(); if (mp) return mp; } // 0.4.77 採收量測（選填，但填了要合理）
+      if (document.getElementById('measureBox')) { const mp = measureProblem(); if (mp) { $n('measureBox').open = true; return mp; } } // 0.4.80 中1：出錯時打開量測框 // 0.4.77 採收量測（選填，但填了要合理）
       if (state.closeTrialFor !== sel0) return '正在查這位農民有沒有進行中的試作…／စစ်ဆေးနေသည်';
       const ct = state.closeTrial;
       if (ct) {
@@ -1707,8 +1729,11 @@
     return !$n('stageBox').hidden && STAGES.indexOf(v) >= 0 ? v : '';
   }
   function renderThumbs() {
-    (state.thumbUrls || []).forEach(u => URL.revokeObjectURL(u));
-    state.thumbUrls = state.photos.map(p => URL.createObjectURL(p.blob));
+    // 0.4.80 1號清單（交接單原記「原因未查」的 ERR_FILE_NOT_FOUND）：原本每次重畫都先釋放上一輪的 blob 網址、再全部重建，
+    // addPhotos 連續重畫兩次時，第一輪縮圖還在載入就被釋放 → 主控台錯誤。改成每張照片的網址建一次重複用，只釋放「已經不在畫面上」的
+    const prev = state.thumbUrls || [];
+    state.thumbUrls = state.photos.map(p => p.thumbUrl || (p.thumbUrl = URL.createObjectURL(p.blob)));
+    prev.forEach(u => { if (state.thumbUrls.indexOf(u) < 0) URL.revokeObjectURL(u); }); // 刪掉的照片、換客戶清掉的照片才釋放
     $('thumbs').innerHTML = state.photos.map((p, i) => `<div class="thumb"><img src="${state.thumbUrls[i]}" alt="照片 ${i + 1}"><span class="tag">${p.source === '相簿' ? '相簿 ဓာတ်ပုံ' : '相機 ကင်မရာ'}</span><button type="button" class="del" data-i="${i}" aria-label="刪掉這張">×</button></div>`).join('');
     $('thumbs').querySelectorAll('.del').forEach(b => b.addEventListener('click', () => { state.photos.splice(Number(b.dataset.i), 1); renderThumbs(); refreshSave(); }));
     $('photoBtn').classList.toggle('done', state.photos.some(p => p.source === '相機'));
@@ -1940,6 +1965,8 @@ ${state.cat}：${who}
       };
       visit.farmerLabel += tr.op === 'start' ? `・開始${cat}` : `・結束${cat}（${tr.outcome}）`;
     }
+    const ctr = visit.closing && visit.closing.trialResult; // 0.4.80 低2：結案填了試作結果 → 手機這件試作馬上算結束（我的試作、我的進度不再當進行中）
+    if (ctr && ctr.id && !metaFns.localTrials) metaFns.localTrials = cur => { const lt = (cur || []).slice(); const i = lt.findIndex(l => l.id === ctr.id); if (i >= 0) lt[i] = Object.assign({}, lt[i], { ended: true }); else lt.push({ id: ctr.id, ended: true }); return lt; };
     if (isNew) {
       // 還沒上傳前，新客戶先放在手機的選單裡，下一次拜訪也選得到
       const rec = Object.assign({}, profile, { id: farmerId, pending: true });

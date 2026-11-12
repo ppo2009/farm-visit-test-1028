@@ -156,7 +156,19 @@
     const box = $('newPwBox'); if (box) box.hidden = true;
     ['newPw', 'newPw2'].forEach(id => { const e = $(id); if (e) e.value = ''; });
   }
+  /** 0.4.80（2號第2任 0.4.79 清單低5）：登出也通知後台停用這把金鑰（跟業務手機同做法）。背景送、最多等 5 秒，失敗照樣登出（畫面先清，不卡住） */
+  function serverLogout(key) {
+    if (!key || typeof fetch !== 'function') return;
+    try {
+      const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+      const timer = ctl ? setTimeout(() => ctl.abort(), 5000) : null;
+      fetch(FARM_CONFIG.gasUrl, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'logout', deviceKey: key }), signal: ctl ? ctl.signal : undefined })
+        .catch(() => {}).finally(() => { if (timer) clearTimeout(timer); });
+    } catch (e) { /* 送不出去照樣登出 */ }
+  }
   function logout() {
+    serverLogout(state.key);
     state.key = null; keyStore.set(null); state.data = null;
     clearMustChange();
     // 讀取中標記與快取也清掉：換人後舊請求的回應會被丟掉（S7），標記不清就永遠是「讀取中」、新的人讀不到（第二輪自行審查 T5）

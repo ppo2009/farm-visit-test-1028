@@ -170,6 +170,7 @@
       await Store.setMeta('lastSync', now);
     }
     if (data && Array.isArray(data.farmers)) await Store.setMeta('farmers', data.farmers);
+    if (data && Array.isArray(data.endedMine)) await Store.setMeta('endedMine', data.endedMine); // 0.4.80 中3：自己負責、已結案的農民（只給種植資料分頁用；舊後台沒有就不動）
     if (data && data.options) await Store.setMeta('options', data.options);
     if (data && data.home) await Store.setMeta('home', Object.assign({ syncedAt: Date.now() }, data.home));
     if (data && Array.isArray(data.trials)) await Store.setMeta('trials', data.trials);
