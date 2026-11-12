@@ -1,6 +1,6 @@
 /* 背景程式：讓網頁沒網路也打得開，並在 Android 手機一有網路時於背景自動上傳 */
 /* global self, caches, clients, FarmCore */
-const VERSION = 'build-20261112-121521';
+const VERSION = 'build-20261112-121713';
 const CACHE = 'farm-visit-' + VERSION;
 const SHELL = ['./', './index.html', './app.js', './core.js', './config.js', './inapp.js', './manifest.json', './icon-192.png', './icon-512.png'];
 
@@ -24,7 +24,8 @@ self.addEventListener('fetch', e => {
   // 網頁本身（html）先抓網路上的新版，沒網路才用手機裡存的，避免更新後還看到舊畫面
   // 有網路一律用最新版（測試期常更新），沒網路才用手機裡存的
   if (true) {
-    e.respondWith(caches.open(CACHE).then(c => fetch(e.request).then(r => { if (r.ok) c.put(e.request, r.clone()); return r; })
+    // 0.4.46 第6任查到：Firebase 對「/」快取 1 小時、GitHub 全部 10 分鐘 → 一律跟伺服器確認最新版（cache:'no-cache'），不吃瀏覽器舊快取，避免舊頁面＋新程式
+    e.respondWith(caches.open(CACHE).then(c => fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then(r => { if (r.ok) c.put(e.request, r.clone()); return r; })
       .catch(() => c.match(e.request, { ignoreSearch: true }).then(hit => hit || c.match('./index.html')))));
     return;
   }
