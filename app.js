@@ -507,7 +507,7 @@
     const head = [c.lastVisit ? `最後拜訪 ${esc(c.lastVisit)}` : '', c.nextDue ? `下次回訪 ${esc(c.nextDue)}` : '', c.crop ? `作物 ${esc(c.crop)}` : '', c.variety ? `品種 ${esc(c.variety)}` : '']
       .filter(Boolean).join('｜');
     const tr = trials.map(t => `<li><b>${esc(t.cat)}進行中</b>：${esc(t.item || '（未填品項）')}${t.start ? `，${esc(t.start)} 開始${wk(t.start) ? `（第 ${wk(t.start)} 週）` : ''}` : ''}</li>`).join('');
-    const vs = recent.map(v => `<li>${esc(v.time)}｜${esc(v.staff)}｜${esc(v.cat)}${v.closing ? '' : ''}${v.text ? `：${esc(v.text)}` : ''}${v.plantFail ? `<br><span class="pill late">種植失敗</span> ${esc(v.plantFail)}` : ''}${v.closing ? `<br>${esc(v.closing)}` : ''}</li>`).join('');
+    const vs = recent.map(v => `<li>${esc(v.time)}｜${esc(v.staff)}｜${esc(CAT_LABEL(v.cat))}${v.closing ? '' : ''}${v.text ? `：${esc(v.text)}` : ''}${v.plantFail ? `<br><span class="pill late">種植失敗</span> ${esc(v.plantFail)}` : ''}${v.closing ? `<br>${esc(v.closing)}` : ''}</li>`).join('');
     box.innerHTML = `<h3>之前的進度／ယခင် တိုးတက်မှု</h3>${head ? `<p class="sub">${head}</p>` : ''}${tr ? `<ul>${tr}</ul>` : ''}` +
       (vs ? `<p class="sub">最近的拜訪${remote ? '' : '（沒網路，只有這支手機記的）'}：</p><ul>${vs}</ul>` : '');
   }
