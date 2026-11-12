@@ -903,7 +903,7 @@
   /** 業務BUG#5：返回首頁前要確認的「填了東西」——除了照片錄音打字，還有沒見到匯報、新客戶資料、結案欄位、盤商結案說明、價格、試作表單 */
   const filled = id => !!String(($n(id).value) || '').trim();
   // 結案七欄＋盤商結案說明（formDirty、換客戶共用）；2號 0.4.70 低3（第8任）：漏了結案地區 cRegion、洽談結果 dcOutcome（兩個下拉，預設空白、不會自動帶值）
-  const CLOSE_IDS = ['cRegion', 'cPrice', 'cYield', 'cBuyer', 'cPhone', 'cReason', 'cProgress', 'dcOutcome', 'dcNote'];
+  const CLOSE_IDS = ['cRegion', 'cPrice', 'cYield', 'cBuyer', 'cPhone', 'cReason', 'cProgress', 'dcOutcome', 'dcNote', 'cTrialOutcome']; // 0.4.74 加試作結果
   const formDirty = () => !!(visitDirty() || filled('nmNote')
     || ($('farmer').value === '__new' && Object.values(PROFILE_INPUTS).some(filled))
     || CLOSE_IDS.some(filled)
@@ -1066,6 +1066,7 @@
     const sel = $('farmer').value;
     const show = (state.cat === '試作' || state.cat === '推廣') && !!sel;
     $('trialBox').hidden = !show;
+    refreshCloseTrial(); // 0.4.74 結案：有進行中的試作／推廣就要先填結果（自己處理換客戶的競態）
     refreshPlantFail(); // 0.4.33 一般拜訪的種植失敗勾選：換類別、換客戶時跟著顯示／收起
     if (sel && !isDealerCat()) fillVarieties(); // 0.4.50 換類別時種子公司選單跟著換（一般＝其他公司、試作推廣＝農友）
     renderCropSum(); // 0.4.44 作物、品種、代碼縮成一行；新農民、沒填或按「修改」才展開四格（0.4.35 起選了農民就看得到）
@@ -1089,7 +1090,7 @@
     $('trialStartBtn').setAttribute('aria-pressed', String(m === 'start')); $('trialEndBtn').setAttribute('aria-pressed', String(m === 'end'));
     if (m === 'start' && !$('tStart').value) { $('tStart').value = mmDay(0); } // 業務BUG#4：緬甸的今天
     if (m === 'end' && !$('tYieldUnit').value) $('tYieldUnit').value = (state.options && state.options.yieldUnit) || '籃';
-    $('failBox').hidden = !((m === 'end' && $('tOutcome').value === '失敗') || plantFailOn());
+    placeFailBox(); // 0.4.74 失敗欄位放哪、要不要顯示統一由 placeFailBox 決定（試作結束／種植失敗／結案試作失敗）
     $('harvestBox').hidden = $('tOutcome').value === '失敗'; // 0.4.38 成功／結束 → 收成報告；失敗 → 失敗紀錄
     refreshSave();
   }
@@ -1099,12 +1100,36 @@
     const show = state.cat === '農戶' && !!$('farmer').value && !noMeetOn();
     $('plantFailBox').hidden = !show;
     if (!show) $('plantFail').checked = false;
+    placeFailBox();
+    refreshSave();
+  }
+  /* ───── 0.4.74 董事長「要，先填結果」：農民結案時，這位農民有進行中的試作（或推廣）→ 先填結果（成功／失敗，失敗要填失敗紀錄）─────
+     同時有試作和推廣時以試作為準（推廣那筆後台照舊寫「結束」）。欄位約定見 2 號確認：closing.trialResult {id, cat, outcome, failure?, startInfo?}、closing.group */
+  const closeFailOn = () => state.cat === '結案' && !!state.closeTrial && state.closeTrialFor === $('farmer').value && $n('cTrialOutcome').value === '失敗' && typeof document !== 'undefined' && !!document.getElementById('closeFailSlot');
+  /** 同一組失敗欄位（failBox）只有一份：種植失敗 → 一般拜訪下面；結案試作失敗 → 結案區；其他 → 回試作結束表單 */
+  function placeFailBox() {
     const box = $('failBox');
-    if (plantFailOn()) { if (box.parentElement !== $('plantFailSlot')) $('plantFailSlot').appendChild(box); box.hidden = false; }
-    else {
-      if (box.parentElement === $('plantFailSlot')) $('trialEndForm').appendChild(box);
-      box.hidden = !(state.trialMode === 'end' && $('tOutcome').value === '失敗');
-    }
+    const slot = plantFailOn() ? $('plantFailSlot') : closeFailOn() ? $n('closeFailSlot') : $('trialEndForm');
+    if (box.parentElement !== slot) slot.appendChild(box);
+    box.hidden = !(plantFailOn() || closeFailOn() || (state.trialMode === 'end' && $('tOutcome').value === '失敗'));
+  }
+  /** 結案畫面：查這位農民有沒有進行中的試作（先）或推廣，有就顯示結果欄（必填） */
+  async function refreshCloseTrial() {
+    const box = $n('closeTrialBox'), sel = $('farmer').value;
+    if (state.cat !== '結案' || !sel || sel === '__new') { state.closeTrial = null; state.closeTrialFor = null; box.hidden = true; placeFailBox(); return; }
+    if (state.closeTrialFor === sel) return; // 這位已經查過（結果欄已經在填，不要洗掉）
+    const gen = state.formGen;
+    state.closeTrial = null; state.closeTrialFor = null; // 查完之前 closeProblem 會擋「讀取中」，不會送出沒帶結果的結案
+    let hit = null;
+    for (const cat of ['試作', '推廣']) { const t = await activeTrialFor(sel, cat); if (t) { hit = { cat, t }; break; } }
+    if (gen !== state.formGen || sel !== $('farmer').value || state.cat !== '結案') return; // 查的途中換了客戶或離開結案
+    state.closeTrial = hit; state.closeTrialFor = sel;
+    box.hidden = !hit;
+    if (hit) {
+      $n('closeTrialLab').innerHTML = `${hit.cat}結果（必填）<span class="my">${CAT_MY[hit.cat] || ''} ရလဒ် (မဖြစ်မနေ)</span>`;
+      $n('closeTrialNow').textContent = `進行中 လုပ်ဆောင်ဆဲ：${hit.t.item || '（未填品項）'}${hit.t.start ? '，' + hit.t.start + ' 開始 စတင်' : ''}。結案前請先填${hit.cat}成功或失敗／ပိတ်သိမ်းမီ ရလဒ် ရွေးပါ`;
+    } else $n('cTrialOutcome').value = '';
+    placeFailBox();
     refreshSave();
   }
   /* ───── 沒拜訪 → 下次再訪（0.4.38 董事長手稿：農民進度 → 拜訪；NO＝沒見到農民或農民拒絕 → 下次再訪）───── */
@@ -1204,13 +1229,36 @@
     if (miss.length) return `結案要填：${miss.join('、')}／ပိတ်သိမ်းရန် ဖြည့်ပါ`;
     // 2號 0.4.63 低#6：輸入框的 min=0 只有表單送出才擋，這裡自己檢查：價格、產量要大於 0（不能負數或 0）
     const bad = [['cPrice', '價格'], ['cYield', '產量']].filter(([id]) => !(Number($(id).value) > 0)).map(([, n]) => n);
-    return bad.length ? `${bad.join('、')}要大於 0／၀ ထက် ကြီးရမည်` : '';
+    if (bad.length) return `${bad.join('、')}要大於 0／၀ ထက် ကြီးရမည်`;
+    // 0.4.74 董事長「要，先填結果」：有進行中的試作／推廣 → 結果必填；失敗要填失敗紀錄。還沒查完不能送（不然會送出沒帶結果的結案）
+    if (typeof document !== 'undefined' && document.getElementById('closeTrialBox')) { // 舊頁面沒有結果欄：照舊不擋（後台照舊寫「結束」）
+      if (state.closeTrialFor !== sel0) return '正在查這位農民有沒有進行中的試作…／စစ်ဆေးနေသည်';
+      const ct = state.closeTrial;
+      if (ct) {
+        const o = $n('cTrialOutcome').value;
+        if (o !== '成功' && o !== '失敗') return `請先選${ct.cat}結果（成功或失敗）／${CAT_MY[ct.cat] || ''} ရလဒ် ရွေးပါ`;
+        if (o === '失敗') { const fm = failMissing(); if (fm.length) return `${ct.cat}失敗要填：${fm.join('、')}／မအောင်မြင်မှု မှတ်တမ်း မပြည့်စုံသေး`; }
+      }
+    }
+    return '';
   }
   function collectClosing() {
     if (state.dealerClose) return { outcome: $n('dcOutcome').value, note: $n('dcNote').value.trim() }; // 0.4.42 盤商、種子商
     if (state.cat !== '結案') return null;
-    return { region: $('cRegion').value, price: $('cPrice').value.trim(), yield: $('cYield').value.trim(), buyer: $('cBuyer').value.trim(), phone: $('cPhone').value.trim(),
-      reason: $n('cReason').value.trim(), progress: $n('cProgress').value.trim() }; // 0.4.62 董事長：結案加原因、進度（可不填；舊頁面沒有這兩格送空白）
+    // 0.4.62 董事長：結案加原因、進度（可不填；舊頁面沒有這兩格送空白）；0.4.74 加 group、trialResult（用 Object.assign，舊手機瀏覽器不支援物件展開）
+    return Object.assign({ region: $('cRegion').value, price: $('cPrice').value.trim(), yield: $('cYield').value.trim(), buyer: $('cBuyer').value.trim(), phone: $('cPhone').value.trim(),
+      reason: $n('cReason').value.trim(), progress: $n('cProgress').value.trim() }, closeTrialFields());
+  }
+  /** 0.4.74 董事長「要讓主管看到」＋「要，先填結果」：group 依送出當下這位農民的實際狀態（不看按哪一顆結案鈕）；trialResult 格式照 2 號約定 */
+  function closeTrialFields() {
+    const sel = $('farmer').value, ct = state.closeTrialFor === sel ? state.closeTrial : null;
+    if (!ct) return { group: '一般農民', trialResult: null };
+    const group = ct.cat === '試作' ? '試作農民' : '推廣農民', outcome = $n('cTrialOutcome').value;
+    if (outcome !== '成功' && outcome !== '失敗') return { group, trialResult: null }; // 舊頁面沒有結果欄：不送空結果（後台照舊寫「結束」）
+    const tr = { id: ct.t.id, cat: ct.cat, outcome };
+    if (outcome === '失敗') tr.failure = collectFailure();
+    if (ct.t.pending) tr.startInfo = { item: ct.t.item, dosage: ct.t.dosage, start: ct.t.start }; // 開始那筆還沒上傳（後台目前不用，照約定附上）
+    return { group, trialResult: tr };
   }
   /** 「打字」的範例：依這位農民現在的進度換（董事長 2026-11-12：業務報告依農民進度寫範例） */
   function noteExample() {
@@ -1249,6 +1297,7 @@
     $('tOutcome').value = '成功';
     $('plantFail').checked = false; // 0.4.33
     state.activeTrial = null;
+    state.closeTrial = null; state.closeTrialFor = null; $n('cTrialOutcome').value = ''; $n('closeTrialBox').hidden = true; // 0.4.74 換客戶：結案的試作結果也清掉、重查
     setTrialMode(null);
     refreshPlantFail();
     $('trialBox').hidden = true;
@@ -1894,6 +1943,7 @@ ${state.cat}：${who}
     $('trialStartBtn').addEventListener('click', () => setTrialMode(state.trialMode === 'start' ? null : 'start'));
     $('trialEndBtn').addEventListener('click', () => setTrialMode(state.trialMode === 'end' ? null : 'end'));
     $('tOutcome').addEventListener('change', () => setTrialMode('end'));
+    $n('cTrialOutcome').addEventListener('change', () => { placeFailBox(); refreshSave(); }); // 0.4.74 結案試作結果：選失敗就展開失敗紀錄
     $('meetYes').addEventListener('click', () => setNoMeet(false)); // 0.4.38
     $('meetNo').addEventListener('click', () => setNoMeet(true));
     ['nmReason', 'nmNote', 'nmNext'].forEach(id => { $(id).addEventListener('input', refreshSave); $(id).addEventListener('change', refreshSave); });

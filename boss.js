@@ -246,7 +246,10 @@
     // 0.4.33 主管確認／退回結案
     $('panel').querySelectorAll('[data-closedecide]').forEach(b => b.addEventListener('click', async () => {
       const ok = b.dataset.closedecide === 'confirm';
-      if (!confirm(ok ? '確認這位農民結案？確認後不再提醒回訪，進行中的試作也會結束。' : '退回這筆結案？客戶照常追蹤，當作沒結案。')) return;
+      // 結案清單低9：盤商、種子商結案（有洽談結果）確認框原本寫農民、試作
+      const cl = (state.data.closings || []).find(x => x.visitId === b.dataset.vid) || {};
+      const dealer = !!cl.result;
+      if (!confirm(ok ? (dealer ? '確認這家店結案（' + cl.result.slice(0, 40) + '）？確認後這家店改「已結束」，業務選單不再出現、不能再拜訪。' : '確認這位農民結案？確認後不再提醒回訪，結案前就在進行的試作也會結束。') : '退回這筆結案？客戶照常追蹤，當作沒結案。')) return;
       $('panel').querySelectorAll('[data-closedecide]').forEach(x => { x.disabled = true; });
       let r;
       try { r = await api({ action: 'closeDecide', visitId: b.dataset.vid, decision: b.dataset.closedecide }); } catch (e) { r = { ok: false, message: '連不上伺服器' }; }
@@ -333,7 +336,8 @@
 
   // 結案那筆資料記成一般拜訪（統計照舊），畫面上標「結案」（董事長 2026-11-12）
   // 主管BUG(2號)#9：被退回的結案標「結案（已退回）」灰底，不是綠色結案
-  const catPill = v => v.closing && v.closeRejected ? '<span class="pill">結案（已退回）</span> ' : `<span class="pill p-grn">${esc(v.closing ? '結案' : (v.cat || '試作'))}</span> `;
+  // 結案清單中3（0.4.74）：待主管確認的結案標黃色「結案（待確認）」，跟已確認的綠色分開
+  const catPill = v => v.closing && v.closeRejected ? '<span class="pill">結案（已退回）</span> ' : v.closing && v.closePending ? '<span class="pill p-yel">結案（待確認）</span> ' : `<span class="pill p-grn">${esc(v.closing ? '結案' : (v.cat || '試作'))}</span> `;
   /** 沒有摘要時要說清楚原因：處理中、處理失敗、沒送翻譯（原本處理失敗也寫「沒有需要翻譯的內容」；2026-11-11 抓到） */
   function noSummaryText(v) {
     // 後台BUG(2號)中5：待處理但有錯誤訊息＝翻譯延遲（額度不足、Gemini 暫時無法使用、上次失敗等重試），不要再寫「約 10 分鐘內完成」
@@ -415,7 +419,7 @@
     const list = state.data.closings || [];
     if (!list.length) return '';
     return `<section class="closings"><h3><span class="pill p-red">待確認結案 ${list.length} 筆</span> <span class="sub">業務按了結案，確認後才真的結案；按錯就退回</span></h3>
-      <ul class="list">${list.map(c => `<li><b><a href="javascript:void 0" data-go="${esc(c.cid)}">${esc(c.name)}</a></b>｜${esc(c.staff)}｜${esc(c.date)}${c.custEnded ? ' <span class="pill p-yel">客戶已經是「已結束」：確認＝維持結束，退回＝不記這筆結案（客戶仍是已結束）</span>' /* 主管BUG(2號)#6 */ : ''}<br>
+      <ul class="list">${list.map(c => `<li><b><a href="javascript:void 0" data-go="${esc(c.cid)}">${esc(c.name)}</a></b>｜${esc(c.staff)}｜${esc(c.date)}${c.custEnded ? ' <span class="pill p-yel">客戶已經是「已結束」：確認＝維持結束，退回＝不記這筆結案（客戶仍是已結束）</span>' /* 主管BUG(2號)#6 */ : ''}${c.group ? ' <span class="pill">' + esc(c.group) + (c.trialOutcome ? '・試作' + esc(c.trialOutcome) : '') + '</span>' /* 0.4.74 結案分類、試作結果 */ : ''}${c.after && (c.after.visits || c.after.trials) ? '<br><span class="pill p-red">結案之後還有 ' + (c.after.visits || 0) + ' 筆拜訪' + (c.after.trials ? '、' + c.after.trials + ' 件新開始的試作（確認後新試作不會跟著結束）' : '') + '，請先看客戶履歷再決定</span>' /* 結案清單中1 */ : ''}<br>
         <span class="sub">${c.result ? esc(c.result) /* 0.4.42 盤商、種子商洽談成功／失敗 */ : !c.buyer && (c.price === '' || c.price == null) && (c.yield === '' || c.yield == null) ? '洽談結果沒記到（結案分頁少了「結果」欄，請在試算表按「第一次安裝／升級」）' /* 主管BUG#10 */ : `賣給 ${esc(c.buyer || '—')}（${esc(c.region || '地區未填')}）｜價格 ${esc(c.price)} ${esc(c.priceUnit || '')}｜產量 ${esc(c.yield)} ${esc(c.yieldUnit || '')}${c.phone ? '｜電話 ' + esc(c.phone) : ''}${c.reason ? '｜原因 ' + esc(c.reason) : ''}${c.progress ? '｜進度 ' + esc(c.progress) : ''}`}</span><br>
         <button class="btn primary" type="button" data-closedecide="confirm" data-vid="${esc(c.visitId)}">確認結案</button>
         <button class="btn" type="button" data-closedecide="reject" data-vid="${esc(c.visitId)}">退回（不結案）</button></li>`).join('')}</ul>

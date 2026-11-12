@@ -478,6 +478,13 @@ footer{margin-top:18px;text-align:center}
       <div><label class="lab" for="cReason">6. 原因<span class="my">အကြောင်းရင်း</span></label><input type="text" id="cReason" maxlength="300" placeholder="例：收成完、全部賣掉／ရိတ်ပြီး ရောင်းပြီး"></div>
       <div><label class="lab" for="cProgress">7. 進度<span class="my">တိုးတက်မှု</span></label><input type="text" id="cProgress" maxlength="300" placeholder="例：已收成 8 成，剩下下週賣／၈၀% ရိတ်ပြီး"></div>
       </div>
+      <!-- 0.4.74 董事長「要，先填結果」：這位農民有進行中的試作或推廣，結案前要先填結果（成功／失敗；失敗要填失敗紀錄） -->
+      <div id="closeTrialBox" class="fields" hidden>
+        <label class="lab" for="cTrialOutcome" id="closeTrialLab">試作結果（必填）<span class="my">ရလဒ် (မဖြစ်မနေ)</span></label>
+        <p class="sub" id="closeTrialNow"></p>
+        <select id="cTrialOutcome"><option value="">— 請選 ရွေးပါ —</option><option value="成功">成功／အောင်မြင်</option><option value="失敗">失敗／မအောင်မြင်</option></select>
+        <div id="closeFailSlot"></div>
+      </div>
       <p class="sub" id="closeHint">只能選自己負責的農民。存檔後這位農民就結案（不再提醒回訪）。<br>ကိုယ်တာဝန်ယူထားသော လယ်သမားသာ ရွေးနိုင်သည်။</p>
     </div>
 
