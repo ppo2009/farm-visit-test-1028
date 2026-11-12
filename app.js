@@ -805,7 +805,7 @@
     $('catSwitch').dataset.group = groupOf(cat);
     // 0.4.40 董事長：結案不放上方，改成畫面最下面的「結案（送主管審核）」；在結案畫面時同一顆按鈕變「取消結案」
     if (groupOf(cat) !== 'dealer') state.dealerClose = false; // 0.4.42 盤商、種子商的結案模式只在那一組
-    $n('dealerCloseBox').hidden = !state.dealerClose;
+    $n('dealerCloseBox').hidden = !(state.dealerClose || dealerSignOn()); // 0.4.75 勾了已簽約也打開
     // 0.4.57 董事長：結案入口搬到首頁「我的進度」→ 打卡畫面最下面只在結案畫面出現「取消結案」
     $n('closeModeBtn').hidden = !(cat === '結案' || state.dealerClose);
     $n('closeModeBtn').innerHTML = '← 取消結案<span class="my">ပိတ်သိမ်းမှု ပယ်ဖျက်</span>';
@@ -922,7 +922,7 @@
   /** 業務BUG#5：返回首頁前要確認的「填了東西」——除了照片錄音打字，還有沒見到匯報、新客戶資料、結案欄位、盤商結案說明、價格、試作表單 */
   const filled = id => { const e = $n(id); return e.type === 'checkbox' ? !!e.checked : !!String((e.value) || '').trim(); }; // 0.4.75 勾選框看有沒有勾（value 永遠是 on）
   // 結案七欄＋盤商結案說明（formDirty、換客戶共用）；2號 0.4.70 低3（第8任）：漏了結案地區 cRegion、洽談結果 dcOutcome（兩個下拉，預設空白、不會自動帶值）
-  const CLOSE_IDS = ['cRegion', 'cPrice', 'cYield', 'cBuyer', 'cPhone', 'cReason', 'cProgress', 'dcOutcome', 'dcNote', 'cTrialOutcome', 'cPlantFail']; // 0.4.74 加試作結果；0.4.75 加種植失敗勾選（filled、清除都認得勾選框）
+  const CLOSE_IDS = ['cRegion', 'cPrice', 'cYield', 'cBuyer', 'cPhone', 'cReason', 'cProgress', 'dcOutcome', 'dcNote', 'cTrialOutcome', 'cPlantFail', 'dcSigned']; // 0.4.74 加試作結果；0.4.75 加種植失敗、已簽約勾選（filled、清除都認得勾選框）
   const formDirty = () => !!(visitDirty() || filled('nmNote')
     || ($('farmer').value === '__new' && Object.values(PROFILE_INPUTS).some(filled))
     || CLOSE_IDS.some(filled)
@@ -1196,6 +1196,26 @@
     sel.value = NM_TEXT[g].opts[0][0];
   }
   const noMeetOn = () => !!state.noMeet && noMeetShown();
+  /* ───── 0.4.75 董事長「盤商跟種子商變成以簽約才結案」：盤商、種子商有見到之後勾「已簽約」→ 打開結案框（不選洽談結果，固定送「簽約」），
+     簽約內容必填，送主管確認後結案；沒勾就是一般拜訪（不結案、不送 closing）。舊的「洽談成功／失敗」結案模式（state.dealerClose）留著不呼叫 ───── */
+  const DC_NOTE_LAB = { sign: '簽約內容（必填）<span class="my">စာချုပ် အကြောင်းအရာ (မဖြစ်မနေ)</span>', old: '說明（必填）<span class="my">မှတ်ချက် (မဖြစ်မနေ)</span>' };
+  const DC_NOTE_PH = { sign: '寫簽約內容，例如簽了什麼、從什麼時候開始：簽 A 品牌種子代理，12 月起每月進 50 包\nဥပမာ - A တံဆိပ် ကိုယ်စားလှယ် စာချုပ်၊ ဒီဇင်ဘာမှ စတင်',
+    old: '例：談成，下個月開始進 A 品牌種子／沒談成，老闆只賣自己的品牌\nဥပမာ - သဘောတူပြီ / မအောင်မြင်' };
+  /** 「已簽約」勾選什麼時候出現：盤商、種子商、選了已經有的客戶、按了「有見到」、不是舊的結案模式 */
+  const dealerSignShown = () => { const s = $('farmer').value; return isDealerCat() && !state.dealerClose && !!s && s !== '__new' && !!state.meetChosen && !noMeetOn(); };
+  const dealerSignOn = () => dealerSignShown() && !!$n('dcSigned').checked;
+  function refreshDealerSign() {
+    const lab = $n('dcSignedLab'), cb = $n('dcSigned');
+    lab.hidden = !dealerSignShown();
+    if (lab.hidden) cb.checked = false; // 換成農民、沒見到、換人：勾選一起取消
+    if (state.dealerClose) return; // 舊的結案模式自己管結案框
+    const on = dealerSignOn();
+    $n('dealerCloseBox').hidden = !on;
+    $n('dcOutcomeRow').hidden = on; // 簽約不用選洽談結果
+    $n('dcNoteLab').innerHTML = on ? DC_NOTE_LAB.sign : DC_NOTE_LAB.old;
+    $n('dcNote').placeholder = on ? DC_NOTE_PH.sign : DC_NOTE_PH.old;
+    if (isDealerCat()) $n('saveBtn').innerHTML = on ? '簽約送主管確認（自動上傳）<span class="my">မန်နေဂျာ အတည်ပြုရန် ပို့မည်</span>' : '儲存（自動上傳）<span class="my">သိမ်းမည်</span>';
+  }
   function refreshNoMeet() {
     const shown = noMeetShown();
     nmLabels();
@@ -1212,6 +1232,7 @@
     ['noteBox', 'trialBox', 'plantFailBox'].forEach(id => { if (on) $(id).hidden = true; });
     const pb = $('priceBox'); if (pb) pb.hidden = on || state.cat !== '盤商' || !!state.dealerClose; // 盤商沒見到：不記價格
     if (on && !$('nmNext').value) { $('nmNext').value = mmDay(7); } // 業務BUG#4：緬甸日期 7 天後
+    refreshDealerSign(); // 0.4.75 盤商、種子商「已簽約」勾選跟著有見到／沒見到、換人顯示或收起
   }
   function setNoMeet(on) {
     state.noMeet = !!on; state.meetChosen = true; // 0.4.44 按過其中一顆才展開
@@ -1264,6 +1285,7 @@
       const miss = [['dcOutcome', '洽談結果'], ['dcNote', '說明']].filter(([id]) => !String($n(id).value).trim()).map(([, n]) => n);
       return miss.length ? `結案要填：${miss.join('、')}／ပိတ်သိမ်းရန် ဖြည့်ပါ` : '';
     }
+    if ((state.cat === '盤商' || state.cat === '種子商') && dealerSignOn()) return String($n('dcNote').value).trim() ? '' : '已簽約要寫簽約內容（簽了什麼、從什麼時候開始）／စာချုပ် အကြောင်းအရာ ရေးပါ'; // 0.4.75
     if (state.cat !== '結案') return '';
     // 業務BUG#3：農民結案只能選已經有的農民，不能在這裡新增（選單已拿掉「＋新增農民」，這裡再擋一次）
     const sel0 = $('farmer').value;
@@ -1289,6 +1311,7 @@
   }
   function collectClosing() {
     if (state.dealerClose) return { outcome: $n('dcOutcome').value, note: $n('dcNote').value.trim() }; // 0.4.42 盤商、種子商
+    if ((state.cat === '盤商' || state.cat === '種子商') && dealerSignOn()) return { outcome: '簽約', note: $n('dcNote').value.trim() }; // 0.4.75 董事長：盤商、種子商以簽約才結案（後台由 2 號接受「簽約」）
     if (state.cat !== '結案') return null;
     // 0.4.62 董事長：結案加原因、進度（可不填；舊頁面沒有這兩格送空白）；0.4.74 加 group、trialResult（用 Object.assign，舊手機瀏覽器不支援物件展開）
     return Object.assign({ region: $('cRegion').value, price: $('cPrice').value.trim(), yield: $('cYield').value.trim(), buyer: $('cBuyer').value.trim(), phone: $('cPhone').value.trim(),
@@ -1647,7 +1670,7 @@
     const sel = $('farmer').value;
     const isNew = sel === '__new';
     const nameOk = !isNew || $('pName').value.trim();
-    const hasContent = noMeetOn() || state.photos.length || state.audio || $('note').value.trim() || collectPrices().length || state.trialMode || ((state.cat === '結案' || state.dealerClose) && !closeProblem()) || (sel && sel !== '__new' && collectProfile());
+    const hasContent = noMeetOn() || state.photos.length || state.audio || $('note').value.trim() || collectPrices().length || state.trialMode || ((state.cat === '結案' || state.dealerClose || dealerSignOn()) && !closeProblem()) || (sel && sel !== '__new' && collectProfile());
     $('note').placeholder = noteExample().join('\n'); // 範例跟著農民進度換
     const tp = noMeetProblem() || trialProblem() || closeProblem() || priceProblem() || profileProblem();
     const ok = sel && nameOk && !state.rec && !state.busyPhotos && !tp && (isNew || hasContent) && !state.saving; // 業務BUG#4：存檔途中（等定位最多 15 秒）不能再按
@@ -1679,6 +1702,14 @@
       const who = ($('farmer').selectedOptions && $('farmer').selectedOptions[0] ? $('farmer').selectedOptions[0].text : '') || $('pName').value;
       const msg = `確定要把這位農民結案嗎？\nလယ်သမား ပိတ်သိမ်းမှာ သေချာပါသလား\n\n農民：${who}\n價格：${$('cPrice').value}\n產量：${$('cYield').value}\n收購客戶：${$('cBuyer').value}\n\n${state.options && state.options.closeConfirm ? '送出後要等主管確認才算結案。' : '存檔後這位農民就結案，不再提醒回訪。'}`;
       if (!confirm(msg)) { refreshSave(); return; }
+    }
+    if (dealerSignOn()) { // 0.4.75 盤商、種子商已簽約：送出前確認
+      const who = $('farmer').selectedOptions && $('farmer').selectedOptions[0] ? $('farmer').selectedOptions[0].text : '';
+      if (!confirm(`確定已簽約、送主管確認後結案嗎？
+စာချုပ်ချုပ်ပြီး မန်နေဂျာထံ ပို့မှာ သေချာပါသလား
+
+${state.cat}：${who}
+簽約內容：${$n('dcNote').value.trim()}`)) { refreshSave(); return; }
     }
     if (state.dealerClose) { // 0.4.42 盤商、種子商結案：送出前確認
       const who = $('farmer').selectedOptions && $('farmer').selectedOptions[0] ? $('farmer').selectedOptions[0].text : '';
@@ -1798,7 +1829,7 @@ ${state.cat}：${who}
     $('profileBox').hidden = true;
     Object.values(PROFILE_INPUTS).forEach(id => { $n(id).value = ''; });
     resetTrialForm();
-    state.dealerClose = false; $n('dcOutcome').value = ''; $n('dcNote').value = ''; applyCatLabels(); // 0.4.42 存完回到一般拜訪
+    state.dealerClose = false; $n('dcOutcome').value = ''; $n('dcNote').value = ''; $n('dcSigned').checked = false; applyCatLabels(); // 0.4.42 存完回到一般拜訪；0.4.75 已簽約也取消
     resetNoMeet();
     refreshSave();
   }
@@ -1949,6 +1980,7 @@ ${state.cat}：${who}
     $('pVarCo').addEventListener('change', () => { fillVarieties(''); refreshSave(); }); // 0.4.31 換種子公司就重選品種
     $('plantFail').addEventListener('change', refreshPlantFail); // 0.4.33 一般拜訪勾「種植失敗」
     $('note').addEventListener('input', refreshSave);
+    $n('dcSigned').addEventListener('change', () => { refreshDealerSign(); refreshSave(); }); // 0.4.75 勾已簽約 → 打開結案框
     ['dcOutcome', 'dcNote'].forEach(id => { $n(id).addEventListener('input', refreshSave); $n(id).addEventListener('change', refreshSave); }); // 0.4.42；低#7（第8任）改 $n：舊頁面沒有這兩格時初始化不中斷
     ['cRegion', 'cPrice', 'cYield', 'cBuyer', 'cPhone'].forEach(id => { $(id).addEventListener('input', refreshSave); $(id).addEventListener('change', refreshSave); });
     $('photoInput').addEventListener('change', e => addPhotos(e.target.files, '相機', $('photoBtn')).finally(() => { e.target.value = ''; }));
