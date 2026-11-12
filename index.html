@@ -21,20 +21,20 @@ body{background:var(--bg);color:var(--fg);font-family:"Noto Sans TC","PingFang T
   padding:max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
 .my{font-family:"Noto Sans Myanmar","Myanmar Text","Padauk",sans-serif;font-size:.8em;color:var(--muted);display:block;font-weight:400}
 button,input,select,textarea{font:inherit;color:inherit}
-header{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:12px}
+header{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;margin-bottom:12px} /* 0.4.29 董事長：標題、名字置中 */
 h1{font-size:1.25rem;margin:0}
 h2{font-size:1rem;margin:18px 0 8px}
-small,.sub{color:var(--muted);font-size:.8rem}
+small,.sub{color:var(--muted);font-size:1rem} /* 0.4.29 董事長：業務字體 16px */
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:14px}
 label.lab,.lab{font-weight:700;display:block;margin-bottom:6px}
 select,input[type=text],input[type=tel],input[type=number],input[type=date],input[type=password],textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);min-width:0}
 textarea{min-height:96px;resize:vertical}
-.gps{font-size:.85rem;color:var(--muted)}
+.gps{font-size:1rem;color:var(--muted)}
 .gps b{color:var(--paddy)}
 .link{background:none;border:0;color:var(--paddy);text-decoration:underline;padding:0;cursor:pointer}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .three{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.big{border:1.5px dashed var(--line);background:var(--bg);border-radius:14px;min-height:92px;padding:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;cursor:pointer;position:relative;font-size:.92rem}
+.big{border:1.5px dashed var(--line);background:var(--bg);border-radius:14px;min-height:92px;padding:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;cursor:pointer;position:relative;font-size:1rem}
 .big svg{width:28px;height:28px}
 .big .label{font-weight:700}
 .big.done{border-style:solid;border-color:var(--paddy);background:var(--paddy-soft)}
@@ -52,25 +52,31 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
 .catswitch{display:flex;gap:6px}
 .catswitch button{flex:1;min-height:48px;border:1.5px solid var(--paddy);background:none;color:var(--paddy);border-radius:12px;font-weight:700;cursor:pointer;padding:6px 4px;word-break:keep-all;overflow-wrap:anywhere;min-width:0}
 /* 0.4.24（2026-11-12 業務面線上檢查）：375 點寬手機「一般拜訪」被拆成「一般拜／訪」兩行 → 中文詞不從中間斷（真的放不下才斷），窄手機字縮小一點 */
-@media (max-width:400px){.catswitch{gap:4px}.catswitch button{font-size:.85rem;padding:6px 2px}}
+@media (max-width:400px){.catswitch{gap:4px}.catswitch button{font-size:1rem;padding:6px 2px}}
 /* 首頁分頁標籤（0.4.26，董事長給的範例：一排文字分頁，選到的那個加框） */
-.htabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:4px 0 14px;overflow:visible}
-.htabs button{flex:1 1 auto;min-width:0;min-height:52px;border:1.5px solid transparent;border-bottom:0;border-radius:10px 10px 0 0;background:none;color:var(--muted);font-weight:700;font-size:.92rem;cursor:pointer;padding:6px 2px;word-break:keep-all;overflow-wrap:anywhere;line-height:1.25;position:relative;margin-bottom:-1px}
+/* 寬度照中文字數分（4、6、4、4 字）：緬文小字比較長，用內容寬度分會把中文擠成兩行（0.4.29 字體 16px 後實測） */
+.htabs{display:grid;grid-template-columns:4fr 6fr 4fr 4fr;gap:2px;border-bottom:1px solid var(--line);margin:4px 0 14px;overflow:visible}
+.htabs button{flex:1 1 auto;min-width:0;min-height:52px;border:1.5px solid transparent;border-bottom:0;border-radius:10px 10px 0 0;background:none;color:var(--muted);font-weight:700;font-size:1rem;cursor:pointer;padding:6px 2px;word-break:keep-all;overflow-wrap:anywhere;line-height:1.25;position:relative;margin-bottom:-1px}
 .htabs button .my{display:block;font-weight:400;font-size:.7rem}
 .htabs button[aria-selected="true"]{border-color:var(--paddy);color:var(--paddy);background:var(--surface)}
 .htabs .tbadge{position:absolute;top:-9px;right:-2px;z-index:1;min-width:18px;height:18px;border-radius:9px;background:var(--chili,#b23a2a);color:#fff;font-size:.72rem;line-height:18px;padding:0 4px}
-@media (max-width:400px){.htabs{gap:2px}.htabs button{font-size:.82rem;padding:6px 3px}}
+@media (max-width:400px){.htabs{gap:2px}.htabs button{font-size:1rem;padding:6px 2px}}
 li.assigned{display:block}
-li.assigned .meta{display:block;color:var(--muted);font-size:.8rem;margin-top:2px}
-.taskclosed{display:block;color:var(--muted);font-size:.8rem;max-width:9em;align-self:center;text-align:right}
+li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px}
+.mirrors{max-width:520px;margin:0 auto 10px;text-align:left;border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--surface)}
+.mirrors summary{cursor:pointer;font-weight:700;color:var(--paddy);min-height:32px}
+.mirrors li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)}
+.mirrors li a{word-break:break-all;flex:1 1 200px}
+.mirrors li button{min-height:40px}
+.taskclosed{display:block;color:var(--muted);font-size:1rem;max-width:9em;align-self:center;text-align:right}
 .catswitch button[aria-pressed="true"]{background:var(--paddy);color:var(--surface)}
 .btn2,.back{min-height:48px} /* 手指按得到：至少 48 點（優化 3） */
 .gps .link{min-height:48px;padding:0 6px}
-.hdr{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-.syncbadge{border:0;border-radius:99px;font-size:.8rem;font-weight:700;padding:4px 10px;min-height:32px;cursor:pointer}
+.hdr{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center}
+.syncbadge{border:0;border-radius:99px;font-size:1rem;font-weight:700;padding:4px 10px;min-height:32px;cursor:pointer}
 .syncbadge.wait{background:var(--turmeric-soft);color:var(--turmeric)}.syncbadge.ok{background:var(--paddy-soft);color:var(--paddy)}
 .cat.hub{min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
-.cat .hint{display:block;font-size:.72rem;font-weight:400;color:inherit;opacity:.9;margin-top:4px;line-height:1.35} /* small 預設是灰色，放在彩色按鈕上看不見（2026-11-12 實測） */
+.cat .hint{display:block;font-size:1rem;font-weight:400;color:inherit;opacity:.9;margin-top:4px;line-height:1.35} /* small 預設是灰色，放在彩色按鈕上看不見（2026-11-12 實測） */
 #farmerBtn[aria-expanded="true"],#dealerBtn[aria-expanded="true"]{outline:3px solid var(--ink,#222);outline-offset:2px}
 li.task{align-items:flex-start}li.task label{display:flex;gap:10px;flex:1;min-width:0;cursor:pointer}
 li.task input{width:26px;height:26px;flex:none;margin-top:2px}li.task.done span{color:var(--muted)}
@@ -100,17 +106,17 @@ details.profile summary{font-weight:700;cursor:pointer}
 .count.wait{color:var(--turmeric)}
 .count.ok{color:var(--paddy)}
 ul{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:12px}
-li{display:flex;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:.9rem}
+li{display:flex;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:1rem}
 li:last-child{border-bottom:0}
 li.empty{color:var(--muted)}
 li.go{cursor:pointer}
-.pill{font-size:.75rem;font-weight:700;padding:1px 9px;border-radius:99px;align-self:center;white-space:nowrap}
+.pill{font-size:1rem;font-weight:700;padding:1px 9px;border-radius:99px;align-self:center;white-space:nowrap}
 .pill.ok{background:var(--paddy-soft);color:var(--paddy)}
 .pill.wait{background:var(--turmeric-soft);color:var(--turmeric)}
 .pill.late{background:var(--chili-soft);color:var(--chili)}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .months{display:flex;gap:6px;margin-bottom:8px}
-.chip{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 14px;cursor:pointer;font-size:.9rem}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 14px;cursor:pointer;font-size:1rem}
 .months .chip{min-height:44px}            /* 田裡用手指按：月份切換至少 44 點高（2026-11-12 逐頁檢查） */
 #logoutBtn{min-height:44px;padding:0 10px} /* 登出維持小字（避免誤按），但按的範圍夠大 */
 .chip[aria-pressed="true"]{background:var(--paddy);color:var(--surface);border-color:var(--paddy)}
@@ -119,9 +125,9 @@ li.plan>span:first-child{flex:1;min-width:0}
 .bar i{display:block;height:100%;background:var(--paddy)}
 .stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 .stat b{display:block;font-size:1.5rem;font-variant-numeric:tabular-nums}
-.tip{background:var(--turmeric-soft);color:var(--fg);border-radius:12px;padding:10px 12px;font-size:.88rem;margin-bottom:12px}
-#syncState{min-height:1.2em;font-size:.85rem;color:var(--muted);margin:6px 0 0}
-#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,env(safe-area-inset-bottom));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:.9rem;max-width:90%;z-index:9}
+.tip{background:var(--turmeric-soft);color:var(--fg);border-radius:12px;padding:10px 12px;font-size:1rem;margin-bottom:12px}
+#syncState{min-height:1.2em;font-size:1rem;color:var(--muted);margin:6px 0 0}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,env(safe-area-inset-bottom));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:1rem;max-width:90%;z-index:9}
 #loginForm{display:grid;gap:12px}
 .err{color:var(--chili)}
 footer{margin-top:18px;text-align:center}
@@ -348,7 +354,15 @@ footer{margin-top:18px;text-align:center}
 
 <datalist id="dlCrops"></datalist><datalist id="dlVarieties"></datalist><datalist id="dlFerts"></datalist><datalist id="dlBrands"></datalist>
 
-<footer><small>第 2 期測試版 <span id="appVer"></span>・緬文待校對 မြန်မာစာ ပြန်စစ်ရန်</small> <button type="button" class="link" id="logoutBtn"><small>登出 ထွက်ရန်</small></button></footer>
+<footer>
+  <!-- 0.4.29 董事長 2026-11-12：緬甸網路常擋某些網站主機 → 列出幾個備用網址（不同公司的主機、同一個後台與資料），打不開時換一個 -->
+  <details class="mirrors" id="mirrors">
+    <summary>網址打不開時改用這個<span class="my">လိပ်စာ မဖွင့်နိုင်လျှင် ဤလိပ်စာ သုံးပါ</span></summary>
+    <ul id="mirrorList"></ul>
+    <p class="sub">換網址要重新登入一次；資料、帳號都一樣。還沒上傳的紀錄存在原本的網址裡，網路通了請回原本的網址送出。<span class="my">လိပ်စာပြောင်းလျှင် ပြန်ဝင်ပါ</span></p>
+  </details>
+  <small>第 2 期測試版 <span id="appVer"></span>・緬文待校對 မြန်မာစာ ပြန်စစ်ရန်</small> <button type="button" class="link" id="logoutBtn"><small>登出 ထွက်ရန်</small></button>
+</footer>
 <div id="toast" hidden aria-live="polite"></div>
 
 <script src="config.js"></script>

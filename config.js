@@ -2,5 +2,5 @@
    第 2 期起改用帳號密碼登入，不再需要 Google 登入的 OAuth Client ID。 */
 self.FARM_CONFIG = {
   gasUrl: 'https://script.google.com/macros/s/AKfycbwZ36Ob8Nxf8Ss618KqmlF9YWPgjW7WRrGvSIgu8T5ENQpD5oG0Jwgg5Y-R8PhrOLtjgA/exec', // 交付包一律留佔位字；部署時用 部署打卡網頁.ps1 -GasUrl 指定，只寫進部署複本（GPT-6.1 R5-06）
-  appVersion: '0.4.28'
+  appVersion: '0.4.29'
 };

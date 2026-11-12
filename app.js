@@ -121,6 +121,22 @@
     renderQueue();
   }
 
+  /* 備用網址（0.4.29）：緬甸網路常擋某些主機，同一份網頁放在不同公司的主機上，後台、資料都一樣。
+     部署設定可以用 FARM_CONFIG.mirrors 換掉這份清單（客戶正式上線換成自己的網址） */
+  const MIRRORS = [
+    { url: 'https://ppo2009.github.io/farm-visit-test-1028/', name: 'GitHub' },
+    { url: 'https://farm-visit-test-1028.web.app/', name: 'Firebase' }
+  ];
+  function renderMirrors() {
+    const list = (typeof FARM_CONFIG !== 'undefined' && Array.isArray(FARM_CONFIG.mirrors) && FARM_CONFIG.mirrors.length) ? FARM_CONFIG.mirrors : MIRRORS;
+    const here = location.origin + location.pathname.replace(/[^/]*$/, '');
+    $('mirrorList').innerHTML = list.map((m, i) => `<li><a href="${esc(m.url)}">${esc(m.url)}</a>${m.url === here ? '<span class="pill ok">現在用的 ယခု</span>' : ''}<button type="button" class="btn2 small" data-copyurl="${i}">複製 ကူးယူ</button></li>`).join('');
+    $('mirrorList').querySelectorAll('[data-copyurl]').forEach(b => b.addEventListener('click', async () => {
+      const url = list[Number(b.dataset.copyurl)].url;
+      try { await navigator.clipboard.writeText(url); toast('已複製網址／ကူးယူပြီး'); } catch (e) { toast(url); } // 不能複製時直接顯示網址，讓他自己抄
+    }));
+  }
+
   /* 首頁分頁（0.4.26）：記住上次看的分頁（只存在這支手機；存不了就每次從田間打卡開始） */
   const HOME_TABS = ['punch', 'todo', 'assigned', 'mine'];
   function setHomeTab(tab) {
@@ -972,6 +988,7 @@
   /* ───── 啟動 ───── */
   async function init() {
     $('appVer').textContent = 'v' + FARM_CONFIG.appVersion;
+    renderMirrors();
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
     const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
     $('iosTip').hidden = !(isIOS && !standalone);
