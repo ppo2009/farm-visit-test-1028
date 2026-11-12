@@ -88,9 +88,23 @@ li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px
 .progress ul{margin:6px 0 0;padding-left:1.1em}
 .progress li{margin:4px 0;display:list-item;padding:0;border-bottom:0} /* 1號清單低#9、#10（第8任實測）：全站 li 是 flex＋兩端對齊（上傳清單用），進度卡、種植卡片被套到 →「試作進行中」擠成 40px 三行直排、「未填」被推到最右；卡片裡的清單改回一般清單 */
 .progress .nw{white-space:nowrap} /* 低#9：日期（2026-11-17）不在「-」斷行 */
+.vhist ul li{margin:8px 0;overflow-wrap:anywhere} /* 0.4.73 過往紀錄 */
+.vhist .hphoto{display:block;max-width:100%;max-height:320px;border-radius:8px;margin:6px 0}
+.vhist audio{display:block;width:100%;margin:6px 0}
+.vhist .btn2.small{margin:4px 4px 0 0}
 #cropBox{margin:8px 0}
 #cropBox.croprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end}
 #cropBox.croprow[hidden]{display:none}
+/* 0.4.72 本月新增客戶五類（1號）：五格一排（手機自動換成 3＋2），點一格展開那一類的明細 */
+.ncchips{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:6px}
+.ncchip{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:6px 4px;min-height:58px;font:inherit;cursor:pointer;text-align:center;color:inherit}
+.ncchip b{display:block;font-size:1.3rem;line-height:1.2;color:var(--paddy);font-variant-numeric:tabular-nums}
+.ncchip>span{display:block;font-size:.85rem;line-height:1.25}
+.ncchip .my{display:block;font-size:.68rem;line-height:1.6;color:var(--muted)}
+.ncchip[aria-pressed="true"]{border-color:var(--paddy);background:var(--paddy-soft)}
+.ncchip[disabled]{opacity:.55;cursor:default}
+.nclist{margin-top:8px}
+.nclist li small{color:var(--muted)}
 .todoboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start} /* 0.4.63 主管任務｜我的進度 兩欄 */
 .tasksum{border:1.5px solid var(--paddy);border-radius:12px;padding:10px 12px;margin:6px 0 10px;background:var(--surface)}
 .tasksum[hidden]{display:none}
@@ -229,8 +243,7 @@ footer{margin-top:18px;text-align:center}
 <!-- 首頁 -->
 <section id="home" hidden>
   <header class="homehdr"><h1>田間打卡<span class="my">လယ်ကွင်း မှတ်တမ်း</span></h1><span class="hdr"><button type="button" class="syncbadge" id="syncBadge" hidden></button><span class="sub" id="who"></span></span>
-    <!-- 0.4.69 董事長截圖：首頁右上角兩顆入口（每個分頁都看得到）。報告＝試作報告，看的範圍不變，只是分「我的／其他業務」 -->
-    <span class="rptbtns"><button type="button" class="rptbtn" id="rptMineBtn">分享我的報告<span class="my">ကျွန်ုပ်၏ အစီရင်ခံစာ</span></button><button type="button" class="rptbtn" id="rptOthersBtn">觀看其他業務報告<span class="my">အခြားသူများ၏ အစီရင်ခံစာ</span></button></span></header>
+    <!-- 0.4.73 董事長「試作報告拿掉」：0.4.69 右上角「分享我的報告／觀看其他業務報告」兩顆入口拿掉 --></header>
   <!-- 0.4.26 董事長 2026-11-12：首頁改成上方分頁標籤，一頁不要放太多東西（田間打卡／執行任務清單／指派任務／我的進度） -->
   <nav class="htabs" role="tablist" aria-label="首頁分頁">
     <button type="button" role="tab" id="htab-punch" data-htab="punch" aria-selected="true">田間打卡<span class="my">မှတ်တမ်း</span></button>
@@ -278,6 +291,10 @@ footer{margin-top:18px;text-align:center}
   <div class="todocol">
   <h2>我的進度<span class="my">ကျွန်ုပ်၏ တိုးတက်မှု</span><span class="sub">這個月的目標和拜訪次數／ဤလ ပစ်မှတ်</span></h2>
   <ul id="todoPlan"></ul>
+  <!-- 0.4.72 董事長：本月新增幾個一般農民、試作農民、推廣農民、盤商、種子商，詳細的要列出來（1號） -->
+  <h2>本月新增客戶<span class="my">ဤလ ဖောက်သည်အသစ်</span><span class="sub" id="newCustSum">點一類看是哪幾位／နှိပ်ပြီး ကြည့်ပါ</span></h2>
+  <div class="ncchips" id="newCustChips" role="group" aria-label="本月新增客戶分類"></div>
+  <ul class="nclist" id="newCustList" hidden></ul>
   <h2>日程清單<span class="my">သွားရန်ရက်စာရင်း</span><span class="sub">逾期＋未來 7 天要回訪的／ရက်ကျော်နှင့် နောက် ၇ ရက်အတွင်း ပြန်သွားရန်</span></h2>
   <ul id="scheduleList"></ul>
   </div>
@@ -290,18 +307,27 @@ footer{margin-top:18px;text-align:center}
        月計劃＋工作進度合成「本月成績」；試作報告摺到最下面；電腦寬度最多 760 置中。資料、後台都沒改 -->
   <div class="mine">
   <div class="mstats" id="mineStats">
-    <button type="button" class="mstat" data-jump="mineFarmers"><b id="msFarmers">—</b><span>我的農民<span class="my">လယ်သမား</span></span></button>
-    <button type="button" class="mstat" data-jump="mineTrials"><b id="msTrials">—</b><span>進行中試作<span class="my">စမ်းသပ်ဆဲ</span></span></button>
+    <!-- 0.4.73 董事長：我的進度列自己負責的農民、盤商、種子商；試作報告拿掉 → 前三格是三種客戶各幾位（點了切到那一種） -->
+    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="農民"><b id="msFarmers">—</b><span>我的農民<span class="my">လယ်သမား</span></span></button>
+    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="盤商"><b id="msDealers">—</b><span>我的盤商<span class="my">ကုန်သည်</span></span></button>
+    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="種子商"><b id="msSeeds">—</b><span>我的種子商<span class="my">မျိုးစေ့ဆိုင်</span></span></button>
     <button type="button" class="mstat" data-jump="mineMonth"><b id="msVisits">—</b><span>本月拜訪<span class="my">ဤလ သွားရောက်မှု</span></span></button>
-    <button type="button" class="mstat" data-jump="mineReports"><b>📄</b><span>試作報告<span class="my">အစီရင်ခံစာ</span></span></button>
   </div>
 
   <section class="msec" id="mineFarmers">
-    <h2>我負責的農民<span class="my">ကျွန်ုပ် တာဝန်ယူသော လယ်သမား</span><span class="sub" id="closeFarmerCount">點一位看他的進度／နှိပ်ပြီး တိုးတက်မှု ကြည့်ပါ</span></h2>
+    <h2>我負責的客戶<span class="my">ကျွန်ုပ် တာဝန်ယူသော ဖောက်သည်</span><span class="sub" id="closeFarmerCount">點一位看進度和過往拜訪紀錄（照片、錄音）／နှိပ်ပြီး ကြည့်ပါ</span></h2>
+    <!-- 0.4.73 董事長：只列自己負責的；切換看農民、盤商、種子商 -->
+    <div class="rptscope" id="mineType" role="group" aria-label="看哪一種客戶">
+      <button type="button" data-mtype="農民" aria-pressed="true">農民<span class="my">လယ်သမား</span></button>
+      <button type="button" data-mtype="盤商" aria-pressed="false">盤商<span class="my">ကုန်သည်</span></button>
+      <button type="button" data-mtype="種子商" aria-pressed="false">種子商<span class="my">မျိုးစေ့ဆိုင်</span></button>
+    </div>
     <ul class="flist" id="closeFarmerList"></ul>
     <!-- 舊程式還會讀這個選單（看進度選了誰）：留著但藏起來，不再顯示重複的下拉 -->
     <select id="closeFarmer" hidden aria-hidden="true" tabindex="-1"><option value="">—</option></select>
     <div class="progress" id="closeProgress" hidden aria-live="polite"></div>
+    <!-- 0.4.73 董事長「點進去要有之前拜訪過的紀錄及照片及錄音」：過往全部拜訪（照片、錄音按了才下載） -->
+    <div class="progress vhist" id="closeHistory" hidden aria-live="polite"></div>
   </section>
 
   <section class="msec" id="mineTrials">
@@ -323,20 +349,7 @@ footer{margin-top:18px;text-align:center}
     <ul id="planList"></ul>
   </section>
 
-  <!-- 0.4.61 董事長：試作成功、失敗都要有報表，所有人都看得到；0.4.69 平常摺起來，點開才看（要有網路） -->
-  <details class="msec mrep" id="mineReports">
-    <summary>試作報告（成功／失敗）<span class="my">စမ်းသပ်မှု အစီရင်ခံစာ</span><span class="sub">所有已結束的試作、推廣，大家都看得到；要有網路</span></summary>
-    <!-- 0.4.69 看哪一種：全部／我的報告（負責業務＝我）／其他業務的；首頁右上角兩顆按鈕直接切到「我的」或「其他業務」 -->
-    <div class="rptscope" id="reportScope" role="group" aria-label="看哪一種報告">
-      <button type="button" data-scope="all" aria-pressed="true">全部<span class="my">အားလုံး</span></button>
-      <button type="button" data-scope="mine" aria-pressed="false">我的報告<span class="my">ကျွန်ုပ်၏</span></button>
-      <button type="button" data-scope="others" aria-pressed="false">其他業務<span class="my">အခြားသူများ</span></button>
-    </div>
-    <p class="rptnow" id="reportNow" aria-live="polite">現在看：全部的試作報告／အားလုံး</p>
-    <button type="button" class="btn2" id="reportLoadBtn">看試作報告／အစီရင်ခံစာ ကြည့်ရန်</button>
-    <p class="sub" id="reportHint" aria-live="polite"></p>
-    <ul id="reportList"></ul>
-  </details>
+  <!-- 0.4.73 董事長「試作報告拿掉」：業務手機不再有試作報告（0.4.61～0.4.72 這裡是試作報告摺疊區）；主管網頁照舊有 -->
   </div>
   </div>
 
@@ -344,10 +357,11 @@ footer{margin-top:18px;text-align:center}
   <div class="hpanel" id="hp-close" role="tabpanel" aria-labelledby="htab-close" hidden>
   <!-- 0.4.60 董事長：結案是一顆按鈕，底下就是農民、盤商、種子行的結案 -->
   <p class="sub">選一種去結案，送主管審核／ရွေးပြီး ပိတ်သိမ်းပါ (မန်နေဂျာ စစ်ဆေးရန်)</p>
+  <!-- 0.4.73 董事長：結案改「一般農民、試作農民、推廣農民結案」，盤商結案、種子商結案拿掉；選了農民會列之前的照片、留言、錄音、地址、過往成功失敗 -->
   <div class="farmermenu closepick" id="closePick">
-    <button type="button" data-closecat="結案">農民結案<span class="my">လယ်သမား</span></button>
-    <button type="button" data-closecat="盤商">盤商結案<span class="my">ကုန်သည်</span></button>
-    <button type="button" data-closecat="種子商">種子商結案<span class="my">မျိုးစေ့ဆိုင်</span></button>
+    <button type="button" data-closecat="結案" data-closegroup="一般農民">一般農民結案<span class="my">ပုံမှန် လယ်သမား</span></button>
+    <button type="button" data-closecat="結案" data-closegroup="試作農民">試作農民結案<span class="my">စမ်းသပ် လယ်သမား</span></button>
+    <button type="button" data-closecat="結案" data-closegroup="推廣農民">推廣農民結案<span class="my">မြှင့်တင် လယ်သမား</span></button>
   </div>
   </div>
 
@@ -395,6 +409,8 @@ footer{margin-top:18px;text-align:center}
     <!-- 0.4.35 董事長：選擇農民後跳出這位農民之前的進度（農民進度表）；沒有進度就跳出新增（補齊）農民資料。
          0.4.44 董事長：照四步驟（選農民→進度小卡→有見到嗎→存檔）移到選農民正下方 -->
     <div class="progress" id="progressBox" hidden aria-live="polite"></div>
+    <!-- 0.4.73 董事長：結案畫面選了農民，列之前的照片、留言、錄音、地址、過往試作成功失敗（只有結案時出現） -->
+    <div class="progress vhist" id="closeVisitHist" hidden aria-live="polite"></div>
     <!-- 0.4.44 作物、品種、代碼縮成進度卡下面一行；按「修改」或資料沒填才展開四格 -->
     <div class="cropsum" id="cropSum" hidden><span id="cropSumText"></span> <button type="button" class="link" id="cropEditBtn">✎ 修改／ပြင်</button></div>
     <!-- 0.4.35 董事長：「試作農民、一般農民怎麼沒有品種、編號選項」→ 作物、種子公司、品種（代碼）從收起來的客戶資料搬出來，選了農民就看得到 -->
@@ -421,7 +437,8 @@ footer{margin-top:18px;text-align:center}
           <div><label class="lab" for="pGps">GPS 座標<span class="my">GPS တည်နေရာ</span></label><input type="text" id="pGps" readonly placeholder="拍照時自動帶入／ဓာတ်ပုံရိုက်လျှင် ဖြည့်မည်"></div>
         </div>
         <div class="dealer-only"><label class="lab" for="pAddress">地址<span class="my">လိပ်စာ</span></label><input type="text" id="pAddress" maxlength="200"></div>
-        <div class="dealer-only"><label class="lab" for="pBrand">品牌（賣哪些品牌）<span class="my">ရောင်းသော တံဆိပ်များ</span></label><input type="text" id="pBrand" list="dlBrands" maxlength="120"></div>
+        <!-- 0.4.73 董事長截圖：盤商、種子商「品牌」改成「作物」下拉（跟農民同一份作物清單），選單沒有的寫在下面「其他」；舊品牌資料留在試算表不動 -->
+        <div class="dealer-only"><label class="lab" for="pDCrop">作物<span class="my">သီးနှံ</span></label><select id="pDCrop"></select></div>
         <div class="farmer-only row2">
           <div><label class="lab" for="pAreaNow">目前種植面積<small class="unit"></small><span class="my">လက်ရှိ စိုက်ဧက</span></label><input type="number" id="pAreaNow" min="0" step="0.1" inputmode="decimal"></div>
           <div><label class="lab" for="pAreaMax">可種植面積<small class="unit"></small><span class="my">စိုက်နိုင်သော ဧက</span></label><input type="number" id="pAreaMax" min="0" step="0.1" inputmode="decimal"></div>
