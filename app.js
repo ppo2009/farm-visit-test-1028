@@ -126,6 +126,8 @@
     const ticks = (await mineTicks()).length;
     if (pending || ticks) { toast(`還有 ${[pending ? pending + ' 筆拜訪' : '', ticks ? ticks + ' 個任務打勾' : ''].filter(Boolean).join('、')}沒上傳，先連上網路等它傳完再登出／မတင်ရသေးသော မှတ်တမ်းရှိသည်၊ အင်တာနက်ချိတ်ပြီး တင်ပြီးမှ ထွက်ပါ`); return; }
     if (!confirm('確定要登出嗎？之後要再輸入帳號密碼。\nထွက်မှာ သေချာပါသလား။ နောက်တစ်ကြိမ် အကောင့်နှင့် စကားဝှက် ပြန်ထည့်ရမည်။')) return;
+    // 0.4.75 董事長「右上角登出，而且實際上也要登出」：先請後台停用這支手機的裝置金鑰（最多等 5 秒；沒網路、逾時、舊後台不認得、出錯都照樣登出）
+    try { await Promise.race([gasCall({ action: 'logout' }), new Promise(r => setTimeout(r, 5000))]); } catch (e) { /* 照樣清本機、回登入頁 */ }
     await Store.setMeta('config', null);
     showLogin();
   }
@@ -180,66 +182,70 @@
     setHomeTab(saved);
   }
 
-  const MINE_TYPES = { 農民: 'လယ်သမား', 盤商: 'ကုန်သည်', 種子商: 'မျိုးစေ့ဆိုင်' }; // 0.4.73 我的進度：三種客戶
+  // 0.4.75 董事長「我的進度要改：一般農民、試作農民、推廣農民、種子商、盤商，都要有下拉選單」：五顆切換，每一類一個看得見的下拉選單
+  const MINE_TYPES = { 一般農民: 'ပုံမှန် လယ်သမား', 試作農民: 'စမ်းသပ် လယ်သမား', 推廣農民: 'မြှင့်တင် လယ်သမား', 種子商: 'မျိုးစေ့ဆိုင်', 盤商: 'ကုန်သည်' };
   const FARMER_GROUPS = ['一般農民', '試作農民', '推廣農民']; // 0.4.73 結案分頁三顆
-  /** 0.4.57 董事長：「我的進度」結案下面的選單：挑自己負責的農民、列出進度（跟打卡畫面結案只列自己的一樣） */
+  /* 0.4.75 董事長「主管訂的目標進度，農民 150 天做成一個進度 100%」：從種植日期算起，150 天＝100%（全專案只有這裡定天數） */
+  const GROW_DAYS = 150;
+  /** 種植進度：沒填（或格式不對）回 null；日期在未來＝0%；超過 150 天顯示 100%、full＝true。today、plantDate 都是 YYYY-MM-DD（緬甸日期） */
+  function growOf(plantDate, today) {
+    const pd = String(plantDate || '').slice(0, 10);
+    if (!/^\d{4}-\d\d-\d\d$/.test(pd) || !/^\d{4}-\d\d-\d\d$/.test(String(today || ''))) return null;
+    const days = Math.round((Date.parse(today) - Date.parse(pd)) / 86400000);
+    if (!isFinite(days)) return null;
+    if (days < 0) return { days: 0, pct: 0, future: true, full: false };
+    return { days, pct: Math.min(100, Math.round(days / GROW_DAYS * 100)), future: false, full: days >= GROW_DAYS };
+  }
+  const growLabel = g => (g ? `${g.pct}%` : '未填種植日期');
+  function growHtml(g) { // 進度條＋百分比＋第 N 天／150 天（跟「主管訂的目標」同一種進度條）
+    if (!g) return '<p class="sub">未填種植日期，算不出種植進度（到「種植資料」分頁補填）／စိုက်ပျိုးသည့်ရက် မဖြည့်ရသေး</p>';
+    return `<div class="grow"><span class="lab">種植進度 စိုက်ပျိုးမှု တိုးတက်မှု：<b>${g.pct}%</b>　${g.future ? '還沒到種植日期' : `第 ${g.days} 天／${GROW_DAYS} 天`}${g.full ? `（已滿 ${GROW_DAYS} 天）` : ''}</span>`
+      + `<span class="bar"><i style="width:${g.pct}%"></i></span></div>`;
+  }
+  /** 農民分三類，跟結案 group 同一套（closeTrialGroup）：有進行中試作＝試作農民、推廣＝推廣農民、都沒有＝一般農民；盤商、種子商照類型 */
+  async function mineGroupOf(f) {
+    const type = f.type || '農民';
+    if (type !== '農民') return type;
+    for (const cat of ['試作', '推廣']) { const t = await activeTrialFor(f.id, cat); if (t) return closeTrialGroup({ cat, t }); }
+    return closeTrialGroup(null);
+  }
+  /** 0.4.57／0.4.73／0.4.75 「我的進度」：自己負責的客戶（不看別人的），五類各幾位、選一類出現下拉、選一位展開進度卡＋過往紀錄；另列農民種植進度 */
   async function fillCloseFarmers() {
     const sel = document.getElementById('closeFarmer');
     if (!sel) return; // 舊頁面沒有這個選單
     const server = (await Store.getMeta('farmers')) || [], local = (await Store.getMeta('localCustomers')) || [];
     const me = String(((await getConfig()) || {}).name || '');
-    // 0.4.73 董事長：我的進度列「自己負責的」農民、盤商、種子商（不看別人的）；上方切換看哪一種。
-    // state.closeList 照舊只放農民（種植資料分頁用）；state.mineAll 是三種全部
+    // state.closeList 照舊只放農民（種植資料分頁用）；state.mineAll 是全部自己負責的
     const allMine = server.concat(local.filter(l => !server.some(f => f.id === l.id)))
       .filter(f => f.pending || String(f.staff || '') === me);
     state.mineAll = allMine;
     state.closeList = allMine.filter(f => (f.type || '農民') === '農民');
-    const mtype = MINE_TYPES[state.mineType] ? state.mineType : '農民';
-    const list = allMine.filter(f => (f.type || '農民') === mtype);
-    const cnt = t => allMine.filter(f => (f.type || '農民') === t).length;
-    $n('msFarmers').textContent = String(cnt('農民')); $n('msDealers').textContent = String(cnt('盤商')); $n('msSeeds').textContent = String(cnt('種子商'));
+    const today = mmDay(0); // 業務BUG#4：緬甸的今天（0.4.75 種植進度也用這個日期算）
+    const groupOf = {}, growOfId = {};
+    for (const f of allMine) { groupOf[f.id] = await mineGroupOf(f); if ((f.type || '農民') === '農民') growOfId[f.id] = growOf(f.plantDate, today); }
+    const mtype = MINE_TYPES[state.mineType] ? state.mineType : '一般農民';
+    const list = allMine.filter(f => groupOf[f.id] === mtype);
+    const cnt = t => allMine.filter(f => groupOf[f.id] === t).length;
+    [['msGen', '一般農民'], ['msTrial', '試作農民'], ['msPromo', '推廣農民'], ['msSeeds', '種子商'], ['msDealers', '盤商']].forEach(([id, t]) => { $n(id).textContent = String(cnt(t)); });
     if (typeof document.querySelectorAll === 'function') document.querySelectorAll('#mineType [data-mtype]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mtype === mtype)));
+    const isFarmer = FARMER_GROUPS.indexOf(mtype) >= 0;
     const keep = sel.value;
-    sel.innerHTML = '<option value="">— 請選擇 ရွေးပါ —</option>' + list.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`).join('');
+    sel.innerHTML = `<option value="">— 選一位${mtype} ${MINE_TYPES[mtype]} ရွေးပါ —</option>` + list.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}${isFarmer ? '｜' + esc(growLabel(growOfId[f.id])) : ''}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`).join('');
     sel.value = keep && list.some(f => f.id === keep) ? keep : '';
-    if (!sel.value) { const b = $n('closeProgress'); b.hidden = true; b.innerHTML = ''; const hb = $n('closeHistory'); hb.hidden = true; hb.innerHTML = ''; hb._tok = null; }
-    // 0.4.57 董事長：列出找到哪幾個農民、每位的進度（狀態、進行中的試作、最後拜訪、下次回訪）
-    const ul = document.getElementById('closeFarmerList');
-    if (!ul) return;
-    $n('closeFarmerCount').textContent = `共 ${list.length} 位${mtype}，點一位看進度和過往拜訪紀錄（照片、錄音）／${list.length} ဦး၊ နှိပ်ပြီး ကြည့်ပါ`;
-    const today = mmDay(0); // 業務BUG#4：緬甸的今天（原本用手機當地時區）
-    const rows = [];
-    for (const f of list) {
-      const tr = [];
-      if (mtype === '農民') for (const cat of ['試作', '推廣']) { const t = await activeTrialFor(f.id, cat); if (t) tr.push(`${cat}中：${t.item || '（未填品項）'}${t.start ? `（${t.start} 開始）` : ''}`); }
-      const parts = [f.pending ? '剛新增，還沒上傳' : (f.status || ''), ...tr,
-        f.lastVisit ? `最後拜訪 ${f.lastVisit}` : '還沒拜訪過', f.nextDue ? `下次回訪 ${f.nextDue}` : ''].filter(Boolean);
-      const late = f.nextDue && f.nextDue < today;
-      // 0.4.69：一行標題（點了就地展開進度）；展開的進度卡放在同一個 li 裡
-      rows.push(`<li data-cid="${esc(f.id)}"><div class="fhead go" role="button" tabindex="0" aria-expanded="false"><span><b>${esc(f.name)}</b>${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}${f.crop ? '｜' + esc(f.crop) : ''}<br><small>${esc(parts.join('・'))}</small></span>${late ? '<span class="pill late">逾期 ရက်ကျော်</span>' : ''}<span class="chev" aria-hidden="true">›</span></div></li>`);
+    sel.disabled = !list.length;
+    state.mineGrow = growOfId;
+    if (!sel.value) { const b = $n('closeProgress'); b.hidden = true; b.innerHTML = ''; const hb = $n('closeHistory'); hb.hidden = true; hb.innerHTML = ''; hb._tok = null; const gb = $n('closeGrow'); gb.hidden = true; gb.innerHTML = ''; }
+    $n('closeFarmerCount').textContent = list.length ? `共 ${list.length} 位${mtype}，從下拉選一位看進度和過往拜訪紀錄（照片、錄音）／${list.length} ဦး၊ ရွေးပြီး ကြည့်ပါ`
+      : `還沒有自己負責的${mtype}／${MINE_TYPES[mtype]} မရှိသေး`;
+    // 「主管訂的目標」底下：農民種植進度（三類都列，百分比由高到低；沒填種植日期排最後）
+    const gl = document.getElementById('growList');
+    if (gl) {
+      const farmers = state.closeList.slice().sort((a, b) => { const ga = growOfId[a.id], gb = growOfId[b.id]; return (gb ? gb.pct : -1) - (ga ? ga.pct : -1); });
+      gl.innerHTML = farmers.map(f => { const g = growOfId[f.id];
+        return `<li class="plan"><span>${esc(f.name)}<br><small>${esc(groupOf[f.id])}・${g ? (g.future ? '還沒到種植日期' : `第 ${g.days} 天／${GROW_DAYS} 天`) : '未填種植日期'}</small><span class="bar"><i style="width:${g ? g.pct : 0}%"></i></span></span>`
+          + `${!g ? '<span class="pill wait">未填 မဖြည့်ရ</span>' : g.full ? `<span class="pill ok">已滿 ${GROW_DAYS} 天</span>` : `<span class="pill wait">${g.pct}%</span>`}</li>`; }).join('')
+        || '<li class="empty">還沒有自己負責的農民／လယ်သမား မရှိသေး</li>';
     }
-    // 換掉清單前，先把進度卡搬出來（不然會跟著舊清單一起被清掉）；畫完再放回選中的那一位底下
-    const box = document.getElementById('closeProgress');
-    if (box && ul.contains(box)) ul.parentNode.insertBefore(box, ul.nextSibling);
-    const hist = document.getElementById('closeHistory'); // 0.4.73 過往紀錄框跟進度卡一起搬
-    if (hist && ul.contains(hist)) ul.parentNode.insertBefore(hist, box ? box.nextSibling : ul.nextSibling);
-    ul.innerHTML = rows.join('') || `<li class="empty">還沒有自己負責的${mtype}／${MINE_TYPES[mtype]} မရှိသေး</li>`;
-    const placeBox = () => {
-      ul.querySelectorAll('li[data-cid]').forEach(li => { const on = li.dataset.cid === sel.value; li.classList.toggle('open', on); const hd = li.querySelector('.fhead'); if (hd) hd.setAttribute('aria-expanded', String(on)); });
-      const li = sel.value ? ul.querySelector(`li[data-cid="${typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(sel.value) : sel.value}"]`) : null;
-      if (box) { if (li) li.appendChild(box); else if (ul.contains(box)) ul.parentNode.insertBefore(box, ul.nextSibling); }
-      if (hist) { if (li) li.appendChild(hist); else if (ul.contains(hist)) ul.parentNode.insertBefore(hist, box ? box.nextSibling : ul.nextSibling); }
-    };
-    placeBox();
-    ul.querySelectorAll('li[data-cid] .fhead').forEach(hd => {
-      const toggle = () => {
-        const cid = hd.parentNode.dataset.cid;
-        sel.value = sel.value === cid ? '' : cid; // 再點一次同一位＝收起來
-        placeBox(); showCloseProgress();
-      };
-      hd.addEventListener('click', toggle);
-      hd.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); } });
-    });
   }
   /* ───── 0.4.59 首頁「種植資料」分頁：選自己負責的農民，改種植資料直接存（不算拜訪） ───── */
   function fillPlantFarmers() {
@@ -431,6 +437,10 @@
   function showCloseProgress() {
     const sel = document.getElementById('closeFarmer'), cid = sel ? sel.value : '';
     const current = () => !!sel && sel.value === cid, list = state.mineAll || state.closeList || [];
+    // 0.4.75 董事長「農民 150 天做成一個進度 100%」：選到農民 → 進度卡最上面放種植進度條（盤商、種子商沒有）
+    const gb = $n('closeGrow'), f = list.find(x => x.id === cid);
+    if (cid && f && (f.type || '農民') === '農民') { gb.hidden = false; gb.innerHTML = growHtml((state.mineGrow || {})[cid] || growOf(f.plantDate, mmDay(0))); }
+    else { gb.hidden = true; gb.innerHTML = ''; }
     renderProgress(cid, { box: $n('closeProgress'), current, list, home: true });
     renderHistory(cid, $n('closeHistory'), { current, list }); // 0.4.73 董事長：點進去要有之前拜訪過的紀錄及照片及錄音
   }
@@ -439,22 +449,29 @@
      後台 myHistory（這位客戶全部拜訪，最多 50 筆＋試作／推廣紀錄＋地址）、myFile（照片／錄音，只限自己負責的客戶）。
      照片、錄音點了才下載（緬甸網路慢、省流量），下載過的記在 fileCache，同一次開網頁不重抓 */
   const fileCache = {};
-  async function loadMyFile(cid, fileId, kind) {
+  async function loadMyFile(cid, fileId, kind, scope) {
     const key = kind + ':' + fileId;
     if (fileCache[key]) return fileCache[key];
     let r;
-    try { r = await gasCall({ action: 'myFile', cid, fileId, kind }); } catch (e) { r = null; }
+    // 0.4.75 田間打卡看別人負責的農民：帶 scope:'field'（後台農民任何業務都能讀；盤商、種子商照舊只限負責人）
+    try { r = await gasCall(Object.assign({ action: 'myFile', cid, fileId, kind }, scope ? { scope } : {})); } catch (e) { r = null; }
     if (!r || !r.ok || !r.data) return { err: r && r.offline ? '要有網路／အင်တာနက် လိုသည်' : r && r.timeout ? '網路太慢，請再按一次／ထပ်နှိပ်ပါ' : (r && r.message) || '讀取失敗，請再按一次／ထပ်နှိပ်ပါ' };
     return (fileCache[key] = { url: `data:${r.mime || (kind === 'photo' ? 'image/jpeg' : 'audio/wav')};base64,${r.data}` });
   }
   const TRIAL_PILL = { 成功: 'ok', 失敗: 'late', 結束: 'wait', 進行中: 'wait' };
+  /** 0.4.75 收起過往紀錄框（換掉讀取記號，還在讀的結果回來也不會再打開） */
+  const hideHist = id => { const hb = $n(id); hb.hidden = true; hb.innerHTML = ''; hb._tok = null; };
+  /* 1號清單低4（0.4.75）：過往紀錄的類別加緬文；後台會給「結案（已退回）」「結案（待確認）」，括號裡的狀態也加緬文（示意，待校對） */
+  const HIST_STATE_MY = { 已退回: 'ပြန်ပို့ပြီး', 待確認: 'စစ်ဆေးရန်' };
+  const histCatBi = c => { const s = String(c || ''), m = s.match(/^(.*?)（(.+)）$/);
+    return m ? `${catBi(m[1])}（${m[2]}${HIST_STATE_MY[m[2]] ? '／' + HIST_STATE_MY[m[2]] : ''}）` : catBi(s); };
   function histHtml(r, o) {
     const addr = [r.area, r.town, r.village].filter(Boolean).join('・');
     const head = o.showAddr ? `<p class="sub">${addr ? '📍 ' + esc(addr) : ''}${r.address ? `${addr ? '　' : '📍 '}${esc(r.address)}` : ''}${r.phone ? `　📞 ${esc(String(r.phone).replace(/^'/, ''))}` : ''}</p>` : '';
     const trials = (r.trials || []).map(t => `<li><span class="pill ${TRIAL_PILL[t.status] || 'wait'}">${esc(t.status || '—')}</span> <b>${esc(catBi(t.cat || '試作'))}</b>：${esc(t.item || '（未填品項）')}${t.crop ? '（' + esc(t.crop) + '）' : ''}`
       + `<br><small>${esc(t.start || '?')}～${esc(t.end || (t.status === '進行中' ? '進行中' : '?'))}${t.yield !== '' ? `・產量 ${esc(t.yield)} ${esc(t.yieldUnit)}` : ''}${t.comment ? '・農民評價：' + esc(t.comment) : ''}</small>`
       + `${t.reason ? `<br><small>失敗原因 အကြောင်းရင်း：${esc(t.reason)}</small>` : ''}${t.conclusion ? `<br><small>結論：${esc(t.conclusion)}</small>` : ''}</li>`).join('');
-    const visits = (r.visits || []).map(v => `<li><b>${esc(v.time)}</b>｜${esc(CAT_LABEL(v.cat || ''))}${v.staff ? '｜' + esc(v.staff) : ''}`
+    const visits = (r.visits || []).map(v => `<li><b>${esc(v.time)}</b>｜${esc(histCatBi(v.cat))}${v.staff ? '｜' + esc(v.staff) : ''}`
       // 1號第2任讀碼中2（第8任）：text 是中文摘要，業務自己打的（常是緬文）看不到 → 摘要跟打字原文不一樣時，原文另外列一行
       + `${v.text ? `<br>${esc(v.text)}` : ''}${v.typed && v.typed !== v.text ? `<br><small>打字原文 မူရင်း：${esc(v.typed)}</small>` : ''}${v.noMeet ? `<br><span class="pill wait">沒見到</span> ${esc(v.noMeet)}` : ''}${v.prices ? `<br><small>價格：${esc(v.prices)}</small>` : ''}`
       + `${v.plantFail ? `<br><span class="pill late">種植失敗</span> ${esc(v.plantFail)}` : ''}${v.closing ? `<br><small>結案：${esc(v.closing)}</small>` : ''}`
@@ -470,31 +487,32 @@
     if (!el || !el.id) return; // 舊頁面沒有這一塊
     if (!cid || cid === '__new') { el.hidden = true; el.innerHTML = ''; el._tok = null; return; }
     const f = (o.list || []).find(x => x.id === cid) || {};
-    if (f.pending) { el.hidden = false; el.innerHTML = '<p class="sub">剛新增、還沒上傳的客戶，上傳後才看得到過往紀錄／တင်ပြီးမှ ကြည့်နိုင်</p>'; return; }
+    if (f.pending) { el._tok = null; el.hidden = false; el.innerHTML = '<p class="sub">剛新增、還沒上傳的客戶，上傳後才看得到過往紀錄／တင်ပြီးမှ ကြည့်နိုင်</p>'; return; }
     const tok = {}; el._tok = tok;
     el.hidden = false; el.innerHTML = '<h3>過往紀錄／ယခင် မှတ်တမ်း</h3><p class="sub">讀取中…／ဖတ်နေသည်</p>';
     let r;
-    try { r = await gasCall({ action: 'myHistory', cid }); } catch (e) { r = { ok: false, message: '網路不穩，請再試一次／ထပ်ကြိုးစားပါ' }; }
+    try { r = await gasCall(Object.assign({ action: 'myHistory', cid }, o.scope ? { scope: o.scope } : {})); } catch (e) { r = { ok: false, message: '網路不穩，請再試一次／ထပ်ကြိုးစားပါ' }; }
+    if (r && !r.ok && r.code === 'NOT_ALLOWED') r = { ok: false, message: '只能看自己負責的客戶／ကိုယ်တာဝန်ယူထားသော ဖောက်သည်သာ' }; // 0.4.75 舊後台不認得 scope：照實說，不當掉
     if (el._tok !== tok) return; // 讀的途中換了客戶，新的那次接手
     if (!current()) { el.hidden = true; el.innerHTML = ''; el._tok = null; return; }
     if (!r || !r.ok) { el.innerHTML = `<h3>過往紀錄／ယခင် မှတ်တမ်း</h3><p class="sub">${esc(r && r.offline ? '要有網路才看得到過往紀錄、照片、錄音／အင်တာနက် လိုသည်' : (r && r.message) || '讀取失敗，請再試一次／ထပ်ကြိုးစားပါ')}</p>`; return; }
     el.innerHTML = histHtml(r, o);
     el.querySelectorAll('[data-hph]').forEach(b => b.addEventListener('click', async () => {
       b.disabled = true; const label = b.textContent; b.textContent = '下載中…';
-      const x = await loadMyFile(cid, b.dataset.hph, 'photo');
+      const x = await loadMyFile(cid, b.dataset.hph, 'photo', o.scope);
       if (x.err) { toast(x.err); b.textContent = label; b.disabled = false; return; }
       const img = document.createElement('img'); img.src = x.url; img.alt = label; img.className = 'hphoto'; b.replaceWith(img);
     }));
     el.querySelectorAll('[data-hau]').forEach(b => b.addEventListener('click', async () => {
       b.disabled = true; const label = b.textContent; b.textContent = '下載中…';
-      const x = await loadMyFile(cid, b.dataset.hau, 'audio');
+      const x = await loadMyFile(cid, b.dataset.hau, 'audio', o.scope);
       if (x.err) { toast(x.err); b.textContent = label; b.disabled = false; return; }
       const au = document.createElement('audio'); au.controls = true; au.src = x.url; b.replaceWith(au);
     }));
   }
 
   /* ───── 0.4.72 董事長「執行任務清單：新增幾個一般農民、試作農民、推廣農民、盤商、種子商，詳細的要列出來」（1號）─────
-     後台 home.newList＝本月自己新增的客戶（已分好類）；五格各幾位，點一格展開那一類的明細（名字、鄉鎮地區、新增日期），再點收起 */
+     後台 home.newList＝本月自己新增的客戶（已分好類）；五格各幾位，點一格展開那一類的明細（名字、鎮・村・地區、新增日期），再點收起 */
   const NEW_GROUPS = [['一般農民', 'ပုံမှန် လယ်သမား'], ['試作農民', 'စမ်းသပ် လယ်သမား'], ['推廣農民', 'မြှင့်တင် လယ်သမား'], ['盤商', 'ကုန်သည်'], ['種子商', 'မျိုးစေ့ဆိုင်']];
   function renderNewCust(h) {
     const chips = document.getElementById('newCustChips'), ul = document.getElementById('newCustList');
@@ -513,7 +531,8 @@
       return `<button type="button" class="ncchip" data-ncg="${esc(g)}" aria-pressed="${state.ncGroup === g}"${n ? '' : ' disabled'}><b>${n}</b><span>${esc(g)}<span class="my">${esc(my)}</span></span></button>`; }).join('');
     const shown = state.ncGroup ? list.filter(c => c.group === state.ncGroup) : [];
     ul.hidden = !shown.length;
-    ul.innerHTML = shown.map(c => { const place = [c.village, c.town, c.area ? String(c.area).split(/[ （(]/)[0] : ''].filter(Boolean).join('・');
+    // 0.4.75 董事長「農民改鎮跟村」：鎮放前面（town＝鎮、village＝村）
+    ul.innerHTML = shown.map(c => { const place = [c.town, c.village, c.area ?String(c.area).split(/[ （(]/)[0] : ''].filter(Boolean).join('・');
       return `<li><span><b>${esc(c.name || '（未命名）')}</b>${place ? '｜' + esc(place) : ''}<br><small>${esc(c.group)}・${esc(String(c.date || '').slice(5).replace('-', '/'))} 新增 အသစ်</small></span></li>`; }).join('');
     chips.querySelectorAll('[data-ncg]').forEach(b => b.addEventListener('click', () => { state.ncGroup = state.ncGroup === b.dataset.ncg ? '' : b.dataset.ncg; renderNewCust(h); }));
   }
@@ -771,7 +790,7 @@
   function applyCatLabels() {
     const cat = state.cat;
     $('visitTitle').textContent = isDealerCat() ? '盤商或種子商 ကုန်သည် / မျိုးစေ့ဆိုင်'
-      : cat === '結案' && FARMER_GROUPS.indexOf(state.closeGroup) >= 0 ? `${state.closeGroup}結案 ပိတ်သိမ်း` : '農民 လယ်သမား'; // 0.4.73 結案標出是哪一種農民
+      : cat === '結案' && closeGroupNow() ? `${closeGroupNow()}結案 ပိတ်သိမ်း` : '農民 လယ်သမား'; // 0.4.73 結案標出是哪一種農民；0.4.75 低3 選了農民後依實際分類
     $('farmerLab').innerHTML = isDealerCat() ? `選擇${cat}<span class="my">${cat === '種子商' ? 'မျိုးစေ့ဆိုင်' : 'ကုန်သည်'} ရွေးပါ</span>` : '選擇農民<span class="my">လယ်သမား ရွေးပါ</span>';
     $('priceBox').hidden = cat !== '盤商' || !!state.dealerClose; // 0.4.41 董事長：種子商那邊不需要價格，只有盤商有
     document.querySelectorAll('.dealer-only').forEach(el => { el.hidden = !isDealerCat(); });
@@ -890,7 +909,7 @@
     state.allCustomers = all;
   }
 
-  // 0.4.71 董事長截圖：地區旁加「鄉」「鎮」（業務手打）；「使用肥料」改叫「其他」（資料照存使用肥料欄）；一般／試作／推廣農民、盤商、種子商都要有
+  // 0.4.71 董事長截圖：地區旁加「鎮」「村」（業務手打；0.4.75 原本叫「鄉」改叫「村」、鎮在前）；「使用肥料」改叫「其他」（資料照存使用肥料欄）；一般／試作／推廣農民、盤商、種子商都要有
   // 0.4.73 董事長：盤商、種子商「品牌」改「作物」（dcrop → 送出時改名 crop）；品牌欄不再出現在表單，舊資料留在試算表不動
   const PROFILE_INPUTS = { name: 'pName', owner: 'pOwner', phone: 'pPhone', area: 'pArea', village: 'pVillage', town: 'pTown', address: 'pAddress', brand: 'pBrand', dcrop: 'pDCrop', crop: 'pCrop', variety: 'pVariety', varCode: 'pVarCode', areaNow: 'pAreaNow', areaMax: 'pAreaMax', plantDate: 'pPlantDate', fertilizer: 'pFert' };
   const DEALER_KEYS = ['name', 'owner', 'phone', 'area', 'village', 'town', 'address', 'dcrop', 'fertilizer'];
@@ -901,9 +920,9 @@
   const FAIL_IDS = ['fWeather', 'fTemp', 'fFert', 'fWater', 'fPest', 'fPestNote', 'fReason'];
   const visitDirty = () => !!(state.photos.length || state.busyPhotos || state.audio || state.rec || $('note').value.trim() || $('plantFail').checked);
   /** 業務BUG#5：返回首頁前要確認的「填了東西」——除了照片錄音打字，還有沒見到匯報、新客戶資料、結案欄位、盤商結案說明、價格、試作表單 */
-  const filled = id => !!String(($n(id).value) || '').trim();
+  const filled = id => { const e = $n(id); return e.type === 'checkbox' ? !!e.checked : !!String((e.value) || '').trim(); }; // 0.4.75 勾選框看有沒有勾（value 永遠是 on）
   // 結案七欄＋盤商結案說明（formDirty、換客戶共用）；2號 0.4.70 低3（第8任）：漏了結案地區 cRegion、洽談結果 dcOutcome（兩個下拉，預設空白、不會自動帶值）
-  const CLOSE_IDS = ['cRegion', 'cPrice', 'cYield', 'cBuyer', 'cPhone', 'cReason', 'cProgress', 'dcOutcome', 'dcNote', 'cTrialOutcome']; // 0.4.74 加試作結果
+  const CLOSE_IDS = ['cRegion', 'cPrice', 'cYield', 'cBuyer', 'cPhone', 'cReason', 'cProgress', 'dcOutcome', 'dcNote', 'cTrialOutcome', 'cPlantFail']; // 0.4.74 加試作結果；0.4.75 加種植失敗勾選（filled、清除都認得勾選框）
   const formDirty = () => !!(visitDirty() || filled('nmNote')
     || ($('farmer').value === '__new' && Object.values(PROFILE_INPUTS).some(filled))
     || CLOSE_IDS.some(filled)
@@ -940,18 +959,18 @@
         : `換農民會清掉剛剛的照片、錄音、打字、匯報${extra}，確定要換？\nလယ်သမား ပြောင်းလျှင် ဓာတ်ပုံ၊ အသံ၊ စာ ပျောက်မည်။`;
       if (!confirm(ask)) { $('farmer').value = prev; return; }
       clearVisitInput();
-      CLOSE_IDS.forEach(id => { $n(id).value = ''; }); // 中1：確定換人，上一位的結案欄位一起清
+      CLOSE_IDS.forEach(id => { const e = $n(id); if (e.type === 'checkbox') { e.checked = false; e.disabled = false; } else e.value = ''; }); // 中1：確定換人，上一位的結案欄位一起清（0.4.75 勾選框取消勾）
     }
     if (prev && val !== prev && hasPrices) { $('priceRows').innerHTML = ''; addPriceRow(); refreshPriceBtn(); }
     state.farmerVal = val;
     const box = $('profileBox');
-    Object.values(PROFILE_INPUTS).forEach(id => { $n(id).value = ''; }); // 0.4.71 用 $n：舊頁面沒有鄉、鎮也不當
+    Object.values(PROFILE_INPUTS).forEach(id => { $n(id).value = ''; }); // 0.4.71 用 $n：舊頁面沒有鎮、村也不當
     $n('pGps').value = ''; // 0.4.71 GPS 座標：換客戶就清掉，拍照時再帶入
     $('pVarCo').value = ''; // 0.4.31：換客戶就重選公司，不帶上一位的
     state.original = null;
     state.cropOpen = false; // 0.4.44 換客戶：作物四格先收起來（沒填才自動展開）
     resetNoMeet(); // 0.4.38 換客戶就回到「有見到農民」；0.4.44 起改成回到「還沒選有沒有見到」
-    if (!val) { box.hidden = true; $('progressBox').hidden = true; const hb = $n('closeVisitHist'); hb.hidden = true; hb.innerHTML = ''; hb._tok = null; refreshTrialBox(); refreshSave(); return; } // 0.4.35 沒選人：進度、作物品種都收起來；0.4.73 過往紀錄也收
+    if (!val) { box.hidden = true; $('progressBox').hidden = true; const hb = $n('closeVisitHist'); hb.hidden = true; hb.innerHTML = ''; hb._tok = null; const vh = $n('visitHistory'); vh.hidden = true; vh.innerHTML = ''; vh._tok = null; refreshTrialBox(); refreshSave(); return; } // 0.4.35 沒選人：進度、作物品種都收起來；0.4.73、0.4.75 過往紀錄也收
     box.hidden = val !== '__new' && !SHOW_PROFILE_ON_VISIT; // 0.4.48 舊客戶不顯示客戶資料（資料照樣讀進來，開始試作時的品種代碼仍用得到）
     $('dealerTypeBox').hidden = true; // 盤商、種子商分開進來，種類就是入口，不用再選
     if (val === '__new') {
@@ -974,6 +993,9 @@
     // 0.4.73 董事長「結案要有之前的照片、留言、錄音、地址、詳細過往失敗成功的紀錄」：結案畫面選了農民就列過往紀錄
     if (state.cat === '結案') renderHistory(val, $n('closeVisitHist'), { current: () => $('farmer').value === val, list: state.allCustomers || [], showAddr: true, showTrials: true });
     else { const hb = $n('closeVisitHist'); hb.hidden = true; hb.innerHTML = ''; hb._tok = null; }
+    // 0.4.75 董事長「田間打卡：所有的農民之前紀錄都要有之前圖片跟錄音」：一般／試作／推廣農民（不限自己負責）列過往紀錄；盤商、種子商、結案不列
+    if (state.cat !== '結案' && groupOf(state.cat) === 'farmer') renderHistory(val, $n('visitHistory'), { current: () => $('farmer').value === val && state.cat !== '結案' && groupOf(state.cat) === 'farmer', list: state.allCustomers || [], showTrials: true, scope: 'field' });
+    else { const vh = $n('visitHistory'); vh.hidden = true; vh.innerHTML = ''; vh._tok = null; }
     // 換客戶就清掉試作表單：剛剛打的結果不能套到另一位客戶的試作（2026-11-11 第四輪自抓 T8）
     resetTrialForm();
     refreshSave();
@@ -1096,8 +1118,10 @@
   }
   /* 一般拜訪的種植失敗（0.4.33）：同一組失敗欄位（failBox）搬到一般拜訪下面用；切回試作結束時再搬回去 */
   const plantFailOn = () => state.cat === '農戶' && !!$('farmer').value && $('plantFail').checked;
+  // 0.4.75 董事長「『這次發現種植失敗（要寫原因）』這邊移除，但是要移到所有農民結案這邊」：一般拜訪不再顯示（改回 true 就恢復；程式、plantFailure 欄位保留，舊資料照常顯示）
+  const PLANT_FAIL_ON_VISIT = false;
   function refreshPlantFail() {
-    const show = state.cat === '農戶' && !!$('farmer').value && !noMeetOn();
+    const show = PLANT_FAIL_ON_VISIT && state.cat === '農戶' && !!$('farmer').value && !noMeetOn();
     $('plantFailBox').hidden = !show;
     if (!show) $('plantFail').checked = false;
     placeFailBox();
@@ -1105,8 +1129,25 @@
   }
   /* ───── 0.4.74 董事長「要，先填結果」：農民結案時，這位農民有進行中的試作（或推廣）→ 先填結果（成功／失敗，失敗要填失敗紀錄）─────
      同時有試作和推廣時以試作為準（推廣那筆後台照舊寫「結束」）。欄位約定見 2 號確認：closing.trialResult {id, cat, outcome, failure?, startInfo?}、closing.group */
-  const closeFailOn = () => state.cat === '結案' && !!state.closeTrial && state.closeTrialFor === $('farmer').value && $n('cTrialOutcome').value === '失敗' && typeof document !== 'undefined' && !!document.getElementById('closeFailSlot');
-  /** 同一組失敗欄位（failBox）只有一份：種植失敗 → 一般拜訪下面；結案試作失敗 → 結案區；其他 → 回試作結束表單 */
+  /** 送出的 group 和結案標題共用：有進行中試作＝試作農民、推廣＝推廣農民、都沒有＝一般農民 */
+  const closeTrialGroup = ct => (ct ? (ct.cat === '試作' ? '試作農民' : '推廣農民') : '一般農民');
+  /** 0.4.75 低3：結案標題用哪一種——選了農民、而且查完試作 → 實際分類；還沒選（或還在查）→ 按的那顆按鈕 */
+  const closeGroupNow = () => { const sel = $('farmer').value;
+    if (sel && sel !== '__new' && state.closeTrialFor === sel) return closeTrialGroup(state.closeTrial);
+    return FARMER_GROUPS.indexOf(state.closeGroup) >= 0 ? state.closeGroup : ''; };
+  function refreshCloseTitle() { if (state.cat === '結案' && closeGroupNow()) $('visitTitle').textContent = `${closeGroupNow()}結案 ပိတ်သိမ်း`; }
+  /** 結案：這位農民的試作（推廣）結果選了失敗 */
+  const closeTrialFailed = () => state.cat === '結案' && !!state.closeTrial && state.closeTrialFor === $('farmer').value && $n('cTrialOutcome').value === '失敗';
+  /** 0.4.75 結案的「這次發現種植失敗」有勾（試作失敗時會自動勾） */
+  const closePlantFailOn = () => state.cat === '結案' && !!$('farmer').value && !!$n('cPlantFail').checked;
+  const closeFailOn = () => (closeTrialFailed() || closePlantFailOn()) && typeof document !== 'undefined' && !!document.getElementById('closeFailSlot');
+  /** 0.4.75：試作結果選失敗 → 種植失敗自動勾、鎖住（同一份失敗紀錄，不要填兩次）；改回成功或換人 → 解開、取消自動勾的那一次 */
+  function syncClosePlantFail() {
+    const cb = $n('cPlantFail');
+    if (closeTrialFailed()) { if (!cb.checked) state.plantFailAuto = true; cb.checked = true; cb.disabled = true; } // 業務自己先勾的，不算自動勾
+    else { cb.disabled = false; if (state.plantFailAuto) { cb.checked = false; state.plantFailAuto = false; } }
+  }
+  /** 同一組失敗欄位（failBox）只有一份：種植失敗 → 一般拜訪下面（0.4.75 起不顯示）；結案試作失敗或結案種植失敗 → 結案區；其他 → 回試作結束表單 */
   function placeFailBox() {
     const box = $('failBox');
     const slot = plantFailOn() ? $('plantFailSlot') : closeFailOn() ? $n('closeFailSlot') : $('trialEndForm');
@@ -1116,7 +1157,7 @@
   /** 結案畫面：查這位農民有沒有進行中的試作（先）或推廣，有就顯示結果欄（必填） */
   async function refreshCloseTrial() {
     const box = $n('closeTrialBox'), sel = $('farmer').value;
-    if (state.cat !== '結案' || !sel || sel === '__new') { state.closeTrial = null; state.closeTrialFor = null; box.hidden = true; placeFailBox(); return; }
+    if (state.cat !== '結案' || !sel || sel === '__new') { state.closeTrial = null; state.closeTrialFor = null; box.hidden = true; placeFailBox(); refreshCloseTitle(); return; }
     if (state.closeTrialFor === sel) return; // 這位已經查過（結果欄已經在填，不要洗掉）
     const gen = state.formGen;
     state.closeTrial = null; state.closeTrialFor = null; // 查完之前 closeProblem 會擋「讀取中」，不會送出沒帶結果的結案
@@ -1124,11 +1165,13 @@
     for (const cat of ['試作', '推廣']) { const t = await activeTrialFor(sel, cat); if (t) { hit = { cat, t }; break; } }
     if (gen !== state.formGen || sel !== $('farmer').value || state.cat !== '結案') return; // 查的途中換了客戶或離開結案
     state.closeTrial = hit; state.closeTrialFor = sel;
+    refreshCloseTitle(); // 0.4.75 低3：標題改成這位農民的實際分類（跟送出的 group 同一套）
     box.hidden = !hit;
     if (hit) {
       $n('closeTrialLab').innerHTML = `${hit.cat}結果（必填）<span class="my">${CAT_MY[hit.cat] || ''} ရလဒ် (မဖြစ်မနေ)</span>`;
       $n('closeTrialNow').textContent = `進行中 လုပ်ဆောင်ဆဲ：${hit.t.item || '（未填品項）'}${hit.t.start ? '，' + hit.t.start + ' 開始 စတင်' : ''}。結案前請先填${hit.cat}成功或失敗／ပိတ်သိမ်းမီ ရလဒ် ရွေးပါ`;
     } else $n('cTrialOutcome').value = '';
+    syncClosePlantFail(); // 0.4.75 試作失敗 → 種植失敗自動勾
     placeFailBox();
     refreshSave();
   }
@@ -1239,6 +1282,8 @@
         if (o !== '成功' && o !== '失敗') return `請先選${ct.cat}結果（成功或失敗）／${CAT_MY[ct.cat] || ''} ရလဒ် ရွေးပါ`;
         if (o === '失敗') { const fm = failMissing(); if (fm.length) return `${ct.cat}失敗要填：${fm.join('、')}／မအောင်မြင်မှု မှတ်တမ်း မပြည့်စုံသေး`; }
       }
+      // 0.4.75 結案勾了「這次發現種植失敗」：失敗紀錄全部必填（試作失敗時上面已經檢查過同一組，不重複；舊頁面沒有這個勾選）
+      if (closePlantFailOn() && !closeTrialFailed()) { const fm = failMissing(); if (fm.length) return `種植失敗要填：${fm.join('、')}／မအောင်မြင်မှု မှတ်တမ်း မပြည့်စုံသေး`; }
     }
     return '';
   }
@@ -1252,8 +1297,8 @@
   /** 0.4.74 董事長「要讓主管看到」＋「要，先填結果」：group 依送出當下這位農民的實際狀態（不看按哪一顆結案鈕）；trialResult 格式照 2 號約定 */
   function closeTrialFields() {
     const sel = $('farmer').value, ct = state.closeTrialFor === sel ? state.closeTrial : null;
-    if (!ct) return { group: '一般農民', trialResult: null };
-    const group = ct.cat === '試作' ? '試作農民' : '推廣農民', outcome = $n('cTrialOutcome').value;
+    if (!ct) return { group: closeTrialGroup(null), trialResult: null };
+    const group = closeTrialGroup(ct), outcome = $n('cTrialOutcome').value;
     if (outcome !== '成功' && outcome !== '失敗') return { group, trialResult: null }; // 舊頁面沒有結果欄：不送空結果（後台照舊寫「結束」）
     const tr = { id: ct.t.id, cat: ct.cat, outcome };
     if (outcome === '失敗') tr.failure = collectFailure();
@@ -1298,6 +1343,7 @@
     $('plantFail').checked = false; // 0.4.33
     state.activeTrial = null;
     state.closeTrial = null; state.closeTrialFor = null; $n('cTrialOutcome').value = ''; $n('closeTrialBox').hidden = true; // 0.4.74 換客戶：結案的試作結果也清掉、重查
+    { const cb = $n('cPlantFail'); cb.checked = false; cb.disabled = false; state.plantFailAuto = false; } // 0.4.75 結案的種植失敗勾選也清掉
     setTrialMode(null);
     refreshPlantFail();
     $('trialBox').hidden = true;
@@ -1670,7 +1716,7 @@ ${state.cat}：${who}
       account: cfg.account || '',
       category: state.cat === '結案' ? '農戶' : state.cat, // 結案記成農民拜訪（統計照舊），另外帶 closing
       closing: collectClosing(),
-      plantFailure: plantFailOn() ? collectFailure() : null, // 0.4.33 一般拜訪的種植失敗
+      plantFailure: plantFailOn() || closePlantFailOn() ? collectFailure() : null, // 0.4.33 一般拜訪的種植失敗；0.4.75 改在農民結案勾（試作失敗時自動帶同一份）
       noMeet: collectNoMeet(), // 0.4.38 沒見到農民／農民拒絕 → 下次再訪
       farmerId,
       tempName,
@@ -1730,6 +1776,7 @@ ${state.cat}：${who}
     // 0.4.54 第6任檢查：上一位客戶的進度卡、作物四格會殘留到下一次打卡畫面 → 進畫面就清掉
     const pbx = $('progressBox'); if (pbx) { pbx.hidden = true; pbx.innerHTML = ''; }
     { const hb = $n('closeVisitHist'); hb.hidden = true; hb.innerHTML = ''; hb._tok = null; } // 0.4.73 結案過往紀錄也清掉
+    hideHist('visitHistory'); // 0.4.75 田間打卡過往紀錄也清掉
     state.cropOpen = false; $n('cropBox').hidden = true; $n('cropSum').hidden = true;
     ['cPrice', 'cYield', 'cBuyer', 'cPhone'].forEach(id => { $(id).value = ''; });
     ['cReason', 'cProgress'].forEach(id => { $n(id).value = ''; }); // 0.4.62 原因、進度也清掉
@@ -1943,7 +1990,8 @@ ${state.cat}：${who}
     $('trialStartBtn').addEventListener('click', () => setTrialMode(state.trialMode === 'start' ? null : 'start'));
     $('trialEndBtn').addEventListener('click', () => setTrialMode(state.trialMode === 'end' ? null : 'end'));
     $('tOutcome').addEventListener('change', () => setTrialMode('end'));
-    $n('cTrialOutcome').addEventListener('change', () => { placeFailBox(); refreshSave(); }); // 0.4.74 結案試作結果：選失敗就展開失敗紀錄
+    $n('cTrialOutcome').addEventListener('change', () => { syncClosePlantFail(); placeFailBox(); refreshSave(); }); // 0.4.74 結案試作結果：選失敗就展開失敗紀錄；0.4.75 種植失敗跟著自動勾
+    $n('cPlantFail').addEventListener('change', () => { placeFailBox(); refreshSave(); }); // 0.4.75 結案勾「這次發現種植失敗」→ 展開失敗紀錄
     $('meetYes').addEventListener('click', () => setNoMeet(false)); // 0.4.38
     $('meetNo').addEventListener('click', () => setNoMeet(true));
     ['nmReason', 'nmNote', 'nmNext'].forEach(id => { $(id).addEventListener('input', refreshSave); $(id).addEventListener('change', refreshSave); });

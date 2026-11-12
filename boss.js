@@ -91,7 +91,11 @@
     cf: { q: '', staff: '', area: '', type: '', show: 'attn' }, // 客戶頁的搜尋與篩選；預設只看要注意的（2026-11-12 規劃 B）
     grpOpen: {},     // 客戶頁各業務分組有沒有展開（使用者按過才記）
     moreOpen: false, // 「更多」分頁列有沒有打開
-    renderGen: 0 };  // 每畫一次加一，舊畫面的照片迴圈看到不同就停
+    renderGen: 0,    // 每畫一次加一，舊畫面的照片迴圈看到不同就停
+    loadSeq: 0,      // 0.4.75（1號主管清單低5）：每次 load 加一，回來時不是最新那次就丟掉
+    dataGen: 0 };    // 畫面資料被動作（確認結案、派任務、標已讀…）改過就加一：在那之前出發的 load 晚到時不採用，改重讀一次
+  /** 動作回來的資料寫進畫面資料（一律走這裡，dataGen 才會加一） */
+  function setData(patch) { Object.assign(state.data, patch); state.dataGen++; }
   // 登入後的金鑰記在這台電腦的瀏覽器裡（存不了就每次重新登入）
   const keyStore = {
     get() { try { return localStorage.getItem(KEY_NAME); } catch (e) { return null; } },
@@ -168,9 +172,14 @@
   async function load() {
     if (!state.key) { showLogin(); return; }
     $('loginMsg').textContent = '讀取中…';
+    const seq = ++state.loadSeq, gen = state.dataGen;
     let data;
     try { data = await api({ action: 'boss' }); }
     catch (e) { data = { ok: false, code: 'NETWORK', message: '連不上伺服器，請確認網路後重新整理' }; }
+    // 0.4.75（1號主管清單低5）：Apps Script 同時處理好幾個請求，回來順序不一定 → 不是最新那次的結果丟掉；
+    // 出發後畫面資料被動作改過（例如剛確認結案）→ 這份可能是改之前的，不採用，重讀一次
+    if (seq !== state.loadSeq) return;
+    if (gen !== state.dataGen && state.data) { load(); return; }
     if (!data.ok) {
       if (data.code === 'BAD_LOGIN' || data.code === 'NOT_BOSS') { logout(); showLogin(data.message || '登入失敗'); return; }
       // 已經有畫面時，暫時的錯誤只顯示在上方，不要把人踢回登入頁
@@ -253,14 +262,15 @@
       $('panel').querySelectorAll('[data-closedecide]').forEach(x => { x.disabled = true; });
       let r;
       try { r = await api({ action: 'closeDecide', visitId: b.dataset.vid, decision: b.dataset.closedecide }); } catch (e) { r = { ok: false, message: '連不上伺服器' }; }
-      if (r.closings) state.data.closings = r.closings;
+      if (r.closings) setData({ closings: r.closings });
       state.closeMsg = r.ok ? (ok ? '已確認結案' : '已退回') : '⚠ ' + (r.message || '處理失敗');
-      if (r.ok && ok) { render(); load(); return; } // 確認結案會改客戶狀態、試作：整份重讀；主管BUG#4：先重畫（按鈕恢復、看到成功訊息），重讀失敗也不會卡灰
+      // 確認結案會改客戶狀態、試作：整份重讀；主管BUG#4：先重畫（按鈕恢復、看到成功訊息），重讀失敗也不會卡灰
+      // 0.4.75（1號主管清單低7）：退回也重讀，拜訪紀錄、客戶履歷才會馬上變「結案（已退回）」
+      if (r.ok && ok) { render(); load(); return; }
+      if (r.ok && !ok) { render(); load(); return; } // 低7：退回
       render();
     }));
-    $('panel').querySelectorAll('[data-play]').forEach(el => el.addEventListener('click', () => playAudio(el)));
-    $('panel').querySelectorAll('[data-speak]').forEach(el => el.addEventListener('click', () => speak(el)));
-    $('panel').querySelectorAll('[data-report]').forEach(el => el.addEventListener('click', () => downloadReport(el)));
+    bindMedia($('panel'));
     $('panel').querySelectorAll('[data-filter]').forEach(el => el.addEventListener('change', () => { state.rf[el.dataset.filter] = el.value; render(); }));
     $('panel').querySelectorAll('[data-month]').forEach(el => el.addEventListener('change', () => { state.pm = el.value; render(); }));
     if (state.tab === 'progress') loadProgress(state.pm);
@@ -268,6 +278,13 @@
     if (state.tab === 'trial') { loadPhotos(); loadHistory(); }
   }
 
+  /** 播放錄音、朗讀摘要、下載報告的按鈕（整頁重畫和只重畫履歷都用這個；綁過的標 data-mbound 不重複綁） */
+  function bindMedia(root) {
+    root.querySelectorAll('[data-play]:not([data-mbound]),[data-speak]:not([data-mbound]),[data-report]:not([data-mbound])').forEach(el => {
+      el.dataset.mbound = '1';
+      el.addEventListener('click', () => (el.dataset.play ? playAudio(el) : el.dataset.speak ? speak(el) : downloadReport(el)));
+    });
+  }
   /** 點客戶名字：到客戶頁看他的履歷；窄螢幕時履歷在清單下面，自動捲過去 */
   function bindGo(root) {
     root.querySelectorAll('[data-go]:not([data-bound])').forEach(el => (el.dataset.bound = '1', el).addEventListener('click', () => {
@@ -287,7 +304,7 @@
     if (!r || !r.ok) return;
     state.hist[c.id] = r.visits;
     const now = state.tab === 'trial' && custSelected();
-    if (now && now.id === c.id) render();
+    if (now && now.id === c.id) { if ($('custDetail')) refreshCustDetail(); else render(); } // 0.4.75 低3：只重畫履歷，不重建搜尋框
   }
 
   /* ───── 聲音：原始錄音（緬甸語）＋用手機內建語音念中文摘要 ───── */
@@ -299,12 +316,13 @@
 
   let player = null, playingId = '', playingBtn = null;
   const PLAY_LABEL = '▶ 聽原始錄音（緬甸語）';
+  const playHtml = () => esc(PLAY_LABEL) + `<span class="my">${BI[PLAY_LABEL]}</span>`; // 0.4.75（1號主管清單低9）：還原時連緬文小字一起還原
   async function playAudio(btn) {
     const id = btn.dataset.play;
-    if (player && playingId === id) { player.pause(); player = null; playingId = ''; btn.textContent = PLAY_LABEL; return; }
+    if (player && playingId === id) { player.pause(); player = null; playingId = ''; btn.innerHTML = playHtml(); return; }
     // 換聽另一段：上一段停掉，按鈕也要恢復（原本會一直停在「停止」；2026-11-11 抓到）
     if (player) player.pause();
-    if (playingBtn && playingBtn !== btn) playingBtn.textContent = PLAY_LABEL;
+    if (playingBtn && playingBtn !== btn) playingBtn.innerHTML = playHtml();
     player = null; playingId = ''; playingBtn = btn;
     btn.textContent = '讀取錄音中…';
     try {
@@ -317,7 +335,7 @@
       player = new Audio(state.audios[id]);
       playingId = id;
       const me = player;
-      player.onended = () => { btn.textContent = PLAY_LABEL; if (player === me) { player = null; playingId = ''; } };
+      player.onended = () => { btn.innerHTML = playHtml(); if (player === me) { player = null; playingId = ''; } };
       await player.play();
       btn.textContent = '⏸ 停止';
     } catch (e) { btn.textContent = '這支手機無法播放這段錄音'; }
@@ -419,7 +437,7 @@
     const list = state.data.closings || [];
     if (!list.length) return '';
     return `<section class="closings"><h3><span class="pill p-red">待確認結案 ${list.length} 筆</span> <span class="sub">業務按了結案，確認後才真的結案；按錯就退回</span></h3>
-      <ul class="list">${list.map(c => `<li><b><a href="javascript:void 0" data-go="${esc(c.cid)}">${esc(c.name)}</a></b>｜${esc(c.staff)}｜${esc(c.date)}${c.custEnded ? ' <span class="pill p-yel">客戶已經是「已結束」：確認＝維持結束，退回＝不記這筆結案（客戶仍是已結束）</span>' /* 主管BUG(2號)#6 */ : ''}${c.group ? ' <span class="pill">' + esc(c.group) + (c.trialOutcome ? '・試作' + esc(c.trialOutcome) : '') + '</span>' /* 0.4.74 結案分類、試作結果 */ : ''}${c.after && (c.after.visits || c.after.trials) ? '<br><span class="pill p-red">結案之後還有 ' + (c.after.visits || 0) + ' 筆拜訪' + (c.after.trials ? '、' + c.after.trials + ' 件新開始的試作（確認後新試作不會跟著結束）' : '') + '，請先看客戶履歷再決定</span>' /* 結案清單中1 */ : ''}<br>
+      <ul class="list">${list.map(c => `<li><b><a href="javascript:void 0" data-go="${esc(c.cid)}">${esc(c.name)}</a></b>｜${esc(c.staff)}｜${esc(c.date)}${c.custEnded ? ' <span class="pill p-yel">客戶已經是「已結束」：確認＝維持結束，退回＝不記這筆結案（客戶仍是已結束）</span>' /* 主管BUG(2號)#6 */ : ''}${c.group ? ' <span class="pill">' + esc(c.group) + (c.trialOutcome ? '・' + esc(c.trialCat || (c.group === '推廣農民' ? '推廣' : '試作')) + esc(c.trialOutcome) : '') + '</span>' /* 0.4.74 結案分類、試作結果；0.4.75 複查低3：照後台 trialCat 寫試作或推廣（舊後台沒送就看分類） */ : ''}${c.after && (c.after.visits || c.after.trials) ? '<br><span class="pill p-red">結案之後還有 ' + (c.after.visits || 0) + ' 筆拜訪' + (c.after.trials ? '、' + c.after.trials + ' 件新開始的試作（確認後新試作不會跟著結束）' : '') + '，請先看客戶履歷再決定</span>' /* 結案清單中1 */ : ''}<br>
         <span class="sub">${c.result ? esc(c.result) /* 0.4.42 盤商、種子商洽談成功／失敗 */ : !c.buyer && (c.price === '' || c.price == null) && (c.yield === '' || c.yield == null) ? '洽談結果沒記到（結案分頁少了「結果」欄，請在試算表按「第一次安裝／升級」）' /* 主管BUG#10 */ : `賣給 ${esc(c.buyer || '—')}（${esc(c.region || '地區未填')}）｜價格 ${esc(c.price)} ${esc(c.priceUnit || '')}｜產量 ${esc(c.yield)} ${esc(c.yieldUnit || '')}${c.phone ? '｜電話 ' + esc(c.phone) : ''}${c.reason ? '｜原因 ' + esc(c.reason) : ''}${c.progress ? '｜進度 ' + esc(c.progress) : ''}`}</span><br>
         <button class="btn primary" type="button" data-closedecide="confirm" data-vid="${esc(c.visitId)}">確認結案</button>
         <button class="btn" type="button" data-closedecide="reject" data-vid="${esc(c.visitId)}">退回（不結案）</button></li>`).join('')}</ul>
@@ -479,7 +497,29 @@
   /** 右邊（手機在下面）要顯示誰的履歷：有指定就是他，沒有就是篩選結果的第一位 */
   function custSelected() {
     const cs = state.data.customers;
-    return cs.find(x => x.id === state.trial) || custFiltered().slice().sort(custOrder)[0] || null;
+    // 0.4.75（1號主管清單低4）：有指定客戶但清單裡已經沒有（被刪、改編號）→ 回 null、畫面寫「找不到」，不悄悄改顯示另一位
+    if (state.trial) return cs.find(x => x.id === state.trial) || null;
+    return custFiltered().slice().sort(custOrder)[0] || null;
+  }
+  /** 履歷那一欄的內容（低3、低4 共用） */
+  function custDetailHtml() {
+    const c = custSelected();
+    if (c) return renderCustDetail(c);
+    if (state.trial) return `<p class="err">找不到這位客戶（編號 ${esc(state.trial)}），可能已經從客戶清單刪掉或改了編號。請按「重新整理」，或在左邊另選一位。</p>`;
+    return state.cf.q ? '<p class="empty">找不到符合的客戶。</p>' : '<p class="empty">左邊選一位客戶，就會在這裡看到他的履歷。</p>';
+  }
+  /** 0.4.75（1號主管清單低3）：只重畫履歷那一欄（搜尋時、履歷讀完時），不重畫整頁 → 搜尋框不會被重建、手機鍵盤不會收起來 */
+  function refreshCustDetail() {
+    const d = $('custDetail');
+    if (!d) return;
+    state.renderGen++; // 舊畫面的照片迴圈停掉
+    const c = custSelected();
+    d.dataset.cid = c ? c.id : '';
+    d.innerHTML = custDetailHtml();
+    bindGo(d); bindMedia(d); biDom(d);
+    const box = $('custList');
+    if (box) box.querySelectorAll('.crow[data-go]').forEach(b => b.setAttribute('aria-current', String(!!c && b.dataset.go === c.id)));
+    loadPhotos(); loadHistory();
   }
   function custOrder(a, b) {
     const ra = attnOf(a), rb = attnOf(b);
@@ -503,7 +543,13 @@
   }
   function bindCustomers() {
     const q = $('custQ');
-    if (q) q.addEventListener('input', () => { state.cf.q = q.value; const box = $('custList'); box.innerHTML = renderCustList(); bindCustList(box); biDom(box); });
+    if (q) q.addEventListener('input', () => {
+      state.cf.q = q.value; const box = $('custList'); box.innerHTML = renderCustList(); bindCustList(box); biDom(box);
+      // 0.4.75（1號主管清單低3）：履歷跟著換（指定的客戶不在搜尋結果裡就改看結果第一位）；只重畫履歷那一欄
+      if (state.trial && !custFiltered().some(c => c.id === state.trial)) state.trial = null;
+      const c = custSelected(), d = $('custDetail');
+      if (d && d.dataset.cid !== (c ? c.id : '')) refreshCustDetail();
+    });
     $('panel').querySelectorAll('[data-cf]').forEach(el => el.addEventListener('change', () => { state.cf[el.dataset.cf] = el.value; state.trial = null; render(); }));
     bindCustList($('custList'));
   }
@@ -528,14 +574,14 @@
       <span class="sub">要注意的＝逾期、今天該回訪、試作進行中、7 天內拜訪過</span></div>`;
     const c = custSelected();
     return `<div class="custgrid"><div>${tools}<div id="custList">${renderCustList()}</div></div>
-      <div id="custDetail">${c ? renderCustDetail(c) : '<p class="empty">左邊選一位客戶，就會在這裡看到他的履歷。</p>'}</div></div>`;
+      <div id="custDetail" data-cid="${esc(c ? c.id : '')}">${custDetailHtml()}</div></div>`;
   }
 
   function renderCustDetail(c) {
     const list = visitsOf(c.id), s = dueState(c);
     const dealer = c.type === '盤商' || c.type === '種子商';
     const kv = (k, val) => val !== '' && val != null ? `<span>${k}：${esc(val)}</span>` : '';
-    return `<div class="card profile"><span><b>${esc(c.name)}</b>（${esc(c.id)}・${esc(c.type || '農民')}）</span><span>${esc(c.area || '')}</span>${kv('鄉', c.village)}${kv('鎮', c.town)}${kv('電話', c.phone)}
+    return `<div class="card profile"><span><b>${esc(c.name)}</b>（${esc(c.id)}・${esc(c.type || '農民')}）</span><span>${esc(c.area || '')}</span>${kv('鎮', c.town)}${kv('村', c.village) /* 0.4.75 董事長「農民改鎮跟村」：鄉改村、鎮放前面 */}${kv('電話', c.phone)}
         ${dealer ? kv('老闆', c.owner) + kv('地址', c.address) + kv('作物', c.crop) + kv('品牌（舊資料）', c.brand) + kv('其他', c.fertilizer) /* 0.4.73 董事長：盤商、種子商品牌改作物；舊的品牌資料有才顯示 */
           : kv('作物', c.crop) + kv('品種', c.variety) + kv('代碼', c.varCode) + kv('目前種植面積', c.areaNow === '' || c.areaNow == null ? '' : c.areaNow + ' ' + (state.data.areaUnit || '英畝')) + kv('可種植面積', c.areaMax === '' || c.areaMax == null ? '' : c.areaMax + ' ' + (state.data.areaUnit || '英畝')) /* 主管BUG#11 */ + kv('種植日期', c.plantDate) + kv('其他', c.fertilizer)
             + `<span>試作：${esc(c.trial || '—')}${c.start ? '（' + md(c.start) + ' 開始）' : ''}</span>`}<span>負責：${esc(c.staff || '—')}</span>
@@ -621,7 +667,7 @@
   }
 
   async function downloadReport(btn) {
-    const label = btn.textContent;
+    const label = btn.innerHTML; // 0.4.75（1號主管清單低9）：存 innerHTML，緬文小字才不會黏成一串
     btn.textContent = '下載中…'; btn.disabled = true;
     try {
       const r = await api({ action: 'report', trialId: btn.dataset.report });
@@ -630,7 +676,7 @@
       const url = URL.createObjectURL(new Blob([bytes], { type: r.mime }));
       const a = document.createElement('a'); a.href = url; a.download = r.name; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 10000);
-      btn.textContent = label;
+      btn.innerHTML = label;
     } catch (e) { btn.textContent = '下載失敗，請再試'; } finally { btn.disabled = false; }
   }
 
@@ -734,7 +780,7 @@
         if (!state.tf.rid || state.tf.ridKey !== key) { state.tf.rid = newRid(); state.tf.ridKey = key; }
         let r;
         try { r = await api({ action: 'taskAdd', staff: state.tf.staff, cid: state.tf.cid, text: state.tf.text.trim(), rid: state.tf.rid }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再按一次（不會派成兩條）' }; }
-        if (r.ok) { state.data.tasks = r.tasks; state.tf.text = ''; state.tf.rid = ''; state.tf.ridKey = ''; state.taskMsg = toBoss ? '已派出（主管打開主管網頁「任務」就會看到）' : '已派出（業務手機下次同步就會看到）'; }
+        if (r.ok) { setData({ tasks: r.tasks }); state.tf.text = ''; state.tf.rid = ''; state.tf.ridKey = ''; state.taskMsg = toBoss ? '已派出（主管打開主管網頁「任務」就會看到）' : '已派出（業務手機下次同步就會看到）'; }
         else state.taskMsg = '⚠ ' + (r.message || '派發失敗');
         render();
       });
@@ -744,7 +790,8 @@
       b.disabled = true;
       let r;
       try { r = await api({ action: 'taskCancel', id: b.dataset.taskcancel }); } catch (e) { r = { ok: false, message: '連不上伺服器' }; }
-      if (r.ok) { state.data.tasks = r.tasks; state.taskMsg = '已取消'; } else state.taskMsg = '⚠ ' + (r.message || '取消失敗');
+      if (r.ok) { setData({ tasks: r.tasks }); state.taskMsg = '已取消'; }
+      else { if (r.tasks) setData({ tasks: r.tasks }); state.taskMsg = '⚠ ' + (r.message || '取消失敗'); } // 0.4.75（1號主管清單低6）：已經完成的照實說，清單也換成最新的
       render();
     }));
     // 主管完成自己的任務：用跟業務手機打勾同一個動作（只能完成自己的）
@@ -754,7 +801,7 @@
       try { r = await api({ action: 'taskDone', done: [{ id: b.dataset.mytaskdone, at: Date.now() }] }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再試一次' }; }
       if (r.ok && (r.done || []).indexOf(b.dataset.mytaskdone) >= 0) {
         // 主管BUG(2號)#10：先在畫面上標完成、重畫（按鈕不會卡灰），再整份重讀；重讀失敗也看得到「已完成」
-        const t = (state.data.tasks || []).find(x => x.id === b.dataset.mytaskdone); if (t) t.status = '已完成';
+        const t = (state.data.tasks || []).find(x => x.id === b.dataset.mytaskdone); if (t) { t.status = '已完成'; state.dataGen++; }
         state.taskMsg = '已完成'; render(); load(); return;
       }
       state.taskMsg = '⚠ ' + (r.message || '沒有完成，請再按一次');
@@ -803,6 +850,8 @@
         ${pending ? '<button class="btn" type="button" id="bNew">放棄確認、改成新的一份</button>' : ''}</form>` + msg +
       `<h3>我送出的匯報</h3>` + (list.map(b => briefItem(b, false)).join('') || '<p class="empty">還沒有</p>');
   }
+  /** 標已讀／回覆後的未讀數：後台有回 briefUnread 就用；舊後台沒回就用清單自己算（清單已含 100 份以外的舊未讀） */
+  const briefUnreadOf = r => (r && r.briefUnread != null ? Number(r.briefUnread) || 0 : (r && r.briefs || []).filter(b => !b.read).length);
   function bindBriefs() {
     const form = $('briefForm');
     if (form) {
@@ -822,12 +871,12 @@
         let r;
         try { r = await api({ action: 'briefAdd', text: text, rid: state.bf.rid }); } catch (e) { r = { ok: false, message: '連不上伺服器，請按「再送一次確認」（不會變成兩份）' }; }
         if (r.ok) {
-          state.data.briefs = r.briefs; state.bf = { text: '', rid: '', sentText: '' };
+          setData({ briefs: r.briefs }); state.bf = { text: '', rid: '', sentText: '' };
           // 只有確定寄出才說「已通知」；沒寄出、或重送時伺服器也不知道寄了沒，都照實說（R8-06）
           state.briefMsg = r.mailed === true ? '已送出，已通知總經理' : r.mailed === false ? '已送出（通知信沒寄出去，總經理打開主管網頁仍看得到）' : '已送出（匯報已存，通知狀態未確認；總經理打開主管網頁看得到）';
         } else if (r.code === 'RID_CONFLICT') {
           // 舊的那份其實已經送到（內容是修改前的）：解開，讓他決定要不要把修改後的另送一份
-          if (r.briefs) state.data.briefs = r.briefs;
+          if (r.briefs) setData({ briefs: r.briefs });
           state.bf = { text: text, rid: '', sentText: '' };
           state.briefMsg = '⚠ ' + r.message;
         } else {
@@ -850,7 +899,7 @@
       el.dataset.unread = '0';
       let r;
       try { r = await api({ action: 'briefRead', id: el.dataset.brief }); } catch (e) { r = { ok: false }; }
-      if (r.ok) { state.data.briefs = r.briefs; render(); }
+      if (r.ok) { setData({ briefs: r.briefs, briefUnread: briefUnreadOf(r) }); render(); } // 0.4.75（1號主管清單中1）：紅點跟著減
       else el.dataset.unread = '1'; // 沒成功：改回未讀，收起再打開會再標一次（自行審查 S7）
     }));
     $('panel').querySelectorAll('[data-replyform]').forEach(f => {
@@ -862,7 +911,7 @@
         f.querySelector('button').disabled = true;
         let r;
         try { r = await api({ action: 'briefReply', id: id, text: ta.value.trim() }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再試一次' }; }
-        if (r.ok) { state.data.briefs = r.briefs; delete state.replyDraft[id]; state.briefMsg = '已回覆'; } else state.briefMsg = '⚠ ' + (r.message || '回覆失敗');
+        if (r.ok) { setData({ briefs: r.briefs, briefUnread: briefUnreadOf(r) }); delete state.replyDraft[id]; state.briefMsg = '已回覆'; } else state.briefMsg = '⚠ ' + (r.message || '回覆失敗');
         render();
       });
     });
@@ -905,7 +954,7 @@
     const after = r => {
       if (r.ok) {
         state.newPw = { account: r.account, reset: r.reset, disabled: !!r.disabled };
-        state.data.salesAccounts = r.accounts;
+        setData({ salesAccounts: r.accounts });
         state.acctMsg = '';
         load(); // 重新讀一次：任務的派給誰選單也會出現新帳號
       } else state.acctMsg = '⚠ ' + (r.message || '沒有完成');
@@ -939,7 +988,7 @@
       b.disabled = true;
       let r;
       try { r = await api({ action: 'accountActive', account: b.dataset.acct, active: on }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再試一次' }; }
-      if (r.ok) { state.data.salesAccounts = r.accounts; state.acctMsg = (on ? '已啟用 ' : '已停用 ') + r.account; load(); }
+      if (r.ok) { setData({ salesAccounts: r.accounts }); state.acctMsg = (on ? '已啟用 ' : '已停用 ') + r.account; load(); }
       else state.acctMsg = '⚠ ' + (r.message || '沒有完成');
       render();
     }));

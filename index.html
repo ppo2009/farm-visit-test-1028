@@ -145,7 +145,7 @@ details.profile{border:1px solid var(--line);border-radius:12px;padding:10px 12p
 details.profile summary{font-weight:700;cursor:pointer}
 .fields{display:grid;gap:10px;margin-top:10px}
 .fields .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
-.fields .row4{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;align-items:end} /* 0.4.71 地區｜鄉｜鎮｜GPS：電腦一排四格、手機 375 寬兩格兩排（140px 實測 375 會變一格一排） */
+.fields .row4{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;align-items:end} /* 0.4.71 地區｜鎮｜村｜GPS（0.4.75 鄉改村、鎮在前）：電腦一排四格、手機 375 寬兩格兩排（140px 實測 375 會變一格一排） */
 #pGps{background:var(--surface,#f6f6f2);color:var(--muted)}
 .price-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px;border:1px solid var(--line);border-radius:10px;position:relative}
 .price-row .del{position:absolute;right:6px;top:-10px;border:1px solid var(--line);background:var(--surface);border-radius:99px;width:26px;height:26px;cursor:pointer}
@@ -171,7 +171,7 @@ li.go{cursor:pointer}
 .months{display:flex;gap:6px;margin-bottom:8px}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 14px;cursor:pointer;font-size:1rem}
 .months .chip{min-height:44px}            /* 田裡用手指按：月份切換至少 44 點高（2026-11-12 逐頁檢查） */
-#logoutBtn{min-height:44px;padding:0 10px} /* 登出維持小字（避免誤按），但按的範圍夠大 */
+#logoutBtn{min-height:44px;padding:4px 12px;border:1px solid var(--line);border-radius:99px;background:var(--surface);color:inherit;font:inherit;font-size:.9rem;font-weight:700;line-height:1.15;cursor:pointer;white-space:nowrap} #logoutBtn .my{display:block;font-size:.7rem;font-weight:400;color:inherit} /* 0.4.75 右上角看得清楚的登出鈕（按的範圍 44px） */
 .chip[aria-pressed="true"]{background:var(--paddy);color:var(--surface);border-color:var(--paddy)}
 li.plan>span:first-child{flex:1;min-width:0}
 .bar{display:block;height:6px;border-radius:99px;background:var(--line);margin-top:4px;overflow:hidden}
@@ -180,7 +180,9 @@ li.plan>span:first-child{flex:1;min-width:0}
 .stat b{display:block;font-size:1.5rem;font-variant-numeric:tabular-nums}
 /* 0.4.69「我的進度」介面優化（1號）：電腦寬度最多 760 置中；一排重點數字；農民清單點了就地展開進度；試作報告摺起來 */
 .mine{max-width:760px;margin:0 auto}
-.mstats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:4px 0 6px}
+.mstats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:4px 0 6px} /* 0.4.75 六格（五類＋本月拜訪）排 3 欄 2 列 */
+#closeFarmer{width:100%;margin:2px 0 8px} .grow .bar{height:10px} .grow .lab{display:block;overflow-wrap:anywhere} /* 0.4.75 下拉、種植進度條 */
+#growList li.plan{display:flex;gap:8px;align-items:center} #growList li.plan small{overflow-wrap:anywhere}
 .mstat{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 4px;min-height:64px;cursor:pointer;text-align:center;color:inherit;font:inherit}
 .mstat b{display:block;font-size:1.4rem;line-height:1.2;font-variant-numeric:tabular-nums;color:var(--paddy)}
 .mstat>span{display:block;font-size:.85rem;line-height:1.25;word-break:keep-all;overflow-wrap:anywhere}
@@ -242,7 +244,7 @@ footer{margin-top:18px;text-align:center}
 
 <!-- 首頁 -->
 <section id="home" hidden>
-  <header class="homehdr"><h1>田間打卡<span class="my">လယ်ကွင်း မှတ်တမ်း</span></h1><span class="hdr"><button type="button" class="syncbadge" id="syncBadge" hidden></button><span class="sub" id="who"></span></span>
+  <header class="homehdr"><h1>田間打卡<span class="my">လယ်ကွင်း မှတ်တမ်း</span></h1><span class="hdr"><button type="button" class="syncbadge" id="syncBadge" hidden></button><span class="sub" id="who"></span><button type="button" id="logoutBtn">登出<span class="my">ထွက်ရန်</span></button></span><!-- 0.4.75 董事長：登出搬到首頁右上角、看得清楚，按了也通知後台停用這支手機 -->
     <!-- 0.4.73 董事長「試作報告拿掉」：0.4.69 右上角「分享我的報告／觀看其他業務報告」兩顆入口拿掉 --></header>
   <!-- 0.4.26 董事長 2026-11-12：首頁改成上方分頁標籤，一頁不要放太多東西（田間打卡／執行任務清單／指派任務／我的進度） -->
   <nav class="htabs" role="tablist" aria-label="首頁分頁">
@@ -284,20 +286,16 @@ footer{margin-top:18px;text-align:center}
   <!-- 0.4.63 董事長：指派任務＝主管派下來的任務；這頁要一邊看主管派的任務、一邊看自己的進度 → 左右兩欄（手機上下排） -->
   <div class="todoboard">
   <div class="todocol">
-  <h2>主管指派的任務<span class="my">မန်နေဂျာ ပေးသော အလုပ်</span><span class="sub">誰派、什麼時候派、做完沒；做完打勾／ပြီးလျှင် အမှန်ခြစ်ပါ</span></h2>
+  <!-- 0.4.75 董事長截圖：「主管指派的任務」改為「執行中任務」；業務新增的農民、種子商、盤商（本月新增客戶）也放在這一欄 -->
+  <h2>執行中任務<span class="my">လုပ်ဆောင်ဆဲ အလုပ်များ</span><span class="sub">主管派的任務：誰派、什麼時候派、做完沒；做完打勾／ပြီးလျှင် အမှန်ခြစ်ပါ</span></h2>
   <div class="tasksum" id="taskSummary"></div>
   <ul id="taskList"></ul>
-  </div>
-  <div class="todocol">
-  <h2>我的進度<span class="my">ကျွန်ုပ်၏ တိုးတက်မှု</span><span class="sub">這個月的目標和拜訪次數／ဤလ ပစ်မှတ်</span></h2>
-  <ul id="todoPlan"></ul>
   <!-- 0.4.72 董事長：本月新增幾個一般農民、試作農民、推廣農民、盤商、種子商，詳細的要列出來（1號） -->
   <h2>本月新增客戶<span class="my">ဤလ ဖောက်သည်အသစ်</span><span class="sub" id="newCustSum">點一類看是哪幾位／နှိပ်ပြီး ကြည့်ပါ</span></h2>
   <div class="ncchips" id="newCustChips" role="group" aria-label="本月新增客戶分類"></div>
   <ul class="nclist" id="newCustList" hidden></ul>
-  <h2>日程清單<span class="my">သွားရန်ရက်စာရင်း</span><span class="sub">逾期＋未來 7 天要回訪的／ရက်ကျော်နှင့် နောက် ၇ ရက်အတွင်း ပြန်သွားရန်</span></h2>
-  <ul id="scheduleList"></ul>
   </div>
+  <!-- 0.4.75 董事長截圖：右欄打叉拿掉——每月目標跟「我的進度」的「主管訂的目標」同一份，合成一份（todoPlan 拿掉，app.js 沒有這格就略過）；日程清單搬到「我的進度」 -->
   </div>
   </div>
 
@@ -308,9 +306,12 @@ footer{margin-top:18px;text-align:center}
   <div class="mine">
   <div class="mstats" id="mineStats">
     <!-- 0.4.73 董事長：我的進度列自己負責的農民、盤商、種子商；試作報告拿掉 → 前三格是三種客戶各幾位（點了切到那一種） -->
-    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="農民"><b id="msFarmers">—</b><span>我的農民<span class="my">လယ်သမား</span></span></button>
-    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="盤商"><b id="msDealers">—</b><span>我的盤商<span class="my">ကုန်သည်</span></span></button>
-    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="種子商"><b id="msSeeds">—</b><span>我的種子商<span class="my">မျိုးစေ့ဆိုင်</span></span></button>
+    <!-- 0.4.75 董事長：一般農民、試作農民、推廣農民、種子商、盤商五類＋本月拜訪（3 欄 2 列，375 寬不左右滑） -->
+    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="一般農民"><b id="msGen">—</b><span>一般農民<span class="my">ပုံမှန် လယ်သမား</span></span></button>
+    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="試作農民"><b id="msTrial">—</b><span>試作農民<span class="my">စမ်းသပ် လယ်သမား</span></span></button>
+    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="推廣農民"><b id="msPromo">—</b><span>推廣農民<span class="my">မြှင့်တင် လယ်သမား</span></span></button>
+    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="種子商"><b id="msSeeds">—</b><span>種子商<span class="my">မျိုးစေ့ဆိုင်</span></span></button>
+    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="盤商"><b id="msDealers">—</b><span>盤商<span class="my">ကုန်သည်</span></span></button>
     <button type="button" class="mstat" data-jump="mineMonth"><b id="msVisits">—</b><span>本月拜訪<span class="my">ဤလ သွားရောက်မှု</span></span></button>
   </div>
 
@@ -318,13 +319,17 @@ footer{margin-top:18px;text-align:center}
     <h2>我負責的客戶<span class="my">ကျွန်ုပ် တာဝန်ယူသော ဖောက်သည်</span><span class="sub" id="closeFarmerCount">點一位看進度和過往拜訪紀錄（照片、錄音）／နှိပ်ပြီး ကြည့်ပါ</span></h2>
     <!-- 0.4.73 董事長：只列自己負責的；切換看農民、盤商、種子商 -->
     <div class="rptscope" id="mineType" role="group" aria-label="看哪一種客戶">
-      <button type="button" data-mtype="農民" aria-pressed="true">農民<span class="my">လယ်သမား</span></button>
-      <button type="button" data-mtype="盤商" aria-pressed="false">盤商<span class="my">ကုန်သည်</span></button>
+      <!-- 0.4.75 董事長：五類，按一類下面出現那一類的下拉選單 -->
+      <button type="button" data-mtype="一般農民" aria-pressed="true">一般農民<span class="my">ပုံမှန် လယ်သမား</span></button>
+      <button type="button" data-mtype="試作農民" aria-pressed="false">試作農民<span class="my">စမ်းသပ် လယ်သမား</span></button>
+      <button type="button" data-mtype="推廣農民" aria-pressed="false">推廣農民<span class="my">မြှင့်တင် လယ်သမား</span></button>
       <button type="button" data-mtype="種子商" aria-pressed="false">種子商<span class="my">မျိုးစေ့ဆိုင်</span></button>
+      <button type="button" data-mtype="盤商" aria-pressed="false">盤商<span class="my">ကုန်သည်</span></button>
     </div>
-    <ul class="flist" id="closeFarmerList"></ul>
-    <!-- 舊程式還會讀這個選單（看進度選了誰）：留著但藏起來，不再顯示重複的下拉 -->
-    <select id="closeFarmer" hidden aria-hidden="true" tabindex="-1"><option value="">—</option></select>
+    <label class="lab" for="closeFarmer">選擇客戶<span class="my">ဖောက်သည် ရွေးပါ</span></label>
+    <select id="closeFarmer"><option value="">—</option></select>
+    <!-- 0.4.75 董事長「農民 150 天做成一個進度 100%」：選到農民，進度卡最上面放種植進度 -->
+    <div class="progress" id="closeGrow" hidden aria-live="polite"></div>
     <div class="progress" id="closeProgress" hidden aria-live="polite"></div>
     <!-- 0.4.73 董事長「點進去要有之前拜訪過的紀錄及照片及錄音」：過往全部拜訪（照片、錄音按了才下載） -->
     <div class="progress vhist" id="closeHistory" hidden aria-live="polite"></div>
@@ -347,6 +352,15 @@ footer{margin-top:18px;text-align:center}
     <p class="sub" id="statByCat"></p>
     <h3 class="msub">主管訂的目標<span class="my">လစဉ် ပစ်မှတ်</span></h3>
     <ul id="planList"></ul>
+    <!-- 0.4.75 董事長：農民 150 天＝100%，自己負責的農民（三類）依百分比由高到低 -->
+    <h3 class="msub">農民種植進度（150 天）<span class="my">စိုက်ပျိုးမှု တိုးတက်မှု (ရက် ၁၅၀)</span></h3>
+    <ul id="growList"></ul>
+  </section>
+
+  <!-- 0.4.75 董事長截圖：日程清單從「執行任務清單」右欄搬過來（元件 id 不變）；本月新增客戶留在執行任務清單的「執行中任務」 -->
+  <section class="msec" id="mineSchedule">
+    <h2>日程清單<span class="my">သွားရန်ရက်စာရင်း</span><span class="sub">逾期＋未來 7 天要回訪的／ရက်ကျော်နှင့် နောက် ၇ ရက်အတွင်း ပြန်သွားရန်</span></h2>
+    <ul id="scheduleList"></ul>
   </section>
 
   <!-- 0.4.73 董事長「試作報告拿掉」：業務手機不再有試作報告（0.4.61～0.4.72 這裡是試作報告摺疊區）；主管網頁照舊有 -->
@@ -411,6 +425,8 @@ footer{margin-top:18px;text-align:center}
     <div class="progress" id="progressBox" hidden aria-live="polite"></div>
     <!-- 0.4.73 董事長：結案畫面選了農民，列之前的照片、留言、錄音、地址、過往試作成功失敗（只有結案時出現） -->
     <div class="progress vhist" id="closeVisitHist" hidden aria-live="polite"></div>
+    <!-- 0.4.75 董事長「田間打卡：所有的農民之前紀錄都要有之前圖片跟錄音」：一般／試作／推廣農民選了人，列過往紀錄（照片、錄音按了才下載；不限自己負責） -->
+    <div class="progress vhist" id="visitHistory" hidden aria-live="polite"></div>
     <!-- 0.4.44 作物、品種、代碼縮成進度卡下面一行；按「修改」或資料沒填才展開四格 -->
     <div class="cropsum" id="cropSum" hidden><span id="cropSumText"></span> <button type="button" class="link" id="cropEditBtn">✎ 修改／ပြင်</button></div>
     <!-- 0.4.35 董事長：「試作農民、一般農民怎麼沒有品種、編號選項」→ 作物、種子公司、品種（代碼）從收起來的客戶資料搬出來，選了農民就看得到 -->
@@ -429,11 +445,12 @@ footer{margin-top:18px;text-align:center}
         <div><label class="lab" for="pName" id="pNameLab">名字<span class="my">အမည်</span></label><input type="text" id="pName" maxlength="60"></div>
         <div class="dealer-only"><label class="lab" for="pOwner">老闆名字<span class="my">ပိုင်ရှင် အမည်</span></label><input type="text" id="pOwner" maxlength="60"></div>
         <div><label class="lab" for="pPhone">電話<span class="my">ဖုန်း</span></label><input type="tel" id="pPhone" maxlength="30" inputmode="tel"></div>
-        <!-- 0.4.71 董事長截圖：地區旁加「鄉」「鎮」（業務手打）、GPS 座標（拍照時自動帶入、不能手打）；窄螢幕自動換行 -->
+        <!-- 0.4.71 董事長截圖：地區旁加村、鎮（業務手打）、GPS 座標（拍照時自動帶入、不能手打）；窄螢幕自動換行
+             0.4.75 董事長「農民改鎮跟村」：「鄉」改叫「村」、鎮放前面（欄位 id、送出的鍵名 village＝村、town＝鎮都不變） -->
         <div class="row4">
           <div><label class="lab" for="pArea">地區<span class="my">ဒေသ</span></label><select id="pArea"></select></div>
-          <div><label class="lab" for="pVillage">鄉<span class="my">ကျေးရွာ</span></label><input type="text" id="pVillage" maxlength="60"></div>
           <div><label class="lab" for="pTown">鎮<span class="my">မြို့နယ်</span></label><input type="text" id="pTown" maxlength="60"></div>
+          <div><label class="lab" for="pVillage">村<span class="my">ကျေးရွာ</span></label><input type="text" id="pVillage" maxlength="60"></div>
           <div><label class="lab" for="pGps">GPS 座標<span class="my">GPS တည်နေရာ</span></label><input type="text" id="pGps" readonly placeholder="拍照時自動帶入／ဓာတ်ပုံရိုက်လျှင် ဖြည့်မည်"></div>
         </div>
         <div class="dealer-only"><label class="lab" for="pAddress">地址<span class="my">လိပ်စာ</span></label><input type="text" id="pAddress" maxlength="200"></div>
@@ -483,8 +500,10 @@ footer{margin-top:18px;text-align:center}
         <label class="lab" for="cTrialOutcome" id="closeTrialLab">試作結果（必填）<span class="my">ရလဒ် (မဖြစ်မနေ)</span></label>
         <p class="sub" id="closeTrialNow"></p>
         <select id="cTrialOutcome"><option value="">— 請選 ရွေးပါ —</option><option value="成功">成功／အောင်မြင်</option><option value="失敗">失敗／မအောင်မြင်</option></select>
-        <div id="closeFailSlot"></div>
       </div>
+      <!-- 0.4.75 董事長「『這次發現種植失敗』移到所有農民結案這邊」：一般／試作／推廣農民結案都有；試作結果選失敗時自動勾、鎖住（失敗紀錄只填一次） -->
+      <label class="chk" id="cPlantFailLab"><input type="checkbox" id="cPlantFail"> 這次發現<b>種植失敗</b>（要寫原因）<span class="my">စိုက်ပျိုးမှု မအောင်မြင် (အကြောင်းရင်း ဖြည့်ရန်)</span></label>
+      <div id="closeFailSlot"></div>
       <p class="sub" id="closeHint">只能選自己負責的農民。存檔後這位農民就結案（不再提醒回訪）。<br>ကိုယ်တာဝန်ယူထားသော လယ်သမားသာ ရွေးနိုင်သည်။</p>
     </div>
 
@@ -622,7 +641,7 @@ footer{margin-top:18px;text-align:center}
     <ul id="mirrorList"></ul>
     <p class="sub">換網址要重新登入一次；資料、帳號都一樣。還沒上傳的紀錄存在原本的網址裡，網路通了請回原本的網址送出。<span class="my">လိပ်စာပြောင်းလျှင် ပြန်ဝင်ပါ</span></p>
   </details>
-  <small>第 2 期測試版 <span id="appVer"></span>・緬文待校對 မြန်မာစာ ပြန်စစ်ရန်</small> <button type="button" class="link" id="logoutBtn"><small>登出 ထွက်ရန်</small></button>
+  <small>第 2 期測試版 <span id="appVer"></span>・緬文待校對 မြန်မာစာ ပြန်စစ်ရန်</small>
 </footer>
 <div id="toast" hidden aria-live="polite"></div>
 

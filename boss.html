@@ -141,6 +141,8 @@ details.brief .body{padding:0 12px 12px;display:grid;gap:8px;grid-template-colum
 .answer{border-left:3px solid var(--paddy);padding:4px 10px;background:var(--paddy-soft);border-radius:0 8px 8px 0}
 .mytasks li{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
 .mytasks{list-style:none;padding:0}.mytasks li .btn{margin-left:auto}
+/* 0.4.75（1號主管清單中2）：任務內容、客戶地址是沒有空白的長網址時會撐寬整頁（375 實測 1400、1280 實測 1474）→ 可以在任何地方斷行；flex 裡的字要能縮 */
+ol.tasks li,.mytasks li>span,.profile>span{overflow-wrap:anywhere;min-width:0}
 footer.wrap{margin-top:24px}
 .mirrors{border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--surface)}
 .mirrors summary{cursor:pointer;font-weight:700;color:var(--paddy)}
