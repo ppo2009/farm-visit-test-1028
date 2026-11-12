@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
-<title>田間打卡</title>
+<title>田間打卡 လယ်ကွင်း မှတ်တမ်း</title><!-- 0.4.94 低2 中緬並列 -->
 <script src="inapp.js"></script>
 <style>
 /* 0.4.27 董事長 2026-11-12「背景改白色的」：一律白底，不再跟著手機深色模式變黑 */
@@ -259,6 +259,7 @@ footer{margin-top:18px;text-align:center}
 </head>
 <body>
 <div class="tip" id="iosTip" hidden>📱 iPhone 請先按下方「分享」→「加入主畫面」，以後<strong>只從主畫面的圖示打開</strong>，離線存的資料才不會不見。<span class="my">iPhone တွင် 「Share」→「Add to Home Screen」 နှိပ်ပြီး နောက်ပိုင်း ပင်မစာမျက်နှာရှိ အိုင်ကွန်မှသာ ဖွင့်ပါ။ ဒါမှ အော့ဖ်လိုင်း မှတ်တမ်း မပျောက်ပါ။</span></div><!-- 0.4.92 中2 加緬文（待校對） -->
+<div class="tip" id="androidTip" hidden>📱 Android 請按右上角「⋮」→「加到主畫面」（或「安裝應用程式」），以後<strong>只從主畫面的圖示打開</strong>，用起來比較快，離線存的資料也比較不會不見。<span class="my">Android တွင် ညာဘက်အပေါ် 「⋮」 →「Add to Home screen」(သို့)「Install app」 ကို နှိပ်ပြီး နောက်ပိုင်း ပင်မစာမျက်နှာရှိ အိုင်ကွန်မှသာ ဖွင့်ပါ။</span><button type="button" class="link" id="androidTipClose">知道了，不再顯示／နားလည်ပြီ</button></div><!-- 0.4.94 低3：可關閉、記住不再顯示（localStorage） -->
 
 <!-- 登入 -->
 <section id="setup" hidden>
@@ -425,6 +426,7 @@ footer{margin-top:18px;text-align:center}
     </div>
     <ul class="nclist" id="statDetail" hidden aria-live="polite"></ul>
     <p class="sub" id="statByCat"></p>
+    <p class="sub" id="homePendNote" hidden></p><!-- 0.4.94 低1：數字含這支手機還沒上傳的拜訪 -->
     <h3 class="msub">主管訂的目標<span class="my">လစဉ် ပစ်မှတ်</span></h3>
     <ul id="planList"></ul>
     <!-- 0.4.75 董事長：農民 150 天＝100%，自己負責的農民（三類）依百分比由高到低 -->

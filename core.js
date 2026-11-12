@@ -137,7 +137,7 @@
    */
   async function post(url, payload) {
     const body = JSON.stringify(payload);
-    const limit = g.SYNC_TEST_TIMEOUT_MS || Math.max(90000, 60000 + Math.round(body.length / 16384) * 1000);
+    const limit = g.SYNC_TEST_TIMEOUT_MS || Math.max(90000, 60000 + Math.round(body.length / 8192) * 1000); // 0.4.94 中3：照 64 kbps（每秒 8 KB）給時間，原本 16 KB（128 kbps）
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     let timer = null, timedOut = false;
     if (ctrl) timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, limit);
@@ -172,9 +172,10 @@
     }
     const now0 = await Store.getMeta('config');
     if (!now0 || !now0.deviceKey || now0.deviceKey !== sentKey) return false;
-    if (data && data.serverTime && Date.now() - sentAt <= 5000) {
+    // 0.4.94 低4（第11任第五輪）：原本來回超過 5 秒就不校正，緬甸網路常常超過 → 一直沒校正。改成 60 秒內都校正（誤差最多約來回時間的一半），超過 60 秒才放棄
+    if (data && data.serverTime && Date.now() - sentAt <= 60000) {
       // 伺服器時間 − 手機時間（扣掉一半來回時間），之後離線打卡都用它校正。
-      // 只用來回 5 秒內的回應：上傳大檔花很久時，「一半來回時間」的誤差會到好幾分鐘（第六輪自抓）
+      // （第六輪原本只用來回 5 秒內的回應，怕上傳大檔時「一半來回時間」誤差太大；0.4.94 放寬到 60 秒，誤差最多約 30 秒，比完全不校正好）
       const now = Date.now();
       const offset = Math.round(data.serverTime - (sentAt + now) / 2);
       await Store.setMeta('clockOffset', offset);
@@ -275,8 +276,8 @@
       if (t.unconfirmed || t.sending) { blocked = 'unconfirmed'; return true; }
       return false;
     }));
-    if (blocked === 'sending') return { ok: false, sending: true, message: '這個打勾正在送出，不能取消；送出後主管那邊就是「完成」' };
-    if (blocked) return { ok: false, unconfirmed: true, message: '上次送出沒收到回覆，主管那邊可能已經是「完成」；等連上網路確認後才知道，不能取消' };
+    if (blocked === 'sending') return { ok: false, sending: true, message: '這個打勾正在送出，不能取消；送出後主管那邊就是「完成」／ပို့နေဆဲ၊ ပယ်ဖျက်၍ မရ' }; // 0.4.94 中2 加緬文
+    if (blocked) return { ok: false, unconfirmed: true, message: '上次送出沒收到回覆，主管那邊可能已經是「完成」；等連上網路確認後才知道，不能取消／အဖြေ မရသေး၊ အင်တာနက် ချိတ်ပြီး အတည်ပြုမှ သိရမည်၊ ပယ်ဖျက်၍ မရ' };
     return { ok: true };
   }
   /** 畫面用：這個打勾現在不能取消（送出中，或上次送出結果未確認） */
@@ -351,6 +352,7 @@
       const todo = all.filter(v => v.status !== 'uploaded' && v.status !== 'rejected' && !(v.account && cfg.account && v.account !== cfg.account) && !waitRetry(v));
       report.left = todo.length;
       let serverFails = 0;
+      let timeouts = 0; // 0.4.94 中3：連續逾時幾筆（2 筆就先停）
       for (const v of todo) {
         if (onProgress) onProgress({ id: v.id, index: report.sent + 1, total: todo.length });
         // 0.4.87 中1（第11任驗收改）：照片、錄音逐張讀；讀不到跟網路錯誤分開（原本當成沒網路整輪停住，後面全部卡住、也不能登出）：
@@ -397,11 +399,26 @@
             audioMime: v.audio && audio ? v.audio.type : ''
           });
         } catch (e) {
-          report.error = e.timeout ? '上傳逾時（網路太慢），稍後自動重送'
-            : e.badResponse ? '伺服器回應異常（可能是 Google 額度用完或部署設定），稍後自動重送；一直出現請告訴主管'
-            : '沒有網路或連不上，稍後自動重送';
-          break; // 這一輪先停，下次再從這筆開始
+          report.error = e.timeout ? '上傳逾時（網路太慢），稍後自動重送／အင်တာနက် နှေးသဖြင့် အချိန်ကုန်၊ နောက်မှ အလိုအလျောက် ထပ်တင်မည်'
+            : e.badResponse ? '伺服器回應異常（可能是 Google 額度用完或部署設定），稍後自動重送；一直出現請告訴主管／ဆာဗာ အဖြေ မမှန်၊ နောက်မှ ထပ်တင်မည်၊ ဆက်ဖြစ်နေလျှင် မန်နေဂျာကို ပြောပါ'
+            : '沒有網路或連不上，稍後自動重送／အင်တာနက် မရှိ (သို့) ချိတ်မရ၊ နောက်မှ အလိုအလျောက် ထပ်တင်မည်'; // 0.4.94 中2 加緬文
+          if (e.timeout) {
+            // 0.4.94 中3（第11任第五輪）：一筆大檔（長錄音＋多張照片）在慢網路逾時，原本 break → 後面的小筆全被它卡住，每次都從它重來。
+            // 改成：這筆照一般失敗排 nextTry（退避 1、2、4…最多 30 分鐘），先送後面的；連續 2 筆都逾時多半是網路整個太慢，這輪先停（省流量）。
+            // 後台用拜訪編號防重複：逾時那筆其實已收到的話，重送回成功，不會多一筆
+            let already = false;
+            await Store.updateVisit(v.id, cur => {
+              if (!cur || cur.status === 'uploaded' || cur.status === 'rejected') { already = true; return null; }
+              const fails = (cur.fails || 0) + 1;
+              return Object.assign({}, cur, { fails, nextTry: Date.now() + Math.min(30, Math.pow(2, fails - 1)) * 60000 });
+            });
+            if (already) { report.left--; continue; }
+            if (++timeouts >= 2) break;
+            continue;
+          }
+          break; // 沒網路、伺服器回應異常：這一輪先停，下次再從這筆開始
         }
+        timeouts = 0; // 0.4.94 中3：有回應就重算連續逾時
         await rememberServer(data, sentAt, cfg.deviceKey); // 0.4.87 高1：送出後換了帳號就整份丟掉（拜訪本身的上傳狀態照記）
         // 寫回拜訪狀態一律在同一個交易裡讀最新的再改（R7-03）：已上傳的不會被降回待上傳或被拒
         if (data && data.ok) {
@@ -436,7 +453,7 @@
             return Object.assign({}, cur, { fails, nextTry: Date.now() + Math.min(30, Math.pow(2, fails - 1)) * 60000 });
           });
           if (already) { report.left--; continue; }
-          report.error = (data && data.message) || '伺服器沒有回應成功，稍後自動重送';
+          report.error = (data && data.message) || '伺服器沒有回應成功，稍後自動重送／ဆာဗာ မအောင်မြင်၊ နောက်မှ အလိုအလျောက် ထပ်တင်မည်'; // 0.4.94 中2 加緬文
           if (++serverFails >= 2) break;
           continue;
         }

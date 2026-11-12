@@ -99,7 +99,7 @@
         state.mustChange = true; $('newPwBox').hidden = false; $('newPw').focus();
         msg.textContent = data.message; return;
       }
-      if (!data.ok) { msg.textContent = data.message || '登入失敗'; msg.className = 'sub err'; return; }
+      if (!data.ok) { msg.textContent = data.message || '登入失敗／ဝင်ရောက်မှု မအောင်မြင်'; msg.className = 'sub err'; return; } // 0.4.94 中2 加緬文
       // 0.4.91 高1：rememberServer 改成一定要帶金鑰、而且要等於現在登入的 → 先寫好這次登入，再存登入回應（用這次拿到的金鑰）
       await Store.setMeta('config', { gasUrl: FARM_CONFIG.gasUrl, deviceKey: data.deviceKey, name: data.name, account: data.account, role: data.role });
       await Store.setMeta('loginLost', null); state.loginLost = null; // 0.4.91 中4：重新登入了，先前延後的登入失效作廢
@@ -437,6 +437,20 @@
     return { crop: $n('plCrop').value, variety, varCode: $n('plCode').value.trim(), plantDate: $n('plDate').value,
       areaNow: $n('plNow').value, areaMax: $n('plMax').value, fertilizer: $n('plFert').value.trim() };
   }
+  /** 0.4.94 中4：種植資料存檔逾時後，同步回來（客戶清單更新）時比對：後台的值已經是送出的值 → 提示「剛才的修改已存好」；超過一天還對不上就不再比 */
+  async function plantPendingCheck() {
+    const pp = await Store.getMeta('plantPending');
+    if (!pp || !pp.cid) return '';
+    if (Date.now() - (pp.at || 0) > 86400000) { await Store.setMeta('plantPending', null); return 'expired'; }
+    const f = ((await Store.getMeta('farmers')) || []).find(x => x.id === pp.cid);
+    if (!f) return '';
+    const same = (a, b) => { const x = String(a == null ? '' : a).trim(), y = String(b == null ? '' : b).trim(); return x === y || (x !== '' && y !== '' && isFinite(Number(x)) && isFinite(Number(y)) && Number(x) === Number(y)); };
+    const ok = Object.keys(pp.profile || {}).every(k => same(f[k], pp.profile[k])) && (pp.clear || []).every(k => String(f[k] == null ? '' : f[k]).trim() === '');
+    if (!ok) return '';
+    await Store.setMeta('plantPending', null);
+    toast(`剛才的種植資料修改已存好（${f.name || pp.cid}）／ယခင် ပြင်ဆင်ချက် သိမ်းပြီးပါပြီ`);
+    return 'saved';
+  }
   async function savePlant() {
     const cid = state.plEditCid || '', cfg = await getConfig(); // 0.4.82 改在月分工作進度：存的是正在改的那位（不是種植資料分頁選的）
     if (!cid) return;
@@ -447,9 +461,15 @@
     const btn = $n('plSave'); btn.disabled = true; $n('plHint').textContent = '存檔中…／သိမ်းနေသည်';
     try {
       const r = await gasCall({ action: 'plantSave', cid, profile: ch.profile, clear: ch.clear }); // 業務BUG#3：改走 gasCall，有逾時；種植資料中1（第8任）：只送改過的欄位
-      if (r && r.timeout) { $n('plHint').textContent = '網路太慢，可能沒存成功，請再按一次／ထပ်နှိပ်ပါ'; return; } // 後台可能其實已存好，重按同樣的值不會壞事
+      // 0.4.94 中4（第11任第五輪）：逾時不代表沒存到（後台常常其實已存好）→ 不叫業務馬上重按；記下送出的值，下次同步回來比對，已經是送出的值就說「剛才的修改已存好」
+      if (r && r.timeout) {
+        await Store.setMeta('plantPending', { cid, profile: ch.profile, clear: ch.clear, at: Date.now() });
+        $n('plHint').textContent = '網路太慢，可能已存好，請稍後到這位農民的進度看一下再決定要不要重按／အင်တာနက် နှေးသည်၊ သိမ်းပြီး ဖြစ်နိုင်သည်၊ ခဏနေမှ တိုးတက်မှုကို ကြည့်ပြီး ထပ်နှိပ်ရန် ဆုံးဖြတ်ပါ';
+        return;
+      }
       if (!r || !r.ok) { $n('plHint').textContent = (r && r.message) || '存檔失敗，請再試一次／မအောင်မြင်'; return; }
       if (Array.isArray(r.farmers)) await Store.setMeta('farmers', r.farmers);
+      { const pp = await Store.getMeta('plantPending'); if (pp && pp.cid === cid) await Store.setMeta('plantPending', null); } // 0.4.94 中4：這位這次存好了，先前逾時那筆不用再比
       $n('plHint').textContent = '已存好，主管看得到／သိမ်းပြီး';
       toast('種植資料已存好／သိမ်းပြီး');
       $n('plHistory')._doneCid = null; // 0.4.80 低5：存好了要重讀紀錄
@@ -463,7 +483,7 @@
     const cfg = await getConfig();
     if (!cfg || !cfg.deviceKey || (typeof navigator !== 'undefined' && navigator.onLine === false)) return { ok: false, offline: true };
     // 1號第2任 0.4.73 讀碼中1（第8任）：照片、錄音（myFile）用 base64 傳，長錄音在緬甸網路 20 秒常傳不完 → 跟報告檔一樣給 60 秒
-    const ms = payload && payload.action === 'farmerReport' ? 150000 : payload && (payload.action === 'trialReportFile' || payload.action === 'myFile') ? 60000 : 20000; // 0.4.77 種植紀錄 Word 含全部照片，給 120 秒
+    const ms = payload && payload.action === 'farmerReport' ? 150000 : payload && (payload.action === 'trialReportFile' || payload.action === 'myFile' || payload.action === 'plantSave') ? 60000 : 20000; // 0.4.94 中4：種植資料存檔 20 秒不夠，改 60 秒 // 0.4.77 種植紀錄 Word 含全部照片，給 120 秒
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctl && typeof setTimeout === 'function' ? setTimeout(() => ctl.abort(), ms) : null;
     try {
@@ -917,6 +937,19 @@
     renderMonthDetail(cur); // 0.4.82 新增客戶、試作兩格的分類和明細（舊後台沒有明細就照舊）
     const bc = cur ? cur.byCategory : (h && h.byCategory) || {};
     $('statByCat').textContent = Object.keys(bc || {}).length ? '類別 အမျိုးအစား：' + Object.entries(bc).map(([k, n]) => `${catBi(k)} ${n} 次`).join('、') : '';
+    // 0.4.94 低1（第11任第五輪）：本月拜訪、拜訪次數、新增客戶、拜訪過的客戶，把這支手機還沒上傳的拜訪也算進去（標「含 N 筆未上傳」）；只算在「這個月」那一頁
+    {
+      const thisMonth = String(today || '').slice(0, 7);
+      const pendAll = (state.myVisitList || []).filter(v => v && v.status === 'pending' && mmDay(0, v.deviceTime).slice(0, 7) === thisMonth);
+      const pend = (cur && cur.month && cur.month !== thisMonth) ? [] : pendAll; // 0.4.95（第12任驗收）：最上面一排「本月拜訪」不跟月份切換 → 一律加 pendAll；下面那組跟著看的月份
+      const lvOf = {}; ((await Store.getMeta('farmers')) || []).forEach(f => { lvOf[f.id] = String(f.lastVisit || ''); });
+      const newN = new Set(pend.filter(v => /^T_/.test(String(v.farmerId || ''))).map(v => v.farmerId)).size; // 新增客戶（臨時編號）
+      const custN = new Set(pend.filter(v => v.farmerId && (lvOf[v.farmerId] || '').slice(0, 7) !== thisMonth).map(v => v.farmerId)).size; // 這個月後台還沒算到的客戶
+      const plus = (el, n) => { if (!el || !n) return; const base = Number(el.textContent); el.textContent = String((isFinite(base) && el.textContent.trim() !== '' ? base : 0) + n); };
+      plus($n('statVisits'), pend.length); plus($n('msVisits'), pendAll.length); plus($n('statNew'), newN); plus($n('statCust'), custN);
+      const pn = $n('homePendNote'); pn.hidden = !pend.length;
+      pn.textContent = pend.length ? `含 ${pend.length} 筆還沒上傳的拜訪（上傳後主管那邊才看得到）／မတင်ရသေးသော ${pend.length} ခု ပါဝင်သည်` : '';
+    }
     if (h && h.syncedAt) { const d = new Date(h.syncedAt); $('homeSynced').textContent = `（${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())} 更新 အပ်ဒိတ်）`; }
   }
 
@@ -2460,6 +2493,7 @@ ${state.cat}：${who}
       // 0.4.81（0.4.80 巡檢中1）：上傳、同步完成 → 種植資料的紀錄切回來要重讀（這裡不馬上重讀，省流量）
       if (r && !r.error) { const ph = document.getElementById('plHistory'); if (ph) ph._doneCid = null; }
       await pruneLocalCustomers();
+      if (r && !r.error) await plantPendingCheck(); // 0.4.94 中4：同步成功（上傳完或抓完最新客戶）就比對逾時的種植資料：後台已是送出的值 → 提示已存好
       if (state.view === 'home') await renderHome();
       // 正在填拜訪而且已經選了客戶，就不重整選單（暫時客戶上傳後會換成正式編號，重整會把選好的清掉；R1-02）
       if (state.view === 'visit' && !$('farmer').value) { await loadOptions(); await loadFarmers(); }
@@ -2495,7 +2529,7 @@ ${state.cat}：${who}
         : v.status === 'rejected' ? '<span class="pill late">被拒 ပယ်ခံရ</span>' : '<span class="pill wait">等上傳 စောင့်နေ</span>';
       const n = Array.isArray(v.photos) && v.photos.length ? v.photos.length : (v.photoCount || (v.photo ? 1 : 0));
       // 0.4.91 低4：照片張數用上傳後記的（扣掉讀不到的）；錄音沒傳成就不寫秒數
-      const what = [n ? `照片 ${n}` : '', v.audioSec && !v.audioLost ? `錄音 ${v.audioSec} 秒` : '', v.text ? '打字' : '', v.prices && v.prices.length ? `價格 ${v.prices.length}` : ''].filter(Boolean).join('・');
+      const what = [n ? `照片 ${n} ဓာတ်ပုံ` : '', v.audioSec && !v.audioLost ? `錄音 ${v.audioSec} 秒 အသံ` : '', v.text ? '打字 စာ' : '', v.prices && v.prices.length ? `價格 ${v.prices.length} ဈေး` : ''].filter(Boolean).join('・'); // 0.4.94 低2 加緬文
       // 0.4.91 低4：後台說客戶已經不存在（被刪）→ 這筆的結案、試作沒收，標出來
       const miss = v.missingCustomer ? '<br><small class="err">客戶已不存在，結案／試作沒收，請洽主管／ဖောက်သည် မရှိတော့၊ မန်နေဂျာကို မေးပါ</small>' : '';
       return `<li><span>${esc(v.farmerLabel)}<br><small>${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}${what ? '・' + esc(what) : ''}</small>${miss}</span>${tag}</li>`;
@@ -2532,6 +2566,15 @@ ${state.cat}：${who}
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
     const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
     $('iosTip').hidden = !(isIOS && !standalone);
+    // 0.4.94 低3（第11任第五輪）：Android 也說明「加到主畫面」（比照 iPhone）；LINE 等 App 內建瀏覽器不顯示（inapp.js 已叫他換 Chrome）；可關閉，記住不再顯示
+    {
+      const ua = navigator.userAgent || '';
+      const inApp = /\bLine\/|FBAN|FBAV|FB_IAB|Messenger|Instagram|MicroMessenger|Zalo|Viber|Telegram|; wv\)/i.test(ua);
+      let closed = false; try { closed = localStorage.getItem('farm-android-tip') === 'off'; } catch (e) { /* 記不了就每次顯示 */ }
+      const at = $n('androidTip');
+      at.hidden = !(/android/i.test(ua) && !inApp && !standalone && !closed);
+      $n('androidTipClose').addEventListener('click', () => { at.hidden = true; try { localStorage.setItem('farm-android-tip', 'off'); } catch (e) { /* 記不了：這次先關 */ } });
+    }
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').then(reg => {

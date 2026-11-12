@@ -251,7 +251,8 @@
   /* ───── 計算 ───── */
   const active = () => state.data.customers.filter(c => c.status !== '已結束' && c.status !== '暫停');
   // 主管BUG(2號)#8：暫停、已結束的客戶不算逾期／今天（原本地圖畫紅色大圓點、履歷寫逾期，跟總覽不一致）→ 'stop'，地圖畫灰色
-  const dueState = c => (c.status === '已結束' || c.status === '暫停') ? 'stop' : !c.nextDue ? 'none' : c.nextDue < state.data.today ? 'late' : c.nextDue === state.data.today ? 'due' : 'ok';
+  // 0.4.94（第11任第五輪 5）：剛拜訪、後台還沒處理完（最後拜訪日還沒更新）→ 算已回訪，總覽逾期數、逾期清單、客戶頁一致
+  const dueState = c => (c.status === '已結束' || c.status === '暫停') ? 'stop' : !c.nextDue ? 'none' : visitingNow(c) ? 'ok' : c.nextDue < state.data.today ? 'late' : c.nextDue === state.data.today ? 'due' : 'ok';
   const visitsOf = id => (state.hist[id] || state.data.visits.filter(v => v.cid === id)).slice().sort((a, b) => b.time.localeCompare(a.time));
   const weekNo = (c, date) => c.start ? Math.max(1, Math.ceil((s2d(date) - s2d(c.start)) / DAY / 7)) : null;
   /** 履歷裡一筆拜訪是「試作第幾週」：只算掛在試作底下、而且在那件試作期間內的（原本拿客戶最後一件試作的開始日算每一筆；第二輪自行審查 T8） */
@@ -519,7 +520,7 @@
   /** 待確認結案（0.4.33 董事長：怕業務結案按錯 → 主管確認才算）：有才顯示，放總覽最上面 */
   function renderClosings() {
     const list = state.data.closings || [];
-    if (!list.length) return '';
+    if (!list.length) return state.closeMsg ? `<p class="sub" id="closeMsg" aria-live="polite">${esc(state.closeMsg)}</p>` : ''; // 0.4.94（第五輪 6）：最後一筆處理完也看得到結果
     // 0.4.77 董事長範例（玉米紙卡）：採收量測摘要，例如「玉米 5 穗 1.5kg 去殼・64 天」；沒填的不寫
     const msum = m => (m ? [m.variety, m.sampleCount !== '' && m.sampleCount != null ? m.sampleCount + (m.sampleUnit || '') : '', m.weightKg !== '' && m.weightKg != null ? m.weightKg + 'kg' : '', m.husk]
       .filter(x => x !== '' && x != null).join(' ') + (m.days !== '' && m.days != null ? '・' + m.days + ' 天' : '') : '');
@@ -563,8 +564,19 @@
   /* ───── 客戶頁：搜尋＋篩選＋按業務分組，預設只列要注意的（2026-11-12 規劃 B） ───── */
   const isActive = c => c.status !== '已結束' && c.status !== '暫停';
   /** 這位客戶為什麼要注意：逾期／今天該回訪／試作進行中／7 天內拜訪過；都不是就回 null */
+  /** 0.4.94（第11任第五輪 5）：這位客戶在拜訪清單裡最新的一天（後台翻譯完才更新「最後拜訪日」，今天剛上傳的還沒算進去） */
+  let nvCache = { src: null, map: {} };
+  /** 這位客戶還沒處理完的拜訪裡最新的一天（只看還沒處理完的；已完成的會更新最後拜訪日） */
+  function newestVisitDay(cid) {
+    const vs = state.data.visits || [];
+    if (nvCache.src !== vs) { const m = {}; vs.forEach(v => { if (v.status === '已完成') return; const day = String(v.time || '').slice(0, 10); if (day > (m[v.cid] || '')) m[v.cid] = day; }); nvCache = { src: vs, map: m }; } // 每次讀到新資料才重算一次
+    return nvCache.map[cid] || '';
+  }
+  /** 7 天內有「還沒處理完」的拜訪（待處理、處理中、處理異常），而且比最後拜訪日新：當作已拜訪。超過 7 天還沒跟上就照常算逾期，不會永遠被蓋掉 */
+  function visitingNow(c) { const nv = newestVisitDay(c.id); return !!nv && (!c.lastVisit || nv > c.lastVisit) && nv >= addDays(state.data.today, -6); }
   function attnOf(c) {
     const d = state.data, s = dueState(c);
+    if (visitingNow(c)) return { cls: 'p-grn', text: `${md(newestVisitDay(c.id))} 拜訪（處理中）`, rank: 3 }; // 剛拜訪、還沒處理完：不算逾期
     if (isActive(c) && s === 'late') return { cls: 'p-red', text: `逾期 ${daysBetween(c.nextDue, d.today)} 天`, rank: 0 };
     if (isActive(c) && s === 'due') return { cls: 'p-yel', text: '今天該回訪', rank: 1 };
     const t = (d.trials || []).find(x => x.cid === c.id && x.status === '進行中');
@@ -656,9 +668,9 @@
     const sel = (key, label, values, all) => `<select data-cf="${key}" aria-label="${label}">${all ? `<option value="">${all}</option>` : ''}${values.map(v => { const [val, txt] = Array.isArray(v) ? v : [v, v]; return `<option value="${esc(val)}"${f[key] === val ? ' selected' : ''}>${esc(txt)}</option>`; }).join('')}</select>`;
     const uniq = arr => [...new Set(arr.filter(Boolean))];
     // 主管BUG(2號)#13：客戶的負責業務沒有帳號（已刪或打錯）時標「（沒有帳號）」，主管才知道要重新指派；照樣能篩，不然那些客戶篩不出來
-    const hasAcct = new Set((state.data.staffList || []).map(s => s.name));
+    const hasAcct = new Set((state.data.staffList || []).map(s => s.name)), off = new Set(state.data.staffOff || []);
     const staffNames = uniq((state.data.staffList || []).map(s => s.name).concat(cs.map(c => c.staff || NO_STAFF)))
-      .map(n => (n === NO_STAFF || hasAcct.has(n) ? n : [n, n + '（沒有帳號）']));
+      .map(n => (n === NO_STAFF || hasAcct.has(n) ? n : [n, n + (off.has(n) ? '（已停用）' : '（沒有帳號）')])); // 0.4.94（第五輪 8）：停用的寫「已停用」
     const tools = `<div class="custtools"><input type="search" id="custQ" placeholder="搜尋全部客戶：名字、電話、編號、作物" value="${esc(f.q)}" aria-label="搜尋客戶">
       <div class="filters">${sel('show', '顯示', [['attn', '要注意的'], ['all', '全部客戶']])}${sel('staff', '業務', staffNames, '全部業務')}${sel('area', '地區', uniq(cs.map(c => c.area)), '全部地區')}${sel('type', '類型', ['農民', '盤商', '種子商'], '全部類型')}</div>
       <span class="sub">要注意的＝逾期、今天該回訪、試作進行中、7 天內拜訪過</span></div>`;
@@ -831,7 +843,14 @@
     const opt = s => `<option value="${esc(s.account)}"${f.staff === s.account ? ' selected' : ''}>${esc(s.name)}（${esc(s.account)}）</option>`;
     const custSel = toBoss
       ? `<select id="tFarmer" aria-label="哪一位客戶（可以不選）"><option value="">— 不指定客戶／ဖောက်သည် မရွေး —</option>${allCust.map(c => `<option value="${esc(c.id)}"${f.cid === c.id ? ' selected' : ''}>${esc(c.name)}｜${esc(c.type || '農民')}${c.area ? '｜' + esc(c.area) : ''}</option>`).join('')}</select>`
-      : `<select id="tFarmer" aria-label="哪一位農民"><option value="">— 選擇農民／လယ်သမား ရွေးပါ —</option>${farmers.map(c => `<option value="${esc(c.id)}"${f.cid === c.id ? ' selected' : ''}>${esc(c.name)}${c.area ? '｜' + esc(c.area) : ''}${c.staff ? '（' + esc(c.staff) + '）' : ''}</option>`).join('')}</select>`;
+      : (() => {
+        // 0.4.94（第11任第五輪 7）：選了業務後，他自己負責的農民排前面（分兩組）
+        const selName = ((staff.find(s => s.account === f.staff) || {}).name) || '';
+        const fo = c => `<option value="${esc(c.id)}"${f.cid === c.id ? ' selected' : ''}>${esc(c.name)}${c.area ? '｜' + esc(c.area) : ''}${c.staff ? '（' + esc(c.staff) + '）' : ''}</option>`;
+        const own = selName ? farmers.filter(c => c.staff === selName) : [], rest = selName ? farmers.filter(c => c.staff !== selName) : farmers;
+        return `<select id="tFarmer" aria-label="哪一位農民"><option value="">— 選擇農民／လယ်သမား ရွေးပါ —</option>` +
+          (own.length ? `<optgroup label="${esc(selName)} 負責的">${own.map(fo).join('')}</optgroup>${rest.length ? `<optgroup label="其他農民">${rest.map(fo).join('')}</optgroup>` : ''}` : rest.map(fo).join('')) + '</select>';
+      })();
     const form = staff.length || bosses.length ? `<h3>派出任務</h3><form class="taskform" id="taskForm">
         <select id="tStaff" aria-label="派給誰">${bosses.length ? `<optgroup label="業務">${staff.map(opt).join('')}</optgroup><optgroup label="主管">${bosses.map(opt).join('')}</optgroup>` : staff.map(opt).join('')}</select>
         ${custSel}
