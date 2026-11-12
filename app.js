@@ -217,6 +217,12 @@
     const n = Math.max(0, d), lv = n >= 10 ? 'r' : n >= 5 ? 'y' : 'g'; // 手機時間比後台慢、最後拜訪日看起來在明天：當 0 天
     return { days: n, lv, text: `距上次拜訪 ${n} 天・${AGE_WORD[lv]}／ရက် ${n}` };
   }
+  /** 0.4.84（BUG清單_0.4.83 低1）：最後拜訪日＝後台 lastVisit 跟這支手機自己帳號的拜訪（myVisits，用緬甸日期 mmDay）取比較新的那天。
+      有打字、錄音的拜訪，後台要等背景翻譯（最多約 10 分鐘）才更新 lastVisit；這段時間只看後台會還是紅字 */
+  function latestVisitDay(serverDay, cid, mine) {
+    const own = (mine || []).filter(v => v && v.farmerId === cid && Number(v.deviceTime) > 0).map(v => mmDay(0, Number(v.deviceTime)));
+    return [String(serverDay || '').slice(0, 10)].concat(own).filter(d => /^\d{4}-\d\d-\d\d$/.test(d)).sort().pop() || '';
+  }
   const visitAgeHtml = (lastVisit, today) => { const a = visitAge(lastVisit, today); return `<span class="vage ${a.lv}">${esc(a.text)}</span>`; };
   /** 農民分三類，跟結案 group 同一套（closeTrialGroup）：有進行中試作＝試作農民、推廣＝推廣農民、都沒有＝一般農民；盤商、種子商照類型 */
   async function mineGroupOf(f) {
@@ -247,7 +253,7 @@
     if (typeof document.querySelectorAll === 'function') document.querySelectorAll('#mineType [data-mtype]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mtype === mtype)));
     const isFarmer = FARMER_GROUPS.indexOf(mtype) >= 0;
     const keep = sel.value;
-    sel.innerHTML = `<option value="">— 選一位${mtype} ${MINE_TYPES[mtype]} ရွေးပါ —</option>` + list.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}${isFarmer ? '｜' + esc(growLabel(growOfId[f.id])) : ''}｜${esc(visitAge(f.lastVisit, today).text.split('／')[0])}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`).join(''); // 0.4.82 選項加「距上次拜訪 N 天」（選項不能上色，靠文字）
+    sel.innerHTML = `<option value="">— 選一位${mtype} ${MINE_TYPES[mtype]} ရွေးပါ —</option>` + list.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}${isFarmer ? '｜' + esc(growLabel(growOfId[f.id])) : ''}｜${esc(visitAge(latestVisitDay(f.lastVisit, f.id, state.myVisitList), today).text.split('／')[0])}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`).join(''); // 0.4.82 選項加「距上次拜訪 N 天」（選項不能上色，靠文字）
     sel.value = keep && list.some(f => f.id === keep) ? keep : '';
     sel.disabled = !list.length;
     state.mineGrow = growOfId;
@@ -775,10 +781,11 @@
   }
   function harvestItemHtml(x) {
     const left = Number(x.daysLeft);
+    const lv = latestVisitDay(x.lastVisit, x.cid, state.myVisitList); // 0.4.84 低1：剛拜訪完、後台還沒更新也算
     const when = x.overdue || left < 0 ? `<b class="vage r">已過採收日 ${Math.abs(left)} 天</b>` : left === 0 ? '<b class="vage r">今天採收</b>' : `<b class="vage ${left <= 3 ? 'r' : 'y'}">剩 ${left} 天</b>`;
     return `<li data-cid="${esc(x.cid)}"><b>${esc(x.name || '（未命名）')}</b>${x.crop ? '｜' + esc(x.crop) : ''}<br>`
       + `<small>預計採收 ရိတ်သိမ်းမည့်ရက် ${esc(String(x.harvestDate || '').slice(5).replace('-', '/'))}</small>・${when}<br>`
-      + `<small>最後拜訪 ${x.lastVisit ? esc(String(x.lastVisit).slice(5).replace('-', '/')) : '還沒拜訪'}</small></li>`;
+      + `<small>最後拜訪 ${lv ? esc(lv.slice(5).replace('-', '/')) : '還沒拜訪'}</small></li>`;
   }
   /* 0.4.82 董事長「快採收紅色提醒條能讓手機發出響聲嗎」：提醒條出現（有新的、今天沒收起）時嗶一聲（Web Audio 產生約 0.5 秒，不用外部音檔）＋震動 [200,100,200]（有才呼叫，iPhone 沒有就略過）。
      首頁常重畫（每次同步）→ 另外記「今天已經為哪些人響過」（harvestBeeped，跟收起用的 harvestSeen 同一套判斷）：同一天同一份名單只響一次，多了新的人才再響。
@@ -844,10 +851,11 @@
 
   async function renderHome() {
     const h = (await Store.getMeta('home')) || null;
+    state.myVisitList = await myVisits(); // 0.4.84 低1：這支手機自己帳號的拜訪，算最後拜訪日用（下拉、快採收、日程、量測週都用 latestVisitDay）
     await renderHarvest(h); // 0.4.82 快採收提醒條
     const today = await phoneToday(h);
     const list = (h ? h.schedule : []).map(s => Object.assign({}, s, { late: s.due < today })); // 逾期用手機的今天重算
-    const lastOf = {}; ((await Store.getMeta('farmers')) || []).forEach(f => { lastOf[f.id] = f.lastVisit; }); // 0.4.82 日程那列加「距上次拜訪 N 天」（farmers 的 lastVisit）
+    const lastOf = {}; ((await Store.getMeta('farmers')) || []).forEach(f => { lastOf[f.id] = latestVisitDay(f.lastVisit, f.id, state.myVisitList); }); // 0.4.82 日程那列加「距上次拜訪 N 天」；0.4.84 低1 合併這支手機的拜訪
     const soon = {}; ((h && Array.isArray(h.harvestSoon)) ? h.harvestSoon : []).forEach(x => { soon[x.cid] = true; }); // 0.4.82 日程裡快採收的人加標籤
     $('scheduleList').innerHTML = list.map(s => `<li class="go" data-id="${esc(s.id)}" data-type="${esc(s.type)}"><span>${esc(s.name)}<br><small>${esc(catBi(s.type || '農民'))}・應回訪 ပြန်သွားရန် ${esc(s.due.slice(5).replace('-', '/'))}</small><br>${visitAgeHtml(lastOf[s.id], today)}${soon[s.id] ? ' <span class="pill late">快採收 ရိတ်သိမ်းခါနီး</span>' : ''}</span>${s.late ? '<span class="pill late">逾期 ရက်ကျော်</span>' : s.due === today ? '<span class="pill wait">今天 ယနေ့</span>' : ''}</li>`).join('')
       || `<li class="empty">${h ? '這 7 天沒有排到回訪／၇ ရက်အတွင်း သွားရန် မရှိ' : '連上網路後會顯示／အင်တာနက်ချိတ်ပြီးမှ ပြမည်'}</li>`;
@@ -906,7 +914,7 @@
     // 最後拜訪日：伺服器的＋這支手機自己存的拜訪（還沒同步的也算，剛量完不會還叫你去量）
     const mine = await myVisits(); // 低#6（第8任）：只算目前帳號的
     const localDay = ms => mmDay(0, ms); // 業務BUG#4：拜訪日也用緬甸日期，跟伺服器的最後拜訪日同一把尺
-    const lastOf = cid => [(people.find(f => f.id === cid) || {}).lastVisit || ''].concat(mine.filter(v => v.farmerId === cid).map(v => localDay(v.deviceTime))).sort().pop();
+    const lastOf = cid => latestVisitDay((people.find(f => f.id === cid) || {}).lastVisit, cid, mine); // 0.4.84 改用共用的 latestVisitDay（同一套：後台與這支手機取較新）
     /** 量測週：開始後第 2、4、8 週（boss.js 有同一組數字，要改兩邊一起改；2026-11-12 優化 4） */
     const measure = t => {
       if (!isDay(t.start)) return null;
