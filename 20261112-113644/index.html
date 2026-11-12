@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2f6b3a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="田間打卡">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>田間打卡</title>
+<script src="inapp.js"></script>
+<style>
+/* 0.4.27 董事長 2026-11-12「背景改白色的」：一律白底，不再跟著手機深色模式變黑 */
+:root{color-scheme:light;--bg:#ffffff;--surface:#f6f7f3;--line:#d9d4c2;--fg:#22281f;--muted:#5f6656;--paddy:#2f6b3a;--paddy-soft:#dcebd9;--turmeric:#9a6a0c;--turmeric-soft:#f6e6bf;--chili:#b23a2b;--chili-soft:#f3d6d0}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important} /* 有設 display 的元素也要能藏起來（2026-11-11 抓到盤商畫面露出農民欄位） */
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;font-size:16px;line-height:1.55;
+  padding:max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+.my{font-family:"Noto Sans Myanmar","Myanmar Text","Padauk",sans-serif;font-size:.8em;color:var(--muted);display:block;font-weight:400}
+button,input,select,textarea{font:inherit;color:inherit}
+header{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;margin-bottom:12px} /* 0.4.29 董事長：標題、名字置中 */
+h1{font-size:1.25rem;margin:0}
+h2{font-size:1rem;margin:18px 0 8px}
+small,.sub{color:var(--muted);font-size:1rem} /* 0.4.29 董事長：業務字體 16px */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:14px}
+label.lab,.lab{font-weight:700;display:block;margin-bottom:6px}
+select,input[type=text],input[type=tel],input[type=number],input[type=date],input[type=password],textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);min-width:0}
+textarea{min-height:96px;resize:vertical}
+.gps{font-size:1rem;color:var(--muted)}
+.gps b{color:var(--paddy)}
+.link{background:none;border:0;color:var(--paddy);text-decoration:underline;padding:0;cursor:pointer}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.three{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.big{border:1.5px dashed var(--line);background:var(--bg);border-radius:14px;min-height:92px;padding:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;cursor:pointer;position:relative;font-size:1rem}
+.big svg{width:28px;height:28px}
+.big .label{font-weight:700}
+.big.done{border-style:solid;border-color:var(--paddy);background:var(--paddy-soft)}
+.big.rec{border-style:solid;border-color:var(--chili);background:var(--chili-soft)}
+.big.busy{opacity:.6}
+.big input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.cats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cat{border:0;border-radius:16px;padding:18px 10px;min-height:96px;font-weight:900;font-size:1.15rem;cursor:pointer;background:var(--paddy);color:var(--surface);text-align:center}
+.cat .my{color:inherit;opacity:.85}
+.cat.c2{background:#3d7d6b}.cat.c3{background:var(--turmeric)}.cat.c4{background:#6b5a8a}.cat.c5{background:#5a6b3d}
+.cats3{grid-template-columns:repeat(3,1fr)}.cats3 .cat{padding:14px 6px;font-size:1.05rem}
+.sub-cats{margin-top:10px}.sub-cats .cat{min-height:76px}
+button .my{color:inherit;opacity:.85} /* 按鈕裡的緬文跟按鈕字同色（選取後底色變綠，灰字會看不見；2026-11-12 實測） */
+h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文／緬文）用一般粗細，不要跟標題一樣粗 */
+.catswitch{display:flex;gap:6px}
+.farmermenu{display:grid;gap:8px;margin-top:10px;padding:10px;border:2px solid var(--paddy);border-radius:16px;background:var(--surface)}
+.farmermenu button{min-height:56px;border:1.5px solid var(--paddy);background:var(--paddy-soft);color:var(--paddy);border-radius:12px;font-weight:700;font-size:1.05rem;cursor:pointer}
+/* 0.4.32 農民那組按鈕寬度照字數分（一般拜訪農民 6 字、試作農民 4、推廣農民 4、結案 2），長的不會被擠成兩行 */
+.catswitch[data-group="farmer"]{display:grid;grid-template-columns:6.6fr 4.6fr 4.6fr 2.6fr}
+.catswitch[data-group="farmer"] button{padding-left:2px;padding-right:2px}
+.catswitch button{flex:1;min-height:48px;border:1.5px solid var(--paddy);background:none;color:var(--paddy);border-radius:12px;font-weight:700;cursor:pointer;padding:6px 4px;word-break:keep-all;overflow-wrap:anywhere;min-width:0}
+/* 0.4.24（2026-11-12 業務面線上檢查）：375 點寬手機「一般拜訪」被拆成「一般拜／訪」兩行 → 中文詞不從中間斷（真的放不下才斷），窄手機字縮小一點 */
+@media (max-width:400px){.catswitch{gap:4px}.catswitch button{font-size:1rem;padding:6px 2px}}
+/* 首頁分頁標籤（0.4.26，董事長給的範例：一排文字分頁，選到的那個加框） */
+/* 寬度照中文字數分（4、6、4、4 字）：緬文小字比較長，用內容寬度分會把中文擠成兩行（0.4.29 字體 16px 後實測） */
+.htabs{display:grid;grid-template-columns:4fr 6fr 4fr 4fr;gap:2px;border-bottom:1px solid var(--line);margin:4px 0 14px;overflow:visible}
+.htabs button{flex:1 1 auto;min-width:0;min-height:52px;border:1.5px solid transparent;border-bottom:0;border-radius:10px 10px 0 0;background:none;color:var(--muted);font-weight:700;font-size:1rem;cursor:pointer;padding:6px 2px;word-break:keep-all;overflow-wrap:anywhere;line-height:1.25;position:relative;margin-bottom:-1px}
+.htabs button .my{display:block;font-weight:400;font-size:.7rem}
+.htabs button[aria-selected="true"]{border-color:var(--paddy);color:var(--paddy);background:var(--surface)}
+.htabs .tbadge{position:absolute;top:-9px;right:-2px;z-index:1;min-width:18px;height:18px;border-radius:9px;background:var(--chili,#b23a2a);color:#fff;font-size:.72rem;line-height:18px;padding:0 4px}
+@media (max-width:400px){.htabs{gap:2px}.htabs button{font-size:1rem;padding:6px 2px}}
+li.assigned{display:block}
+li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px}
+.progress{border:1.5px solid var(--paddy);border-radius:12px;padding:12px 14px;margin:14px 0 18px;background:var(--surface);min-height:120px}
+.progress h3{margin:0 0 6px;font-size:1rem;color:var(--paddy)}
+.progress ul{margin:6px 0 0;padding-left:1.1em}
+.progress li{margin:4px 0}
+#cropBox{margin:8px 0}
+#cropBox.croprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end}
+#cropBox.croprow[hidden]{display:none}
+.meetswitch{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.meetswitch .btn2[aria-pressed="true"]{background:var(--paddy);color:var(--surface)}
+#meetNo[aria-pressed="true"]{background:var(--turmeric);border-color:var(--turmeric)}
+#noMeetForm{margin-top:10px}
+.mirrors{max-width:520px;margin:0 auto 10px;text-align:left;border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--surface)}
+.mirrors summary{cursor:pointer;font-weight:700;color:var(--paddy);min-height:32px}
+.mirrors li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)}
+.mirrors li a{word-break:break-all;flex:1 1 200px}
+.mirrors li button{min-height:40px}
+.taskclosed{display:block;color:var(--muted);font-size:1rem;max-width:9em;align-self:center;text-align:right}
+.catswitch button[aria-pressed="true"]{background:var(--paddy);color:var(--surface)}
+.btn2,.back{min-height:48px} /* 手指按得到：至少 48 點（優化 3） */
+.gps .link{min-height:48px;padding:0 6px}
+.hdr{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center}
+.syncbadge{border:0;border-radius:99px;font-size:1rem;font-weight:700;padding:4px 10px;min-height:32px;cursor:pointer}
+.syncbadge.wait{background:var(--turmeric-soft);color:var(--turmeric)}.syncbadge.ok{background:var(--paddy-soft);color:var(--paddy)}
+.cat.hub{min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.cat .hint{display:block;font-size:1rem;font-weight:400;color:inherit;opacity:.9;margin-top:4px;line-height:1.35} /* small 預設是灰色，放在彩色按鈕上看不見（2026-11-12 實測） */
+#farmerBtn[aria-expanded="true"],#dealerBtn[aria-expanded="true"]{outline:3px solid var(--ink,#222);outline-offset:2px}
+li.task{align-items:flex-start}li.task label{display:flex;gap:10px;flex:1;min-width:0;cursor:pointer}
+li.task input{width:26px;height:26px;flex:none;margin-top:2px}li.task.done span{color:var(--muted)}
+.btn2.small{width:auto;padding:6px 12px;flex:none;align-self:center}
+
+.thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.thumbs:empty{display:none}
+.thumb{position:relative;border-radius:10px;overflow:hidden;aspect-ratio:1;background:var(--paddy-soft)}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb .tag{position:absolute;left:4px;top:4px;font-size:.7rem;background:rgba(0,0,0,.55);color:#fff;border-radius:6px;padding:0 6px}
+.thumb .del{position:absolute;right:4px;top:4px;border:0;border-radius:99px;width:28px;height:28px;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;font-weight:900}
+details.profile{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--bg)}
+.trial{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--bg);display:grid;gap:10px}
+.trial .btn2[aria-pressed="true"]{background:var(--paddy);color:var(--surface)}
+details.profile summary{font-weight:700;cursor:pointer}
+.fields{display:grid;gap:10px;margin-top:10px}
+.fields .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
+.price-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px;border:1px solid var(--line);border-radius:10px;position:relative}
+.price-row .del{position:absolute;right:6px;top:-10px;border:1px solid var(--line);background:var(--surface);border-radius:99px;width:26px;height:26px;cursor:pointer}
+.btn2{border:1px solid var(--paddy);background:none;color:var(--paddy);border-radius:10px;padding:10px;font-weight:700;cursor:pointer;width:100%}
+.save{border:0;border-radius:14px;background:var(--paddy);color:var(--surface);padding:15px;font-weight:900;font-size:1.1rem;cursor:pointer;width:100%}
+.save:disabled{opacity:.4}
+.save .my{color:inherit;opacity:.85}
+.back{border:0;background:none;color:var(--paddy);font-weight:700;cursor:pointer;padding:4px 0;font-size:1rem}
+.queue{margin-top:14px}
+.count{font-weight:700;margin:0 0 6px}
+.count.wait{color:var(--turmeric)}
+.count.ok{color:var(--paddy)}
+ul{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+li{display:flex;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:1rem}
+li:last-child{border-bottom:0}
+li.empty{color:var(--muted)}
+li.go{cursor:pointer}
+.pill{font-size:1rem;font-weight:700;padding:1px 9px;border-radius:99px;align-self:center;white-space:nowrap}
+.pill.ok{background:var(--paddy-soft);color:var(--paddy)}
+.pill.wait{background:var(--turmeric-soft);color:var(--turmeric)}
+.pill.late{background:var(--chili-soft);color:var(--chili)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.months{display:flex;gap:6px;margin-bottom:8px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 14px;cursor:pointer;font-size:1rem}
+.months .chip{min-height:44px}            /* 田裡用手指按：月份切換至少 44 點高（2026-11-12 逐頁檢查） */
+#logoutBtn{min-height:44px;padding:0 10px} /* 登出維持小字（避免誤按），但按的範圍夠大 */
+.chip[aria-pressed="true"]{background:var(--paddy);color:var(--surface);border-color:var(--paddy)}
+li.plan>span:first-child{flex:1;min-width:0}
+.bar{display:block;height:6px;border-radius:99px;background:var(--line);margin-top:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--paddy)}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.stat b{display:block;font-size:1.5rem;font-variant-numeric:tabular-nums}
+.tip{background:var(--turmeric-soft);color:var(--fg);border-radius:12px;padding:10px 12px;font-size:1rem;margin-bottom:12px}
+#syncState{min-height:1.2em;font-size:1rem;color:var(--muted);margin:6px 0 0}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,env(safe-area-inset-bottom));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:1rem;max-width:90%;z-index:9}
+#loginForm{display:grid;gap:12px}
+.err{color:var(--chili)}
+footer{margin-top:18px;text-align:center}
+</style>
+</head>
+<body>
+<div class="tip" id="iosTip" hidden>📱 iPhone 請先按下方「分享」→「加入主畫面」，以後<strong>只從主畫面的圖示打開</strong>，離線存的資料才不會不見。</div>
+
+<!-- 登入 -->
+<section id="setup" hidden>
+  <header><h1>田間打卡<span class="my">လယ်ကွင်း မှတ်တမ်း</span></h1></header>
+  <form class="card" id="loginForm" autocomplete="on">
+    <div><label class="lab" for="acct">帳號<span class="my">အကောင့်</span></label>
+      <input type="text" id="acct" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>
+    <div><label class="lab" for="pw">密碼<span class="my">စကားဝှက်</span></label>
+      <input type="password" id="pw" autocomplete="current-password" required></div>
+    <div id="newPwBox" hidden>
+      <label class="lab" for="newPw">設定你自己的新密碼（至少 6 個字）<span class="my">စကားဝှက် အသစ်</span></label>
+      <input type="password" id="newPw" autocomplete="new-password">
+      <label class="lab" for="newPw2" style="margin-top:8px">新密碼再輸入一次</label>
+      <input type="password" id="newPw2" autocomplete="new-password">
+    </div>
+    <button type="submit" class="save" id="loginBtn">登入<span class="my">ဝင်မည်</span></button>
+    <p class="sub" id="setupMsg" aria-live="polite">只要登入一次，之後沒網路也能打卡。帳號和密碼請向主管索取（密碼不能自己改）。</p>
+  </form>
+</section>
+
+<!-- 首頁 -->
+<section id="home" hidden>
+  <header><h1>田間打卡<span class="my">လယ်ကွင်း မှတ်တမ်း</span></h1><span class="hdr"><button type="button" class="syncbadge" id="syncBadge" hidden></button><span class="sub" id="who"></span></span></header>
+  <!-- 0.4.26 董事長 2026-11-12：首頁改成上方分頁標籤，一頁不要放太多東西（田間打卡／執行任務清單／指派任務／我的進度） -->
+  <nav class="htabs" role="tablist" aria-label="首頁分頁">
+    <button type="button" role="tab" id="htab-punch" data-htab="punch" aria-selected="true">田間打卡<span class="my">မှတ်တမ်း</span></button>
+    <button type="button" role="tab" id="htab-todo" data-htab="todo" aria-selected="false">執行任務清單<span class="my">လုပ်ရန်</span><b class="tbadge" id="todoBadge" hidden></b></button>
+    <button type="button" role="tab" id="htab-assigned" data-htab="assigned" aria-selected="false">指派任務<span class="my">ပေးထားသော အလုပ်</span></button>
+    <button type="button" role="tab" id="htab-mine" data-htab="mine" aria-selected="false">我的進度<span class="my">တိုးတက်မှု</span></button>
+  </nav>
+
+  <!-- 分頁 1 田間打卡：照手稿左卡「農民」、右卡「盤商或種子商」，點了直接進打卡畫面（2026-11-12 規劃 D＋優化 1），下面是上傳狀態 -->
+  <div class="hpanel" id="hp-punch" role="tabpanel" aria-labelledby="htab-punch">
+  <div class="cats">
+    <button type="button" class="cat hub" id="farmerBtn" aria-expanded="false" aria-controls="farmerMenu">農民 ▾<span class="my">လယ်သမား</span><small class="hint">點開選：一般拜訪／試作／推廣<br>လယ်သမား ရွေး → မှတ်တမ်း・ဓာတ်ပုံ・စာ・အသံ</small></button>
+    <button type="button" class="cat c3 hub" id="dealerBtn">盤商或種子商<span class="my">ကုန်သည် / မျိုးစေ့ဆိုင်</span><small class="hint">選擇 → 拜訪內容・農作物價格<br>ရွေး → သွားရောက်မှု・သီးနှံဈေးနှုန်း</small></button>
+  </div>
+  <!-- 0.4.32 董事長 2026-11-12：「農民」改成下拉選單：一般拜訪農民／試作農民／推廣農民，選了直接進那一種打卡（結案在打卡畫面上方切換） -->
+  <div class="farmermenu" id="farmerMenu" role="menu" hidden>
+    <button type="button" role="menuitem" data-farmercat="農戶">一般拜訪農民<span class="my">ပုံမှန်သွားရောက်</span></button>
+    <button type="button" role="menuitem" data-farmercat="試作">試作農民<span class="my">စမ်းသပ်စိုက်ပျိုး</span></button>
+    <button type="button" role="menuitem" data-farmercat="推廣">推廣農民<span class="my">မြှင့်တင်ရောင်းချ</span></button>
+  </div>
+  <div class="queue">
+    <p class="count" id="pendingCount"></p>
+    <ul id="queueList"></ul>
+    <p id="syncState" aria-live="polite"></p>
+  </div>
+  </div>
+
+  <!-- 分頁 2 執行任務清單：要去做的事（任務打勾＋回訪日程） -->
+  <div class="hpanel" id="hp-todo" role="tabpanel" aria-labelledby="htab-todo" hidden>
+  <h2>任務清單<span class="my">လုပ်ရန်စာရင်း</span><span class="sub">主管、總經理派的，做完打勾／မန်နေဂျာ၊ အထွေထွေမန်နေဂျာ ပေးသောအလုပ်၊ ပြီးလျှင် အမှန်ခြစ်ပါ</span></h2>
+  <ul id="taskList"></ul>
+
+  <h2>日程清單<span class="my">သွားရန်ရက်စာရင်း</span><span class="sub">逾期＋未來 7 天要回訪的／ရက်ကျော်နှင့် နောက် ၇ ရက်အတွင်း ပြန်သွားရန်</span></h2>
+  <ul id="scheduleList"></ul>
+  </div>
+
+  <!-- 分頁 3 指派任務：主管、總經理派給我的任務紀錄（誰派、什麼時候、做完沒）；打勾在「執行任務清單」 -->
+  <div class="hpanel" id="hp-assigned" role="tabpanel" aria-labelledby="htab-assigned" hidden>
+  <h2>指派任務<span class="my">ပေးထားသော အလုပ်</span><span class="sub">主管、總經理派給你的任務紀錄；做完請到「執行任務清單」打勾／ပြီးလျှင် 「လုပ်ရန်」 တွင် အမှန်ခြစ်ပါ</span></h2>
+  <ul id="assignedList"></ul>
+  </div>
+
+  <!-- 分頁 4 我的進度：我的試作、月計劃、工作進度 -->
+  <div class="hpanel" id="hp-mine" role="tabpanel" aria-labelledby="htab-mine" hidden>
+  <h2>我的試作<span class="my">ကျွန်ုပ်၏ စမ်းသပ်ကွက်များ</span><span class="sub">進行中的試作、推廣，點一下去拜訪／လုပ်ဆောင်ဆဲ စမ်းသပ်ကွက်၊ နှိပ်ပြီး သွားရောက်ပါ</span></h2>
+  <ul id="trialList"></ul>
+
+  <h2>月計劃<span class="my">လစဉ် ပစ်မှတ်</span><span class="sub">主管訂的目標，系統自動算／မန်နေဂျာ သတ်မှတ်သော ပစ်မှတ်၊ စနစ်က အလိုအလျောက် တွက်သည်</span></h2>
+  <ul id="planList"></ul>
+
+  <h2>工作進度<span class="my">လုပ်ငန်း တိုးတက်မှု</span><span class="sub" id="homeSynced"></span></h2>
+  <div class="months" id="monthChips"></div>
+  <div class="stats">
+    <div class="stat"><b id="statVisits">—</b><span class="sub">拜訪次數／သွားရောက်သည့် အကြိမ်</span></div>
+    <div class="stat"><b id="statNew">—</b><span class="sub">新增客戶／ဖောက်သည်အသစ်</span></div>
+    <div class="stat"><b id="statCust">—</b><span class="sub">拜訪過的客戶／သွားခဲ့သော ဖောက်သည်</span></div>
+    <div class="stat"><b id="statTrials">—</b><span class="sub">試作 開始／完成<br>စမ်းသပ် စတင်／ပြီးဆုံး</span></div>
+  </div>
+  <p class="sub" id="statByCat"></p>
+  </div>
+</section>
+
+<!-- 拜訪 -->
+<section id="visit" hidden>
+  <header><button type="button" class="back" id="backBtn">← 首頁 ပင်မ</button><h1 id="visitTitle">試作</h1></header>
+  <div class="card">
+    <!-- 拜訪類別切換：農民＝一般拜訪／試作／推廣，盤商或種子商＝盤商／種子商；首頁少點一層（2026-11-12 董事長同意優化 1） -->
+    <div class="catswitch" id="catSwitch" role="group" aria-label="拜訪類別"></div>
+    <div>
+      <label class="lab" for="farmer" id="farmerLab">1. 選擇農民<span class="my">လယ်သမား ရွေးပါ</span></label>
+      <select id="farmer"></select>
+    </div>
+    <!-- 0.4.35 董事長：「試作農民、一般農民怎麼沒有品種、編號選項」→ 作物、種子公司、品種（代碼）從收起來的客戶資料搬出來，選了農民就看得到 -->
+    <div class="fields croprow" id="cropBox" hidden>
+      <div><label class="lab" for="pCrop">作物<span class="my">သီးနှံ</span></label><select id="pCrop"></select></div>
+      <!-- 0.4.31 董事長 2026-11-12 手稿「品種＝Company name＋代碼，有選單」：先選種子公司，再選品種（品種含代碼） -->
+      <div><label class="lab" for="pVarCo">種子公司<span class="my">မျိုးစေ့ ကုမ္ပဏီ</span></label><select id="pVarCo"></select></div>
+      <div><label class="lab" for="pVariety">品種<span class="my">မျိုး</span></label><select id="pVariety"></select></div>
+      <!-- 0.4.38 董事長：品種跟代碼是分開的 → 代碼另外手動輸入；四格排一列，不會太長 -->
+      <div><label class="lab" for="pVarCode">代碼<span class="my">ကုဒ်</span></label><input type="text" id="pVarCode" maxlength="30" placeholder="手動輸入／ရိုက်ထည့်ပါ"></div>
+    </div>
+    <details class="profile" id="profileBox" hidden>
+      <summary id="profileTitle">客戶資料／ဖောက်သည် အချက်အလက်</summary>
+      <div class="fields">
+        <div id="dealerTypeBox"><label class="lab" for="pType">類型<span class="my">အမျိုးအစား</span></label>
+          <select id="pType"><option value="盤商">盤商</option><option value="種子商">種子商</option></select></div>
+        <div><label class="lab" for="pName" id="pNameLab">名字<span class="my">အမည်</span></label><input type="text" id="pName" maxlength="60"></div>
+        <div class="dealer-only"><label class="lab" for="pOwner">老闆名字<span class="my">ပိုင်ရှင် အမည်</span></label><input type="text" id="pOwner" maxlength="60"></div>
+        <div><label class="lab" for="pPhone">電話<span class="my">ဖုန်း</span></label><input type="tel" id="pPhone" maxlength="30" inputmode="tel"></div>
+        <div><label class="lab" for="pArea">地區<span class="my">ဒေသ</span></label><select id="pArea"></select></div>
+        <div class="dealer-only"><label class="lab" for="pAddress">地址<span class="my">လိပ်စာ</span></label><input type="text" id="pAddress" maxlength="200"></div>
+        <div class="dealer-only"><label class="lab" for="pBrand">品牌（賣哪些品牌）<span class="my">ရောင်းသော တံဆိပ်များ</span></label><input type="text" id="pBrand" list="dlBrands" maxlength="120"></div>
+        <div class="farmer-only row2">
+          <div><label class="lab" for="pAreaNow">目前種植面積<small class="unit"></small><span class="my">လက်ရှိ စိုက်ဧက</span></label><input type="number" id="pAreaNow" min="0" step="0.1" inputmode="decimal"></div>
+          <div><label class="lab" for="pAreaMax">可種植面積<small class="unit"></small><span class="my">စိုက်နိုင်သော ဧက</span></label><input type="number" id="pAreaMax" min="0" step="0.1" inputmode="decimal"></div>
+        </div>
+        <div class="farmer-only"><label class="lab" for="pPlantDate">種植日期<span class="my">စိုက်သည့်ရက်</span></label><input type="date" id="pPlantDate"></div>
+        <div class="farmer-only"><label class="lab" for="pFert">使用肥料<span class="my">သုံးသော မြေသြဇာ</span></label><input type="text" id="pFert" list="dlFerts" maxlength="120"></div>
+      </div>
+    </details>
+
+    <!-- 客戶資料緊接在選擇農民下面（董事長 2026-11-12 手稿：新農民名字、電話、作物選單、品種＝公司名＋代碼選單、面積、種植日期可編輯）；接著拍照、打字 -->
+    <div class="three" id="mediaRow">
+      <label class="big" id="photoBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        <span class="label">拍照</span><span class="my">ဓာတ်ပုံ ရိုက်</span>
+        <input type="file" id="photoInput" accept="image/*" capture="environment" aria-label="拍照">
+      </label>
+      <label class="big" id="albumBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/></svg>
+        <span class="label">照片上傳</span><span class="my">ဓာတ်ပုံ တင်</span>
+        <input type="file" id="albumInput" accept="image/*" multiple aria-label="從相簿選照片">
+      </label>
+      <button type="button" class="big" id="recBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        <span class="label">錄音</span><span class="my">အသံ သွင်း</span>
+      </button>
+    </div>
+    <div class="thumbs" id="thumbs"></div>
+
+    <!-- 結案：農民收成賣掉後（董事長 2026-11-12 手稿：選擇農民、拍照、圖片上傳、賣給 1 地區 2 價格 3 產量 4 收購客戶 5 電話） -->
+    <div id="closeBox" class="trial" hidden>
+      <span class="lab">賣給<span class="my">ရောင်းချသည့်နေရာ</span></span>
+      <div><label class="lab" for="cRegion">1. 地區<span class="my">ဒေသ</span></label><select id="cRegion"></select></div>
+      <div class="row2">
+        <div><label class="lab" for="cPrice">2. 價格（必填）<span class="my">ဈေးနှုန်း (မဖြစ်မနေ)</span><small class="cunit-price"></small></label><input type="number" id="cPrice" min="0" step="any" inputmode="decimal" placeholder="例 12000"></div>
+        <div><label class="lab" for="cYield">3. 產量（必填）<span class="my">အထွက်နှုန်း (မဖြစ်မနေ)</span><small class="cunit-yield"></small></label><input type="number" id="cYield" min="0" step="any" inputmode="decimal" placeholder="例 60"></div>
+      </div>
+      <div><label class="lab" for="cBuyer">4. 收購客戶（必填）<span class="my">ဝယ်သူ (မဖြစ်မနေ)</span></label><input type="text" id="cBuyer" maxlength="80" placeholder="例：Golden 糧行／U Aung"></div>
+      <div><label class="lab" for="cPhone">5. 電話<span class="my">ဖုန်း</span></label><input type="tel" id="cPhone" maxlength="30" inputmode="tel" placeholder="例：09 123 456 789"></div>
+      <p class="sub" id="closeHint">只能選自己負責的農民。存檔後這位農民就結案（不再提醒回訪）。<br>ကိုယ်တာဝန်ယူထားသော လယ်သမားသာ ရွေးနိုင်သည်။</p>
+    </div>
+
+    <!-- 0.4.35 董事長：選擇農民後跳出這位農民之前的進度（農民進度表）；沒有進度就跳出新增（補齊）農民資料。
+         位置照董事長截圖：拍照／照片上傳／錄音下面、打字上面，空一大格 -->
+    <div class="progress" id="progressBox" hidden aria-live="polite"></div>
+    <!-- 0.4.38 董事長流程「農民進度 → 拜訪 → NO（沒見到、農民拒絕）→ 下次再訪」 -->
+    <div class="trial" id="noMeetBox" hidden>
+      <div class="meetswitch">
+        <button type="button" class="btn2" id="meetYes" aria-pressed="true">有見到農民，開始拜訪<span class="my">တွေ့ပြီ၊ စတင်မည်</span></button>
+        <button type="button" class="btn2" id="meetNo" aria-pressed="false">沒見到／農民拒絕 → 下次再訪<span class="my">မတွေ့ / ငြင်း → နောက်မှ</span></button>
+      </div>
+      <div class="fields" id="noMeetForm" hidden>
+        <div class="row2">
+          <div><label class="lab" for="nmReason">原因<span class="my">အကြောင်းရင်း</span></label>
+            <select id="nmReason"><option value="沒見到農民">沒見到農民／မတွေ့</option><option value="農民拒絕">農民拒絕／ငြင်းဆို</option><option value="其他">其他／အခြား</option></select></div>
+          <div><label class="lab" for="nmNext">下次再訪日期<span class="my">နောက်တစ်ကြိမ် သွားမည့်ရက်</span></label><input type="date" id="nmNext"></div>
+        </div>
+        <div><label class="lab" for="nmNote">說明（可不填）<span class="my">မှတ်ချက်</span></label><input type="text" id="nmNote" maxlength="300" placeholder="例：農民去外地，下週回來／ခရီးထွက်၊ နောက်အပတ် ပြန်လာမည်"></div>
+      </div>
+    </div>
+
+    <div id="noteBox">
+      <label class="lab" for="note">打字<span class="my">စာရိုက်</span></label>
+      <textarea id="note" maxlength="2000" placeholder="作物怎麼樣、客戶說什麼、下次要準備什麼（緬文或中文都可以）&#10;သီးနှံအခြေအနေ၊ ဖောက်သည်ပြောသည်များ၊ နောက်တစ်ကြိမ် ပြင်ဆင်ရန် (မြန်မာ သို့မဟုတ် တရုတ်)"></textarea>
+    </div>
+
+
+    <div id="trialBox" class="trial" hidden>
+      <span class="lab" id="trialLab">試作<span class="my">စမ်းသပ်</span></span>
+      <p class="sub" id="trialNow"></p>
+      <div class="two">
+        <button type="button" class="btn2" id="trialStartBtn">＋ 開始新的試作</button>
+        <button type="button" class="btn2" id="trialEndBtn">填結果／結束<span class="my">ရလဒ်ဖြည့် / ပြီးဆုံး</span></button>
+      </div>
+      <div class="fields" id="trialStartForm" hidden>
+        <div><label class="lab" for="tItem" id="tItemLab">試作品項（必填）<span class="my">ပစ္စည်းအမည် (မဖြစ်မနေ)</span></label><input type="text" id="tItem" maxlength="120" placeholder="例：A 肥料 2 號／ဥပမာ - A မြေသြဇာ နံပါတ် ၂"></div>
+        <div class="row2">
+          <div><label class="lab" for="tDosage">用量<span class="my">သုံးစွဲပမာဏ</span></label><input type="text" id="tDosage" maxlength="120" placeholder="例：每英畝 2 包／တစ်ဧကလျှင် ၂ အိတ်"></div>
+          <div><label class="lab" for="tStart">開始日<span class="my">စတင်ရက်</span></label><input type="date" id="tStart"></div>
+        </div>
+      </div>
+      <div class="fields" id="trialEndForm" hidden>
+        <div><label class="lab" for="tOutcome">結果<span class="my">ရလဒ်</span></label>
+          <select id="tOutcome"><option value="成功">成功／အောင်မြင်</option><option value="失敗">失敗／မအောင်မြင်</option><option value="結束">結束（推廣完成，不分成敗）／ပြီးဆုံး</option></select></div>
+        <div class="row2">
+          <div><label class="lab" for="tHeight">株高（公分）<span class="my">အပင်အမြင့် (စင်တီ)</span></label><input type="number" id="tHeight" min="0" step="0.1" inputmode="decimal"></div>
+          <div><label class="lab" for="tGrains">穗粒數<span class="my">အနှံတစ်ခု အစေ့အရေအတွက်</span></label><input type="number" id="tGrains" min="0" step="1" inputmode="numeric"></div>
+        </div>
+        <div class="row2">
+          <div><label class="lab" for="tYield">產量<span class="my">အထွက်နှုန်း</span></label><input type="number" id="tYield" min="0" step="any" inputmode="decimal"></div>
+          <div><label class="lab" for="tYieldUnit">產量單位<span class="my">အထွက် ယူနစ်</span></label><input type="text" id="tYieldUnit" maxlength="20"></div>
+        </div>
+        <div class="row2">
+          <div><label class="lab" for="tScore">農民評分<span class="my">လယ်သမား အမှတ်ပေး</span></label>
+            <select id="tScore"><option value="">—</option><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></div>
+          <div><label class="lab" for="tComment">農民評價<span class="my">လယ်သမား၏ သုံးသပ်ချက်</span></label><input type="text" id="tComment" maxlength="300"></div>
+        </div>
+        <div><label class="lab" for="tOther">其他觀察<span class="my">အခြား တွေ့ရှိချက်</span></label><input type="text" id="tOther" maxlength="500"></div>
+        <!-- 0.4.38 董事長流程：成功 → 寫收成報告／成果報告（現有量測欄位＋收成欄位），做好寄給主管 -->
+        <div class="fields" id="harvestBox">
+          <span class="lab" style="color:var(--paddy)">收成報告／成果報告<span class="my">ရိတ်သိမ်း အစီရင်ခံစာ</span></span>
+          <div class="row2">
+            <div><label class="lab" for="hDate">收成日期<span class="my">ရိတ်သိမ်းရက်</span></label><input type="date" id="hDate"></div>
+            <div><label class="lab" for="hQuality">品質<span class="my">အရည်အသွေး</span></label>
+              <select id="hQuality"><option value="">—</option><option value="好">好／ကောင်း</option><option value="普通">普通／သာမန်</option><option value="差">差／ညံ့</option></select></div>
+          </div>
+          <div><label class="lab" for="hCompare">比對照區多收多少<span class="my">နှိုင်းယှဉ်ကွက်ထက် ပိုထွက်</span></label><input type="text" id="hCompare" maxlength="200" placeholder="例：每英畝多 10 籃／တစ်ဧက ၁၀ တောင်း ပို"></div>
+          <div><label class="lab" for="hAgain">農民明年還要用嗎<span class="my">နောက်နှစ် ဆက်သုံးမလား</span></label>
+            <select id="hAgain"><option value="">—</option><option value="要">要／သုံးမည်</option><option value="考慮">考慮／စဉ်းစားမည်</option><option value="不要">不要／မသုံးတော့</option></select></div>
+        </div>
+        <div class="fields" id="failBox" hidden>
+          <span class="lab" style="color:var(--chili)">失敗紀錄（全部都要填）<span class="my">မအောင်မြင်မှု မှတ်တမ်း (အားလုံး ဖြည့်ရန်)</span></span>
+          <p class="tip" id="failExample">範例 ဥပမာ：天氣 乾旱／溫度 38°C／施肥 尿素每英畝 1 包（播種後 20 天）／水分 缺水，灌溉溝乾了／病蟲害 有，葉子褐色斑點約三成／失敗原因 開花期連續 10 天沒下雨，穗粒很少<br>ရာသီဥတု မိုးခေါင်／အပူချိန် 38°C／ယူရီးယား တစ်ဧက ၁ အိတ်／ရေမလုံ／ရွက်ပေါ် အညိုကွက်／ပန်းပွင့်ချိန် မိုးမရွာ၍ အစေ့နည်း</p>
+          <div class="row2">
+            <div><label class="lab" for="fWeather">天氣<span class="my">ရာသီဥတု</span></label>
+              <select id="fWeather"><option value="">— 請選 ရွေးပါ —</option><option value="乾旱">乾旱／မိုးခေါင်</option><option value="大雨淹水">大雨淹水／မိုးသည်း ရေကြီး</option><option value="正常">正常／ပုံမှန်</option><option value="其他">其他／အခြား</option></select></div>
+            <div><label class="lab" for="fTemp">溫度（°C）<span class="my">အပူချိန် (°C)</span></label><input type="number" id="fTemp" step="any" inputmode="decimal" placeholder="例 38"></div>
+          </div>
+          <div><label class="lab" for="fFert">施肥情況（品項、用量、時間）<span class="my">မြေသြဇာ (အမျိုး၊ ပမာဏ၊ အချိန်)</span></label><input type="text" id="fFert" maxlength="300" placeholder="例：尿素 每英畝 1 包，播種後 20 天／ယူရီးယား တစ်ဧက ၁ အိတ်"></div>
+          <div class="row2">
+            <div><label class="lab" for="fWater">水分<span class="my">ရေ</span></label>
+              <select id="fWater"><option value="">—</option><option value="正常">正常／ပုံမှန်</option><option value="缺水">缺水／ရေမလုံ</option><option value="積水">積水／ရေဝပ်</option><option value="其他">其他／အခြား</option></select></div>
+            <div><label class="lab" for="fPest">病蟲害<span class="my">ပိုးမွှား / ရောဂါ</span></label>
+              <select id="fPest"><option value="">—</option><option value="無">無／မရှိ</option><option value="有">有／ရှိ</option></select></div>
+          </div>
+          <div><label class="lab" for="fPestNote">病蟲害說明<span class="my">ပိုးမွှား / ရောဂါ အသေးစိတ်</span></label><input type="text" id="fPestNote" maxlength="300" placeholder="例：葉子有褐色斑點，約三成植株／ရွက်ပေါ် အညိုကွက်"></div>
+          <div><label class="lab" for="fReason">失敗原因<span class="my">မအောင်မြင်ရသည့် အကြောင်းရင်း</span></label><textarea id="fReason" maxlength="1000" placeholder="例：開花期連續 10 天沒下雨，田裡缺水，穗粒很少&#10;ပန်းပွင့်ချိန် ရက် ၁၀ မိုးမရွာ၍ ရေမလုံ၊ အစေ့နည်း"></textarea></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 0.4.33 董事長：一般拜訪的農民也會種植失敗，要寫原因 → 勾了就用試作那一組失敗欄位（全部必填） -->
+    <div id="plantFailBox" class="trial" hidden>
+      <label class="chk"><input type="checkbox" id="plantFail"> 這次發現<b>種植失敗</b>（要寫原因）<span class="my">စိုက်ပျိုးမှု မအောင်မြင် (အကြောင်းရင်း ဖြည့်ရန်)</span></label>
+      <div id="plantFailSlot"></div>
+    </div>
+
+    <div id="priceBox" hidden>
+      <span class="lab">農作物價格<span class="my">သီးနှံ ဈေးနှုန်း</span></span>
+      <div id="priceRows" style="display:grid;gap:12px"></div>
+      <button type="button" class="btn2" id="addPriceBtn" style="margin-top:10px">＋ 加一筆價格／ဈေးနှုန်း ထပ်ထည့်</button>
+    </div>
+
+
+    <div class="gps"><span id="gps">📍 定位中… တည်နေရာ ရှာနေသည်</span> <button type="button" class="link" id="relocateBtn">重新定位／ပြန်ရှာ</button></div>
+
+    <button type="button" class="save" id="saveBtn" disabled>儲存（自動上傳）<span class="my">သိမ်းမည်</span></button>
+    <p class="sub" id="saveHint"></p>
+  </div>
+</section>
+
+<datalist id="dlCrops"></datalist><datalist id="dlVarieties"></datalist><datalist id="dlFerts"></datalist><datalist id="dlBrands"></datalist>
+
+<footer>
+  <!-- 0.4.29 董事長 2026-11-12：緬甸網路常擋某些網站主機 → 列出幾個備用網址（不同公司的主機、同一個後台與資料），打不開時換一個 -->
+  <details class="mirrors" id="mirrors">
+    <summary>網址打不開時改用這個<span class="my">လိပ်စာ မဖွင့်နိုင်လျှင် ဤလိပ်စာ သုံးပါ</span></summary>
+    <ul id="mirrorList"></ul>
+    <p class="sub">換網址要重新登入一次；資料、帳號都一樣。還沒上傳的紀錄存在原本的網址裡，網路通了請回原本的網址送出。<span class="my">လိပ်စာပြောင်းလျှင် ပြန်ဝင်ပါ</span></p>
+  </details>
+  <small>第 2 期測試版 <span id="appVer"></span>・緬文待校對 မြန်မာစာ ပြန်စစ်ရန်</small> <button type="button" class="link" id="logoutBtn"><small>登出 ထွက်ရန်</small></button>
+</footer>
+<div id="toast" hidden aria-live="polite"></div>
+
+<script src="config.js"></script>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2f6b3a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="田間打卡">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>田間打卡</title>
+<script src="inapp.js"></script>
+<style>
+:root{--bg:#f3f1e8;--surface:#fbfaf5;--line:#d9d4c2;--fg:#22281f;--muted:#5f6656;--paddy:#2f6b3a;--paddy-soft:#dcebd9;--turmeric:#9a6a0c;--turmeric-soft:#f6e6bf;--chili:#b23a2b;--chili-soft:#f3d6d0}
+@media (prefers-color-scheme:dark){:root{--bg:#151812;--surface:#1d2119;--line:#343a2e;--fg:#e8eadf;--muted:#a3a993;--paddy:#7fbf86;--paddy-soft:#233824;--turmeric:#e3ad45;--turmeric-soft:#3d3113;--chili:#ec7c6b;--chili-soft:#4a1f19;color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important} /* 有設 display 的元素也要能藏起來（2026-11-11 抓到盤商畫面露出農民欄位） */
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;font-size:16px;line-height:1.55;
+  padding:max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+.my{font-family:"Noto Sans Myanmar","Myanmar Text","Padauk",sans-serif;font-size:.8em;color:var(--muted);display:block;font-weight:400}
+button,input,select,textarea{font:inherit;color:inherit}
+header{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:12px}
+h1{font-size:1.25rem;margin:0}
+h2{font-size:1rem;margin:18px 0 8px}
+small,.sub{color:var(--muted);font-size:.8rem}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:14px}
+label.lab,.lab{font-weight:700;display:block;margin-bottom:6px}
+select,input[type=text],input[type=tel],input[type=number],input[type=date],input[type=password],textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);min-width:0}
+textarea{min-height:96px;resize:vertical}
+.gps{font-size:.85rem;color:var(--muted)}
+.gps b{color:var(--paddy)}
+.link{background:none;border:0;color:var(--paddy);text-decoration:underline;padding:0;cursor:pointer}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.three{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.big{border:1.5px dashed var(--line);background:var(--bg);border-radius:14px;min-height:92px;padding:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;cursor:pointer;position:relative;font-size:.92rem}
+.big svg{width:28px;height:28px}
+.big .label{font-weight:700}
+.big.done{border-style:solid;border-color:var(--paddy);background:var(--paddy-soft)}
+.big.rec{border-style:solid;border-color:var(--chili);background:var(--chili-soft)}
+.big.busy{opacity:.6}
+.big input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.cats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cat{border:0;border-radius:16px;padding:18px 10px;min-height:96px;font-weight:900;font-size:1.15rem;cursor:pointer;background:var(--paddy);color:var(--surface);text-align:center}
+.cat .my{color:inherit;opacity:.85}
+.cat.c2{background:#3d7d6b}.cat.c3{background:var(--turmeric)}.cat.c4{background:#6b5a8a}.cat.c5{background:#5a6b3d}
+.cats3{grid-template-columns:repeat(3,1fr)}.cats3 .cat{padding:14px 6px;font-size:1.05rem}
+.sub-cats{margin-top:10px}.sub-cats .cat{min-height:76px}
+.cat.hub{min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.cat .hint{display:block;font-size:.72rem;font-weight:400;color:inherit;opacity:.9;margin-top:4px;line-height:1.35} /* small 預設是灰色，放在彩色按鈕上看不見（2026-11-12 實測） */
+#farmerBtn[aria-expanded="true"],#dealerBtn[aria-expanded="true"]{outline:3px solid var(--ink,#222);outline-offset:2px}
+li.task{align-items:flex-start}li.task label{display:flex;gap:10px;flex:1;min-width:0;cursor:pointer}
+li.task input{width:26px;height:26px;flex:none;margin-top:2px}li.task.done span{color:var(--muted)}
+.btn2.small{width:auto;padding:6px 12px;flex:none;align-self:center}
+@media (prefers-color-scheme:dark){.cat{color:#10140d}}
+.thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.thumbs:empty{display:none}
+.thumb{position:relative;border-radius:10px;overflow:hidden;aspect-ratio:1;background:var(--paddy-soft)}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb .tag{position:absolute;left:4px;top:4px;font-size:.7rem;background:rgba(0,0,0,.55);color:#fff;border-radius:6px;padding:0 6px}
+.thumb .del{position:absolute;right:4px;top:4px;border:0;border-radius:99px;width:28px;height:28px;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;font-weight:900}
+details.profile{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--bg)}
+.trial{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--bg);display:grid;gap:10px}
+.trial .btn2[aria-pressed="true"]{background:var(--paddy);color:var(--surface)}
+details.profile summary{font-weight:700;cursor:pointer}
+.fields{display:grid;gap:10px;margin-top:10px}
+.fields .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
+.price-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px;border:1px solid var(--line);border-radius:10px;position:relative}
+.price-row .del{position:absolute;right:6px;top:-10px;border:1px solid var(--line);background:var(--surface);border-radius:99px;width:26px;height:26px;cursor:pointer}
+.btn2{border:1px solid var(--paddy);background:none;color:var(--paddy);border-radius:10px;padding:10px;font-weight:700;cursor:pointer;width:100%}
+.save{border:0;border-radius:14px;background:var(--paddy);color:var(--surface);padding:15px;font-weight:900;font-size:1.1rem;cursor:pointer;width:100%}
+.save:disabled{opacity:.4}
+.save .my{color:inherit;opacity:.85}
+.back{border:0;background:none;color:var(--paddy);font-weight:700;cursor:pointer;padding:4px 0;font-size:1rem}
+.queue{margin-top:14px}
+.count{font-weight:700;margin:0 0 6px}
+.count.wait{color:var(--turmeric)}
+.count.ok{color:var(--paddy)}
+ul{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+li{display:flex;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:.9rem}
+li:last-child{border-bottom:0}
+li.empty{color:var(--muted)}
+li.go{cursor:pointer}
+.pill{font-size:.75rem;font-weight:700;padding:1px 9px;border-radius:99px;align-self:center;white-space:nowrap}
+.pill.ok{background:var(--paddy-soft);color:var(--paddy)}
+.pill.wait{background:var(--turmeric-soft);color:var(--turmeric)}
+.pill.late{background:var(--chili-soft);color:var(--chili)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.months{display:flex;gap:6px;margin-bottom:8px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 14px;cursor:pointer;font-size:.9rem}
+.chip[aria-pressed="true"]{background:var(--paddy);color:var(--surface);border-color:var(--paddy)}
+li.plan>span:first-child{flex:1;min-width:0}
+.bar{display:block;height:6px;border-radius:99px;background:var(--line);margin-top:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--paddy)}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.stat b{display:block;font-size:1.5rem;font-variant-numeric:tabular-nums}
+.tip{background:var(--turmeric-soft);color:var(--fg);border-radius:12px;padding:10px 12px;font-size:.88rem;margin-bottom:12px}
+#syncState{min-height:1.2em;font-size:.85rem;color:var(--muted);margin:6px 0 0}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,env(safe-area-inset-bottom));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:.9rem;max-width:90%;z-index:9}
+#loginForm{display:grid;gap:12px}
+.err{color:var(--chili)}
+footer{margin-top:18px;text-align:center}
+</style>
+</head>
+<body>
+<div class="tip" id="iosTip" hidden>📱 iPhone 請先按下方「分享」→「加入主畫面」，以後<strong>只從主畫面的圖示打開</strong>，離線存的資料才不會不見。</div>
+
+<!-- 登入 -->
+<section id="setup" hidden>
+  <header><h1>田間打卡<span class="my">လယ်ကွင်း မှတ်တမ်း</span></h1></header>
+  <form class="card" id="loginForm" autocomplete="on">
+    <div><label class="lab" for="acct">帳號<span class="my">အကောင့်</span></label>
+      <input type="text" id="acct" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>
+    <div><label class="lab" for="pw">密碼<span class="my">စကားဝှက်</span></label>
+      <input type="password" id="pw" autocomplete="current-password" required></div>
+    <div id="newPwBox" hidden>
+      <label class="lab" for="newPw">設定你自己的新密碼（至少 6 個字）<span class="my">စကားဝှက် အသစ်</span></label>
+      <input type="password" id="newPw" autocomplete="new-password">
+      <label class="lab" for="newPw2" style="margin-top:8px">新密碼再輸入一次</label>
+      <input type="password" id="newPw2" autocomplete="new-password">
+    </div>
+    <button type="submit" class="save" id="loginBtn">登入<span class="my">ဝင်မည်</span></button>
+    <p class="sub" id="setupMsg" aria-live="polite">只要登入一次，之後沒網路也能打卡。帳號請向主管索取。</p>
+  </form>
+</section>
+
+<!-- 首頁 -->
+<section id="home" hidden>
+  <header><h1>田間打卡<span class="my">လယ်ကွင်း မှတ်တမ်း</span></h1><span class="sub" id="who"></span></header>
+  <!-- 首頁照手稿：左卡「農民」、右卡「盤商或種子商」，點了再選細項（2026-11-12 董事長同意介面規劃 D） -->
+  <div class="cats">
+    <button type="button" class="cat hub" id="farmerBtn" aria-expanded="false" aria-controls="farmerCats">農民<span class="my">လယ်သမား</span><small class="hint">選擇農民 → 打卡・拍照・打字・語音</small></button>
+    <button type="button" class="cat c3 hub" id="dealerBtn" aria-expanded="false" aria-controls="dealerCats">盤商或種子商<span class="my">ကုန်သည် / မျိုးစေ့ဆိုင်</span><small class="hint">選擇 → 拜訪內容・農作物價格</small></button>
+  </div>
+  <div class="cats cats3 sub-cats" id="farmerCats" hidden>
+    <button type="button" class="cat" data-cat="試作">試作<span class="my">စမ်းသပ်စိုက်ပျိုး</span></button>
+    <button type="button" class="cat c2" data-cat="推廣">推廣<span class="my">မြှင့်တင်ရောင်းချ</span></button>
+    <button type="button" class="cat c5" data-cat="農戶">一般拜訪<span class="my">ပုံမှန်သွားရောက်</span></button>
+  </div>
+  <div class="cats sub-cats" id="dealerCats" hidden>
+    <button type="button" class="cat c3" data-cat="盤商">盤商<span class="my">ကုန်သည်</span></button>
+    <button type="button" class="cat c4" data-cat="種子商">種子商<span class="my">မျိုးစေ့ဆိုင်</span></button>
+  </div>
+
+  <h2>任務清單<span class="sub">（主管派的，做完打勾）</span></h2>
+  <ul id="taskList"></ul>
+
+  <h2>日程清單<span class="sub">（逾期＋未來 7 天要回訪的）</span></h2>
+  <ul id="scheduleList"></ul>
+
+  <h2>我的試作<span class="sub">（進行中的試作、推廣，點一下去拜訪）</span></h2>
+  <ul id="trialList"></ul>
+
+  <h2>月計劃<span class="sub">（主管在試算表「計劃」分頁訂的目標，系統自動算）</span></h2>
+  <ul id="planList"></ul>
+
+  <h2>工作進度 <span class="sub" id="homeSynced"></span></h2>
+  <div class="months" id="monthChips"></div>
+  <div class="stats">
+    <div class="stat"><b id="statVisits">—</b><span class="sub">拜訪次數</span></div>
+    <div class="stat"><b id="statNew">—</b><span class="sub">新增客戶</span></div>
+    <div class="stat"><b id="statCust">—</b><span class="sub">拜訪過的客戶</span></div>
+    <div class="stat"><b id="statTrials">—</b><span class="sub">試作 開始／完成</span></div>
+  </div>
+  <p class="sub" id="statByCat"></p>
+
+  <div class="queue">
+    <p class="count" id="pendingCount"></p>
+    <ul id="queueList"></ul>
+    <p id="syncState" aria-live="polite"></p>
+  </div>
+</section>
+
+<!-- 拜訪 -->
+<section id="visit" hidden>
+  <header><button type="button" class="back" id="backBtn">← 首頁</button><h1 id="visitTitle">試作</h1></header>
+  <div class="card">
+    <div>
+      <label class="lab" for="farmer" id="farmerLab">1. 選擇農民<span class="my">လယ်သမား ရွေးပါ</span></label>
+      <select id="farmer"></select>
+    </div>
+
+    <details class="profile" id="profileBox" hidden>
+      <summary id="profileTitle">客戶資料</summary>
+      <div class="fields">
+        <div id="dealerTypeBox"><label class="lab" for="pType">類型</label>
+          <select id="pType"><option value="盤商">盤商</option><option value="種子商">種子商</option></select></div>
+        <div><label class="lab" for="pName" id="pNameLab">名字</label><input type="text" id="pName" maxlength="60"></div>
+        <div class="dealer-only"><label class="lab" for="pOwner">老闆名字</label><input type="text" id="pOwner" maxlength="60"></div>
+        <div><label class="lab" for="pPhone">電話</label><input type="tel" id="pPhone" maxlength="30" inputmode="tel"></div>
+        <div><label class="lab" for="pArea">地區</label><select id="pArea"></select></div>
+        <div class="dealer-only"><label class="lab" for="pAddress">地址</label><input type="text" id="pAddress" maxlength="200"></div>
+        <div class="dealer-only"><label class="lab" for="pBrand">品牌（賣哪些品牌）</label><input type="text" id="pBrand" list="dlBrands" maxlength="120"></div>
+        <div class="farmer-only row2">
+          <div><label class="lab" for="pCrop">作物</label><input type="text" id="pCrop" list="dlCrops" maxlength="40"></div>
+          <div><label class="lab" for="pVariety">品種</label><input type="text" id="pVariety" list="dlVarieties" maxlength="80" placeholder="公司名＋品種"></div>
+        </div>
+        <div class="farmer-only row2">
+          <div><label class="lab" for="pAreaNow">目前種植面積<small class="unit"></small></label><input type="number" id="pAreaNow" min="0" step="0.1" inputmode="decimal"></div>
+          <div><label class="lab" for="pAreaMax">可種植面積<small class="unit"></small></label><input type="number" id="pAreaMax" min="0" step="0.1" inputmode="decimal"></div>
+        </div>
+        <div class="farmer-only"><label class="lab" for="pPlantDate">種植日期</label><input type="date" id="pPlantDate"></div>
+        <div class="farmer-only"><label class="lab" for="pFert">使用肥料</label><input type="text" id="pFert" list="dlFerts" maxlength="120"></div>
+      </div>
+    </details>
+
+    <div id="trialBox" class="trial" hidden>
+      <span class="lab" id="trialLab">試作<span class="my">စမ်းသပ်</span></span>
+      <p class="sub" id="trialNow"></p>
+      <div class="two">
+        <button type="button" class="btn2" id="trialStartBtn">＋ 開始新的試作</button>
+        <button type="button" class="btn2" id="trialEndBtn">填結果／結束</button>
+      </div>
+      <div class="fields" id="trialStartForm" hidden>
+        <div><label class="lab" for="tItem" id="tItemLab">試作品項（必填）</label><input type="text" id="tItem" maxlength="120" placeholder="例：A 肥料 2 號"></div>
+        <div class="row2">
+          <div><label class="lab" for="tDosage">用量</label><input type="text" id="tDosage" maxlength="120" placeholder="例：每英畝 2 包"></div>
+          <div><label class="lab" for="tStart">開始日</label><input type="date" id="tStart"></div>
+        </div>
+      </div>
+      <div class="fields" id="trialEndForm" hidden>
+        <div><label class="lab" for="tOutcome">結果</label>
+          <select id="tOutcome"><option value="成功">成功</option><option value="失敗">失敗</option><option value="結束">結束（推廣完成，不分成敗）</option></select></div>
+        <div class="row2">
+          <div><label class="lab" for="tHeight">株高（公分）</label><input type="number" id="tHeight" min="0" step="0.1" inputmode="decimal"></div>
+          <div><label class="lab" for="tGrains">穗粒數</label><input type="number" id="tGrains" min="0" step="1" inputmode="numeric"></div>
+        </div>
+        <div class="row2">
+          <div><label class="lab" for="tYield">產量</label><input type="number" id="tYield" min="0" step="any" inputmode="decimal"></div>
+          <div><label class="lab" for="tYieldUnit">產量單位</label><input type="text" id="tYieldUnit" maxlength="20"></div>
+        </div>
+        <div class="row2">
+          <div><label class="lab" for="tScore">農民評分</label>
+            <select id="tScore"><option value="">—</option><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></div>
+          <div><label class="lab" for="tComment">農民評價</label><input type="text" id="tComment" maxlength="300"></div>
+        </div>
+        <div><label class="lab" for="tOther">其他觀察</label><input type="text" id="tOther" maxlength="500"></div>
+        <div class="fields" id="failBox" hidden>
+          <span class="lab" style="color:var(--chili)">失敗紀錄（天氣和失敗原因必填）</span>
+          <div class="row2">
+            <div><label class="lab" for="fWeather">天氣</label>
+              <select id="fWeather"><option value="">— 請選 —</option><option>乾旱</option><option>大雨淹水</option><option>正常</option><option>其他</option></select></div>
+            <div><label class="lab" for="fTemp">溫度（°C）</label><input type="number" id="fTemp" step="any" inputmode="decimal"></div>
+          </div>
+          <div><label class="lab" for="fFert">施肥情況（品項、用量、時間）</label><input type="text" id="fFert" maxlength="300"></div>
+          <div class="row2">
+            <div><label class="lab" for="fWater">水分</label>
+              <select id="fWater"><option value="">—</option><option>正常</option><option>缺水</option><option>積水</option><option>其他</option></select></div>
+            <div><label class="lab" for="fPest">病蟲害</label>
+              <select id="fPest"><option value="">—</option><option>無</option><option>有</option></select></div>
+          </div>
+          <div><label class="lab" for="fPestNote">病蟲害說明</label><input type="text" id="fPestNote" maxlength="300"></div>
+          <div><label class="lab" for="fReason">失敗原因</label><textarea id="fReason" maxlength="1000"></textarea></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="gps"><span id="gps">📍 定位中…</span> <button type="button" class="link" id="relocateBtn">重新定位</button></div>
+
+    <div class="three">
+      <label class="big" id="photoBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        <span class="label">拍照</span><span class="my">ဓာတ်ပုံ ရိုက်</span>
+        <input type="file" id="photoInput" accept="image/*" capture="environment" aria-label="拍照">
+      </label>
+      <label class="big" id="albumBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/></svg>
+        <span class="label">照片上傳</span><span class="my">ဓာတ်ပုံ တင်</span>
+        <input type="file" id="albumInput" accept="image/*" multiple aria-label="從相簿選照片">
+      </label>
+      <button type="button" class="big" id="recBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        <span class="label">錄音</span><span class="my">အသံ သွင်း</span>
+      </button>
+    </div>
+    <div class="thumbs" id="thumbs"></div>
+
+    <div>
+      <label class="lab" for="note">打字<span class="my">စာရိုက်</span></label>
+      <textarea id="note" maxlength="2000" placeholder="作物怎麼樣、客戶說什麼、下次要準備什麼（緬文或中文都可以）"></textarea>
+    </div>
+
+    <div id="priceBox" hidden>
+      <span class="lab">農作物價格<span class="my">သီးနှံ ဈေးနှုန်း</span></span>
+      <div id="priceRows" style="display:grid;gap:12px"></div>
+      <button type="button" class="btn2" id="addPriceBtn" style="margin-top:10px">＋ 加一筆價格</button>
+    </div>
+
+    <button type="button" class="save" id="saveBtn" disabled>儲存（自動上傳）<span class="my">သိမ်းမည်</span></button>
+    <p class="sub" id="saveHint"></p>
+  </div>
+</section>
+
+<datalist id="dlCrops"></datalist><datalist id="dlVarieties"></datalist><datalist id="dlFerts"></datalist><datalist id="dlBrands"></datalist>
+
+<footer><small>第 2 期測試版 <span id="appVer"></span>・緬文為示意，待校對</small> <button type="button" class="link" id="logoutBtn"><small>登出</small></button></footer>
+<div id="toast" hidden aria-live="polite"></div>
+
+<script src="config.js"></script>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
