@@ -3,6 +3,16 @@
 (function () {
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  /** 備用網址（0.4.30）：跟業務頁同一份清單（config.js 的 mirrors），主管頁網址＝每個網址＋boss.html；設定留空就不顯示 */
+  function renderMirrors() {
+    const box = $('mirrors'), ul = $('mirrorList');
+    if (!box || !ul) return;
+    const list = (typeof FARM_CONFIG !== 'undefined' && Array.isArray(FARM_CONFIG.mirrors)) ? FARM_CONFIG.mirrors : [];
+    box.hidden = !list.length;
+    const here = typeof location !== 'undefined' ? location.origin + location.pathname : '';
+    ul.innerHTML = list.map(m => { const u = String(m.url).replace(/\/?$/, '/') + 'boss.html';
+      return `<li><a href="${esc(u)}">${esc(u)}</a>${u === here ? '<span class="pill p-grn">現在用的</span>' : ''}</li>`; }).join('');
+  }
   const DAY = 86400000;
   const s2d = s => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
   const d2s = d => d.toISOString().slice(0, 10);
@@ -858,6 +868,7 @@
   $('logout').addEventListener('click', logout);
   $('loginForm').addEventListener('submit', onLogin);
   biDom(document.body); // 登入頁、標題列、分頁名稱補緬文
+  renderMirrors();
   state.key = keyStore.get();
   if (state.key) load(); else showLogin();
   window.__bossTest = { state, render, load, logout }; // 本機測試用

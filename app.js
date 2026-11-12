@@ -125,10 +125,12 @@
      部署設定可以用 FARM_CONFIG.mirrors 換掉這份清單（客戶正式上線換成自己的網址） */
   const MIRRORS = [
     { url: 'https://ppo2009.github.io/farm-visit-test-1028/', name: 'GitHub' },
+    { url: 'https://farmvisit-mm1028.farmvisit-mm1028.workers.dev/', name: 'Cloudflare' },
     { url: 'https://farm-visit-test-1028.web.app/', name: 'Firebase' }
   ];
   function renderMirrors() {
-    const list = (typeof FARM_CONFIG !== 'undefined' && Array.isArray(FARM_CONFIG.mirrors) && FARM_CONFIG.mirrors.length) ? FARM_CONFIG.mirrors : MIRRORS;
+    const list = (typeof FARM_CONFIG !== 'undefined' && Array.isArray(FARM_CONFIG.mirrors)) ? FARM_CONFIG.mirrors : MIRRORS;
+    $('mirrors').hidden = !list.length; // 設定留空＝不顯示
     const here = location.origin + location.pathname.replace(/[^/]*$/, '');
     $('mirrorList').innerHTML = list.map((m, i) => `<li><a href="${esc(m.url)}">${esc(m.url)}</a>${m.url === here ? '<span class="pill ok">現在用的 ယခု</span>' : ''}<button type="button" class="btn2 small" data-copyurl="${i}">複製 ကူးယူ</button></li>`).join('');
     $('mirrorList').querySelectorAll('[data-copyurl]').forEach(b => b.addEventListener('click', async () => {

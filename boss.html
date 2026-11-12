@@ -139,6 +139,12 @@ details.brief .body{padding:0 12px 12px;display:grid;gap:8px}
 .answer{border-left:3px solid var(--paddy);padding:4px 10px;background:var(--paddy-soft);border-radius:0 8px 8px 0}
 .mytasks li{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
 .mytasks{list-style:none;padding:0}.mytasks li .btn{margin-left:auto}
+footer.wrap{margin-top:24px}
+.mirrors{border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--surface)}
+.mirrors summary{cursor:pointer;font-weight:700;color:var(--paddy)}
+.mirrors ul{list-style:none;padding:0;margin:8px 0}
+.mirrors li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--line)}
+.mirrors li a{word-break:break-all}
 </style>
 </head>
 <body>
@@ -185,6 +191,11 @@ details.brief .body{padding:0 12px 12px;display:grid;gap:8px}
   </div>
   <main id="panel"></main>
 </div>
+
+<!-- 0.4.30 董事長 2026-11-12：主管頁也放備用網址（緬甸網路常擋網站主機；登入畫面和主畫面都看得到） -->
+<footer class="wrap"><details class="mirrors" id="mirrors"><summary>網址打不開時改用這個<span class="my">လိပ်စာ မဖွင့်နိုင်လျှင် ဤလိပ်စာ သုံးပါ</span></summary>
+  <ul id="mirrorList"></ul>
+  <p class="sub">換網址要重新登入一次；資料、帳號都一樣。</p></details></footer>
 
 <script src="config.js"></script>
 <script src="boss.js"></script>
