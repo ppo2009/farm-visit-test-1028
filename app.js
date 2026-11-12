@@ -434,9 +434,9 @@
     state.allCustomers = all;
   }
 
-  const PROFILE_INPUTS = { name: 'pName', owner: 'pOwner', phone: 'pPhone', area: 'pArea', address: 'pAddress', brand: 'pBrand', crop: 'pCrop', variety: 'pVariety', areaNow: 'pAreaNow', areaMax: 'pAreaMax', plantDate: 'pPlantDate', fertilizer: 'pFert' };
+  const PROFILE_INPUTS = { name: 'pName', owner: 'pOwner', phone: 'pPhone', area: 'pArea', address: 'pAddress', brand: 'pBrand', crop: 'pCrop', variety: 'pVariety', varCode: 'pVarCode', areaNow: 'pAreaNow', areaMax: 'pAreaMax', plantDate: 'pPlantDate', fertilizer: 'pFert' };
   const DEALER_KEYS = ['name', 'owner', 'phone', 'area', 'address', 'brand'];
-  const FARMER_KEYS = ['name', 'phone', 'area', 'crop', 'variety', 'areaNow', 'areaMax', 'plantDate', 'fertilizer'];
+  const FARMER_KEYS = ['name', 'phone', 'area', 'crop', 'variety', 'varCode', 'areaNow', 'areaMax', 'plantDate', 'fertilizer'];
   const activeKeys = () => (isDealerCat() ? DEALER_KEYS : FARMER_KEYS);
 
   function onFarmerChange() {
@@ -445,6 +445,7 @@
     Object.values(PROFILE_INPUTS).forEach(id => { $(id).value = ''; });
     $('pVarCo').value = ''; // 0.4.31：換客戶就重選公司，不帶上一位的
     state.original = null;
+    resetNoMeet(); // 0.4.38 換客戶就回到「有見到農民」
     if (!val) { box.hidden = true; $('progressBox').hidden = true; refreshTrialBox(); refreshSave(); return; } // 0.4.35 沒選人：進度、作物品種都收起來
     box.hidden = false;
     $('dealerTypeBox').hidden = true; // 盤商、種子商分開進來，種類就是入口，不用再選
@@ -504,7 +505,7 @@
       return;
     }
     const wk = s => { const d = Date.parse(String(s || '').slice(0, 10)); return isFinite(d) ? Math.max(1, Math.ceil((Date.now() - d) / 604800000)) : null; };
-    const head = [c.lastVisit ? `最後拜訪 ${esc(c.lastVisit)}` : '', c.nextDue ? `下次回訪 ${esc(c.nextDue)}` : '', c.crop ? `作物 ${esc(c.crop)}` : '', c.variety ? `品種 ${esc(c.variety)}` : '']
+    const head = [c.lastVisit ? `最後拜訪 ${esc(c.lastVisit)}` : '', c.nextDue ? `下次回訪 ${esc(c.nextDue)}` : '', c.crop ? `作物 ${esc(c.crop)}` : '', c.variety ? `品種 ${esc(c.variety)}` : '', c.varCode ? `代碼 ${esc(c.varCode)}` : '']
       .filter(Boolean).join('｜');
     const tr = trials.map(t => `<li><b>${esc(t.cat)}進行中</b>：${esc(t.item || '（未填品項）')}${t.start ? `，${esc(t.start)} 開始${wk(t.start) ? `（第 ${wk(t.start)} 週）` : ''}` : ''}</li>`).join('');
     const vs = recent.map(v => `<li>${esc(v.time)}｜${esc(v.staff)}｜${esc(CAT_LABEL(v.cat))}${v.closing ? '' : ''}${v.text ? `：${esc(v.text)}` : ''}${v.plantFail ? `<br><span class="pill late">種植失敗</span> ${esc(v.plantFail)}` : ''}${v.closing ? `<br>${esc(v.closing)}` : ''}</li>`).join('');
@@ -527,6 +528,8 @@
     $('trialBox').hidden = !show;
     refreshPlantFail(); // 0.4.33 一般拜訪的種植失敗勾選：換類別、換客戶時跟著顯示／收起
     $('cropBox').hidden = !(sel && !isDealerCat()); // 0.4.35 作物、種子公司、品種：選了農民就看得到
+    refreshNoMeet(); // 0.4.38 沒拜訪：換類別、換客戶時跟著顯示／收起
+    if (noMeetOn()) { $('trialBox').hidden = true; if (state.trialMode) setTrialMode(null); return; }
     if (!show) { if (state.trialMode) setTrialMode(null); return; }
     $('trialLab').innerHTML = `${esc(state.cat)}<span class="my">${CAT_MY[state.cat] || ''}</span>`;
     $('trialStartBtn').innerHTML = `＋ 開始新的${state.cat}<span class="my">${CAT_MY[state.cat]} အသစ် စတင်</span>`;
@@ -546,12 +549,13 @@
     if (m === 'start' && !$('tStart').value) { const d = new Date(); $('tStart').value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
     if (m === 'end' && !$('tYieldUnit').value) $('tYieldUnit').value = (state.options && state.options.yieldUnit) || '籃';
     $('failBox').hidden = !((m === 'end' && $('tOutcome').value === '失敗') || plantFailOn());
+    $('harvestBox').hidden = $('tOutcome').value === '失敗'; // 0.4.38 成功／結束 → 收成報告；失敗 → 失敗紀錄
     refreshSave();
   }
   /* 一般拜訪的種植失敗（0.4.33）：同一組失敗欄位（failBox）搬到一般拜訪下面用；切回試作結束時再搬回去 */
   const plantFailOn = () => state.cat === '農戶' && !!$('farmer').value && $('plantFail').checked;
   function refreshPlantFail() {
-    const show = state.cat === '農戶' && !!$('farmer').value;
+    const show = state.cat === '農戶' && !!$('farmer').value && !noMeetOn();
     $('plantFailBox').hidden = !show;
     if (!show) $('plantFail').checked = false;
     const box = $('failBox');
@@ -562,6 +566,40 @@
     }
     refreshSave();
   }
+  /* ───── 沒拜訪 → 下次再訪（0.4.38 董事長手稿：農民進度 → 拜訪；NO＝沒見到農民或農民拒絕 → 下次再訪）───── */
+  const noMeetShown = () => { const s = $('farmer').value; return !!s && s !== '__new' && groupOf(state.cat) === 'farmer' && state.cat !== '結案'; };
+  const noMeetOn = () => !!state.noMeet && noMeetShown();
+  function refreshNoMeet() {
+    const shown = noMeetShown();
+    $('noMeetBox').hidden = !shown;
+    if (!shown) state.noMeet = false;
+    const on = noMeetOn();
+    $('meetYes').setAttribute('aria-pressed', String(!on)); $('meetNo').setAttribute('aria-pressed', String(on));
+    $('noMeetForm').hidden = !on;
+    // 沒見到人：不填拜訪內容、試作、種植失敗（照片仍可拍，當作有去過的證明）
+    ['noteBox', 'trialBox', 'plantFailBox'].forEach(id => { if (on) $(id).hidden = true; });
+    if (on && !$('nmNext').value) { const d = new Date(Date.now() + 7 * 86400000); $('nmNext').value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+  }
+  function setNoMeet(on) {
+    state.noMeet = !!on;
+    if (on) { setTrialMode(null); $('plantFail').checked = false; refreshPlantFail(); }
+    else { $('noteBox').hidden = false; }
+    refreshNoMeet();
+    if (!on) refreshTrialBox();
+    refreshSave();
+  }
+  function resetNoMeet() { state.noMeet = false; $('nmReason').value = '沒見到農民'; $('nmNote').value = ''; $('nmNext').value = ''; $('noteBox').hidden = false; refreshNoMeet(); }
+  /** 沒拜訪時要的日期：必須是明天到一年內 */
+  function noMeetProblem() {
+    if (!noMeetOn()) return '';
+    const v = $('nmNext').value, d = new Date(), today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const max = new Date(Date.now() + 365 * 86400000), maxS = `${max.getFullYear()}-${pad(max.getMonth() + 1)}-${pad(max.getDate())}`;
+    if (!/^\d{4}-\d\d-\d\d$/.test(v)) return '請選下次再訪日期／နောက်တစ်ကြိမ် ရက် ရွေးပါ';
+    if (v <= today || v > maxS) return '下次再訪日期要在明天到一年內／မနက်ဖြန်မှ တစ်နှစ်အတွင်း ရွေးပါ';
+    return '';
+  }
+  const collectNoMeet = () => (noMeetOn() ? { reason: $('nmReason').value, note: $('nmNote').value.trim(), next: $('nmNext').value } : null);
+
   /** 失敗紀錄全部必填（董事長 2026-11-12）；病蟲害選「有」時說明也要填。回傳缺哪些 */
   function failMissing() {
     const miss = [['fWeather', '天氣'], ['fTemp', '溫度'], ['fFert', '施肥情況'], ['fWater', '水分'], ['fPest', '病蟲害'], ['fReason', '失敗原因']]
@@ -619,12 +657,13 @@
     const o = { op: 'end', id: t.id, outcome: $('tOutcome').value, height: $('tHeight').value, grains: $('tGrains').value, yield: $('tYield').value,
       yieldUnit: $('tYieldUnit').value.trim(), score: $('tScore').value, comment: $('tComment').value.trim(), other: $('tOther').value.trim() };
     if (o.outcome === '失敗') o.failure = collectFailure();
+    else o.harvest = { date: $('hDate').value, quality: $('hQuality').value, compare: $('hCompare').value.trim(), again: $('hAgain').value }; // 0.4.38 收成報告
     // 開始那筆還沒上傳：結束也帶著開始的資料，萬一順序顛倒後台照樣建得出來
     if (t.pending) o.startInfo = { item: t.item, dosage: t.dosage, start: t.start };
     return o;
   }
   function resetTrialForm() {
-    ['tItem', 'tDosage', 'tStart', 'tHeight', 'tGrains', 'tYield', 'tYieldUnit', 'tComment', 'tOther', 'fTemp', 'fFert', 'fPestNote', 'fReason', 'tScore', 'fWeather', 'fWater', 'fPest'].forEach(id => { $(id).value = ''; });
+    ['tItem', 'tDosage', 'tStart', 'tHeight', 'tGrains', 'tYield', 'tYieldUnit', 'tComment', 'tOther', 'fTemp', 'fFert', 'fPestNote', 'fReason', 'tScore', 'fWeather', 'fWater', 'fPest', 'hDate', 'hQuality', 'hCompare', 'hAgain'].forEach(id => { $(id).value = ''; });
     $('tOutcome').value = '成功';
     $('plantFail').checked = false; // 0.4.33
     state.activeTrial = null;
@@ -905,9 +944,9 @@
     const sel = $('farmer').value;
     const isNew = sel === '__new';
     const nameOk = !isNew || $('pName').value.trim();
-    const hasContent = state.photos.length || state.audio || $('note').value.trim() || collectPrices().length || state.trialMode || (state.cat === '結案' && !closeProblem()) || (sel && sel !== '__new' && collectProfile());
+    const hasContent = noMeetOn() || state.photos.length || state.audio || $('note').value.trim() || collectPrices().length || state.trialMode || (state.cat === '結案' && !closeProblem()) || (sel && sel !== '__new' && collectProfile());
     $('note').placeholder = noteExample().join('\n'); // 範例跟著農民進度換
-    const tp = trialProblem() || closeProblem();
+    const tp = noMeetProblem() || trialProblem() || closeProblem();
     const ok = sel && nameOk && !state.rec && !state.busyPhotos && !tp && (isNew || hasContent);
     $('saveBtn').disabled = !ok;
     $('saveHint').textContent = !sel ? '' : !nameOk ? '請先填名字／အမည် အရင်ဖြည့်ပါ' : state.rec ? '錄音中，先按一下結束錄音／အသံသွင်းနေသည်၊ အရင် ရပ်ပါ' : state.busyPhotos ? `照片處理中（還有 ${state.busyPhotos} 張）… ဓာတ်ပုံ ပြင်ဆင်နေ` : tp ? tp : !ok ? `拍照、上傳照片、錄音、打字${isDealerCat() ? '、記價格' : ''}（或改客戶資料）至少做一樣／ဓာတ်ပုံ၊ အသံ၊ စာ တစ်ခုခု လုပ်ပါ` : '';
@@ -956,13 +995,14 @@
       category: state.cat === '結案' ? '農戶' : state.cat, // 結案記成農民拜訪（統計照舊），另外帶 closing
       closing: collectClosing(),
       plantFailure: plantFailOn() ? collectFailure() : null, // 0.4.33 一般拜訪的種植失敗
+      noMeet: collectNoMeet(), // 0.4.38 沒見到農民／農民拒絕 → 下次再訪
       farmerId,
       tempName,
       farmerLabel: `【${state.cat}】${name}${isNew ? '（新）' : ''}`,
       profile,
-      text: $('note').value.trim(),
+      text: noMeetOn() ? '' : $('note').value.trim(),
       prices: collectPrices(),
-      trial: collectTrial(`T_${tag}_${stamp}_tr${rand}`),
+      trial: noMeetOn() ? null : collectTrial(`T_${tag}_${stamp}_tr${rand}`),
       // 一般拜訪也記下「存檔當下進行中的試作」：試作之後結束了，晚到的這筆照樣掛回去（GPT-6.1 R2-07）
       trialRef: !state.trialMode && (state.cat === '試作' || state.cat === '推廣') && state.activeTrial ? state.activeTrial.id : '',
       deviceTime: now,
@@ -1030,6 +1070,7 @@
     $('profileBox').hidden = true;
     Object.values(PROFILE_INPUTS).forEach(id => { $(id).value = ''; });
     resetTrialForm();
+    resetNoMeet();
     refreshSave();
   }
 
@@ -1166,6 +1207,9 @@
     $('trialStartBtn').addEventListener('click', () => setTrialMode(state.trialMode === 'start' ? null : 'start'));
     $('trialEndBtn').addEventListener('click', () => setTrialMode(state.trialMode === 'end' ? null : 'end'));
     $('tOutcome').addEventListener('change', () => setTrialMode('end'));
+    $('meetYes').addEventListener('click', () => setNoMeet(false)); // 0.4.38
+    $('meetNo').addEventListener('click', () => setNoMeet(true));
+    ['nmReason', 'nmNote', 'nmNext'].forEach(id => { $(id).addEventListener('input', refreshSave); $(id).addEventListener('change', refreshSave); });
     document.querySelectorAll('#trialBox input, #trialBox select, #trialBox textarea').forEach(el => { el.addEventListener('input', refreshSave); el.addEventListener('change', refreshSave); });
 
     // 自動上傳的時機：有網路時、切回這個畫面時、每分鐘一次

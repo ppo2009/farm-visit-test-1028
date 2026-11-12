@@ -73,6 +73,12 @@ li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px
 .progress ul{margin:6px 0 0;padding-left:1.1em}
 .progress li{margin:4px 0}
 #cropBox{margin:8px 0}
+#cropBox.croprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end}
+#cropBox.croprow[hidden]{display:none}
+.meetswitch{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.meetswitch .btn2[aria-pressed="true"]{background:var(--paddy);color:var(--surface)}
+#meetNo[aria-pressed="true"]{background:var(--turmeric);border-color:var(--turmeric)}
+#noMeetForm{margin-top:10px}
 .mirrors{max-width:520px;margin:0 auto 10px;text-align:left;border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--surface)}
 .mirrors summary{cursor:pointer;font-weight:700;color:var(--paddy);min-height:32px}
 .mirrors li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)}
@@ -241,11 +247,13 @@ footer{margin-top:18px;text-align:center}
       <select id="farmer"></select>
     </div>
     <!-- 0.4.35 董事長：「試作農民、一般農民怎麼沒有品種、編號選項」→ 作物、種子公司、品種（代碼）從收起來的客戶資料搬出來，選了農民就看得到 -->
-    <div class="fields" id="cropBox" hidden>
+    <div class="fields croprow" id="cropBox" hidden>
       <div><label class="lab" for="pCrop">作物<span class="my">သီးနှံ</span></label><select id="pCrop"></select></div>
       <!-- 0.4.31 董事長 2026-11-12 手稿「品種＝Company name＋代碼，有選單」：先選種子公司，再選品種（品種含代碼） -->
       <div><label class="lab" for="pVarCo">種子公司<span class="my">မျိုးစေ့ ကုမ္ပဏီ</span></label><select id="pVarCo"></select></div>
-      <div><label class="lab" for="pVariety">品種（代碼）<span class="my">မျိုး (ကုဒ်)</span></label><select id="pVariety"></select></div>
+      <div><label class="lab" for="pVariety">品種<span class="my">မျိုး</span></label><select id="pVariety"></select></div>
+      <!-- 0.4.38 董事長：品種跟代碼是分開的 → 代碼另外手動輸入；四格排一列，不會太長 -->
+      <div><label class="lab" for="pVarCode">代碼<span class="my">ကုဒ်</span></label><input type="text" id="pVarCode" maxlength="30" placeholder="手動輸入／ရိုက်ထည့်ပါ"></div>
     </div>
     <details class="profile" id="profileBox" hidden>
       <summary id="profileTitle">客戶資料／ဖောက်သည် အချက်အလက်</summary>
@@ -268,7 +276,7 @@ footer{margin-top:18px;text-align:center}
     </details>
 
     <!-- 客戶資料緊接在選擇農民下面（董事長 2026-11-12 手稿：新農民名字、電話、作物選單、品種＝公司名＋代碼選單、面積、種植日期可編輯）；接著拍照、打字 -->
-    <div class="three">
+    <div class="three" id="mediaRow">
       <label class="big" id="photoBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
         <span class="label">拍照</span><span class="my">ဓာတ်ပုံ ရိုက်</span>
@@ -302,6 +310,21 @@ footer{margin-top:18px;text-align:center}
     <!-- 0.4.35 董事長：選擇農民後跳出這位農民之前的進度（農民進度表）；沒有進度就跳出新增（補齊）農民資料。
          位置照董事長截圖：拍照／照片上傳／錄音下面、打字上面，空一大格 -->
     <div class="progress" id="progressBox" hidden aria-live="polite"></div>
+    <!-- 0.4.38 董事長流程「農民進度 → 拜訪 → NO（沒見到、農民拒絕）→ 下次再訪」 -->
+    <div class="trial" id="noMeetBox" hidden>
+      <div class="meetswitch">
+        <button type="button" class="btn2" id="meetYes" aria-pressed="true">有見到農民，開始拜訪<span class="my">တွေ့ပြီ၊ စတင်မည်</span></button>
+        <button type="button" class="btn2" id="meetNo" aria-pressed="false">沒見到／農民拒絕 → 下次再訪<span class="my">မတွေ့ / ငြင်း → နောက်မှ</span></button>
+      </div>
+      <div class="fields" id="noMeetForm" hidden>
+        <div class="row2">
+          <div><label class="lab" for="nmReason">原因<span class="my">အကြောင်းရင်း</span></label>
+            <select id="nmReason"><option value="沒見到農民">沒見到農民／မတွေ့</option><option value="農民拒絕">農民拒絕／ငြင်းဆို</option><option value="其他">其他／အခြား</option></select></div>
+          <div><label class="lab" for="nmNext">下次再訪日期<span class="my">နောက်တစ်ကြိမ် သွားမည့်ရက်</span></label><input type="date" id="nmNext"></div>
+        </div>
+        <div><label class="lab" for="nmNote">說明（可不填）<span class="my">မှတ်ချက်</span></label><input type="text" id="nmNote" maxlength="300" placeholder="例：農民去外地，下週回來／ခရီးထွက်၊ နောက်အပတ် ပြန်လာမည်"></div>
+      </div>
+    </div>
 
     <div id="noteBox">
       <label class="lab" for="note">打字<span class="my">စာရိုက်</span></label>
@@ -340,6 +363,18 @@ footer{margin-top:18px;text-align:center}
           <div><label class="lab" for="tComment">農民評價<span class="my">လယ်သမား၏ သုံးသပ်ချက်</span></label><input type="text" id="tComment" maxlength="300"></div>
         </div>
         <div><label class="lab" for="tOther">其他觀察<span class="my">အခြား တွေ့ရှိချက်</span></label><input type="text" id="tOther" maxlength="500"></div>
+        <!-- 0.4.38 董事長流程：成功 → 寫收成報告／成果報告（現有量測欄位＋收成欄位），做好寄給主管 -->
+        <div class="fields" id="harvestBox">
+          <span class="lab" style="color:var(--paddy)">收成報告／成果報告<span class="my">ရိတ်သိမ်း အစီရင်ခံစာ</span></span>
+          <div class="row2">
+            <div><label class="lab" for="hDate">收成日期<span class="my">ရိတ်သိမ်းရက်</span></label><input type="date" id="hDate"></div>
+            <div><label class="lab" for="hQuality">品質<span class="my">အရည်အသွေး</span></label>
+              <select id="hQuality"><option value="">—</option><option value="好">好／ကောင်း</option><option value="普通">普通／သာမန်</option><option value="差">差／ညံ့</option></select></div>
+          </div>
+          <div><label class="lab" for="hCompare">比對照區多收多少<span class="my">နှိုင်းယှဉ်ကွက်ထက် ပိုထွက်</span></label><input type="text" id="hCompare" maxlength="200" placeholder="例：每英畝多 10 籃／တစ်ဧက ၁၀ တောင်း ပို"></div>
+          <div><label class="lab" for="hAgain">農民明年還要用嗎<span class="my">နောက်နှစ် ဆက်သုံးမလား</span></label>
+            <select id="hAgain"><option value="">—</option><option value="要">要／သုံးမည်</option><option value="考慮">考慮／စဉ်းစားမည်</option><option value="不要">不要／မသုံးတော့</option></select></div>
+        </div>
         <div class="fields" id="failBox" hidden>
           <span class="lab" style="color:var(--chili)">失敗紀錄（全部都要填）<span class="my">မအောင်မြင်မှု မှတ်တမ်း (အားလုံး ဖြည့်ရန်)</span></span>
           <p class="tip" id="failExample">範例 ဥပမာ：天氣 乾旱／溫度 38°C／施肥 尿素每英畝 1 包（播種後 20 天）／水分 缺水，灌溉溝乾了／病蟲害 有，葉子褐色斑點約三成／失敗原因 開花期連續 10 天沒下雨，穗粒很少<br>ရာသီဥတု မိုးခေါင်／အပူချိန် 38°C／ယူရီးယား တစ်ဧက ၁ အိတ်／ရေမလုံ／ရွက်ပေါ် အညိုကွက်／ပန်းပွင့်ချိန် မိုးမရွာ၍ အစေ့နည်း</p>

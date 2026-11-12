@@ -176,7 +176,9 @@
     const accTab = document.querySelector('.tab[data-tab="accounts"]');
     if (accTab) { accTab.textContent = data.role === '總經理' ? '業務、主管帳號' : '業務帳號'; biDom(accTab.parentNode); }
     $('updated').textContent = '更新於 ' + new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
-    $('sheetLink').href = data.sheetUrl;
+    // 0.4.38 董事長：「開啟試算表」只有總經理有（後台只給總經理網址，主管拿到的是空的就藏起來）
+    $('sheetLink').href = data.sheetUrl || '#';
+    $('sheetLink').hidden = !(data.role === '總經理' && data.sheetUrl);
     render();
   }
 
@@ -331,6 +333,7 @@
       ${v.summary ? esc(v.summary) + `<br><span class="sub">問題：${esc(v.issue || '—')}　下一步：${esc(v.next || '—')}</span>` : `<span class="sub">${esc(pending)}</span>`}
       ${v.closing ? `<br><span class="sub">${esc(v.closing)}</span>` : ''}${v.prices ? `<br><span class="sub pre">價格：${esc(v.prices)}</span>` : ''}
       ${v.plantFail ? `<br><span class="pill p-red">種植失敗</span> <span class="sub">${esc(v.plantFail)}</span>` : ''}
+      ${v.noMeet ? `<br><span class="pill p-yel">沒拜訪</span> <span class="sub">${esc(v.noMeet)}</span>` : ''}
       ${v.nav ? `<br><a href="${esc(v.nav)}" target="_blank" rel="noopener">導航 ↗</a>` : ''}${soundBtns(v)}</li>`;
   }
 
@@ -508,7 +511,7 @@
     const kv = (k, val) => val !== '' && val != null ? `<span>${k}：${esc(val)}</span>` : '';
     return `<div class="card profile"><span><b>${esc(c.name)}</b>（${esc(c.id)}・${esc(c.type || '農民')}）</span><span>${esc(c.area || '')}</span>${kv('電話', c.phone)}
         ${dealer ? kv('老闆', c.owner) + kv('地址', c.address) + kv('品牌', c.brand)
-          : kv('作物', c.crop) + kv('品種', c.variety) + kv('目前種植面積', c.areaNow) + kv('可種植面積', c.areaMax) + kv('種植日期', c.plantDate) + kv('使用肥料', c.fertilizer)
+          : kv('作物', c.crop) + kv('品種', c.variety) + kv('代碼', c.varCode) + kv('目前種植面積', c.areaNow) + kv('可種植面積', c.areaMax) + kv('種植日期', c.plantDate) + kv('使用肥料', c.fertilizer)
             + `<span>試作：${esc(c.trial || '—')}${c.start ? '（' + md(c.start) + ' 開始）' : ''}</span>`}<span>負責：${esc(c.staff || '—')}</span>
         <span>下次回訪：${c.nextDue ? md(c.nextDue) : '—'} ${s === 'late' ? '<span class="pill p-red">逾期</span>' : s === 'due' ? '<span class="pill p-yel">今天</span>' : ''}</span>
         ${c.lat ? `<a href="https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}" target="_blank" rel="noopener">田區導航 ↗</a>` : ''}</div>
