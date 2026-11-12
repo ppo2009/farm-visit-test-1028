@@ -397,7 +397,7 @@
     if (!list.length) return '';
     return `<section class="closings"><h3><span class="pill p-red">待確認結案 ${list.length} 筆</span> <span class="sub">業務按了結案，確認後才真的結案；按錯就退回</span></h3>
       <ul class="list">${list.map(c => `<li><b><a href="javascript:void 0" data-go="${esc(c.cid)}">${esc(c.name)}</a></b>｜${esc(c.staff)}｜${esc(c.date)}<br>
-        <span class="sub">賣給 ${esc(c.buyer || '—')}（${esc(c.region || '地區未填')}）｜價格 ${esc(c.price)} ${esc(c.priceUnit || '')}｜產量 ${esc(c.yield)} ${esc(c.yieldUnit || '')}${c.phone ? '｜電話 ' + esc(c.phone) : ''}</span><br>
+        <span class="sub">${c.result ? esc(c.result) /* 0.4.42 盤商、種子商洽談成功／失敗 */ : `賣給 ${esc(c.buyer || '—')}（${esc(c.region || '地區未填')}）｜價格 ${esc(c.price)} ${esc(c.priceUnit || '')}｜產量 ${esc(c.yield)} ${esc(c.yieldUnit || '')}${c.phone ? '｜電話 ' + esc(c.phone) : ''}`}</span><br>
         <button class="btn primary" type="button" data-closedecide="confirm" data-vid="${esc(c.visitId)}">確認結案</button>
         <button class="btn" type="button" data-closedecide="reject" data-vid="${esc(c.visitId)}">退回（不結案）</button></li>`).join('')}</ul>
       <p class="sub" id="closeMsg" aria-live="polite">${esc(state.closeMsg || '')}</p></section>`;

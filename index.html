@@ -309,6 +309,16 @@ footer{margin-top:18px;text-align:center}
       <p class="sub" id="closeHint">只能選自己負責的農民。存檔後這位農民就結案（不再提醒回訪）。<br>ကိုယ်တာဝန်ယူထားသော လယ်သမားသာ ရွေးနိုင်သည်။</p>
     </div>
 
+    <!-- 0.4.42 董事長：盤商、種子商結案＝洽談成功或失敗都送主管審核，主管確認才正式結案 -->
+    <div id="dealerCloseBox" class="trial" hidden>
+      <span class="lab">結案（送主管審核）<span class="my">ပိတ်သိမ်း (မန်နေဂျာ စစ်ဆေးရန်)</span></span>
+      <div><label class="lab" for="dcOutcome">洽談結果（必填）<span class="my">ဆွေးနွေးမှု ရလဒ် (မဖြစ်မနေ)</span></label>
+        <select id="dcOutcome"><option value="">— 請選擇 ရွေးပါ —</option><option value="成功">成功（談成合作）／အောင်မြင်</option><option value="失敗">失敗（沒談成）／မအောင်မြင်</option></select></div>
+      <div><label class="lab" for="dcNote">說明（必填）<span class="my">မှတ်ချက် (မဖြစ်မနေ)</span></label>
+        <textarea id="dcNote" maxlength="500" placeholder="例：談成，下個月開始進 A 品牌種子／沒談成，老闆只賣自己的品牌&#10;ဥပမာ - သဘောတူပြီ / မအောင်မြင်"></textarea></div>
+      <p class="sub">送出後要等主管確認才算結案；主管退回就照常往來。<br><span class="my">မန်နေဂျာ အတည်ပြုမှ ပိတ်သိမ်းမည်။</span></p>
+    </div>
+
     <!-- 0.4.35 董事長：選擇農民後跳出這位農民之前的進度（農民進度表）；沒有進度就跳出新增（補齊）農民資料。
          位置照董事長截圖：拍照／照片上傳／錄音下面、打字上面，空一大格 -->
     <div class="progress" id="progressBox" hidden aria-live="polite"></div>
@@ -329,7 +339,7 @@ footer{margin-top:18px;text-align:center}
     </div>
 
     <div id="noteBox">
-      <label class="lab" for="note">打字<span class="my">စာရိုက်</span></label>
+      <label class="lab" for="note" id="noteLab">打字<span class="my">စာရိုက်</span></label>
       <textarea id="note" maxlength="2000" placeholder="作物怎麼樣、客戶說什麼、下次要準備什麼（緬文或中文都可以）&#10;သီးနှံအခြေအနေ၊ ဖောက်သည်ပြောသည်များ၊ နောက်တစ်ကြိမ် ပြင်ဆင်ရန် (မြန်မာ သို့မဟုတ် တရုတ်)"></textarea>
     </div>
 

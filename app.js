@@ -365,7 +365,7 @@
     const cat = state.cat;
     $('visitTitle').textContent = isDealerCat() ? '盤商或種子商 ကုန်သည် / မျိုးစေ့ဆိုင်' : '農民 လယ်သမား';
     $('farmerLab').innerHTML = isDealerCat() ? `1. 選擇${cat}<span class="my">${cat === '種子商' ? 'မျိုးစေ့ဆိုင်' : 'ကုန်သည်'} ရွေးပါ</span>` : '1. 選擇農民<span class="my">လယ်သမား ရွေးပါ</span>';
-    $('priceBox').hidden = cat !== '盤商'; // 0.4.41 董事長：種子商那邊不需要價格，只有盤商有
+    $('priceBox').hidden = cat !== '盤商' || !!state.dealerClose; // 0.4.41 董事長：種子商那邊不需要價格，只有盤商有
     document.querySelectorAll('.dealer-only').forEach(el => { el.hidden = !isDealerCat(); });
     document.querySelectorAll('.farmer-only').forEach(el => { el.hidden = isDealerCat(); });
     $('closeBox').hidden = cat !== '結案';
@@ -375,11 +375,14 @@
     const SWITCH_LABEL = { 農戶: '一般拜訪農民', 試作: '試作農民', 推廣: '推廣農民' };
     $('catSwitch').dataset.group = groupOf(cat);
     // 0.4.40 董事長：結案不放上方，改成畫面最下面的「結案（送主管審核）」；在結案畫面時同一顆按鈕變「取消結案」
-    $('closeModeBtn').hidden = groupOf(cat) !== 'farmer';
-    $('closeModeBtn').innerHTML = cat === '結案'
+    if (groupOf(cat) !== 'dealer') state.dealerClose = false; // 0.4.42 盤商、種子商的結案模式只在那一組
+    $('dealerCloseBox').hidden = !state.dealerClose;
+    $('closeModeBtn').hidden = false;
+    $('closeModeBtn').innerHTML = cat === '結案' || state.dealerClose
       ? '← 取消結案<span class="my">ပိတ်သိမ်းမှု ပယ်ဖျက်</span>'
       : '結案（送主管審核）<span class="my">ပိတ်သိမ်း (မန်နေဂျာ စစ်ဆေးရန်)</span>';
-    $('saveBtn').innerHTML = cat === '結案' ? '結案送主管審核（自動上傳）<span class="my">မန်နေဂျာ စစ်ဆေးရန် ပို့မည်</span>' : '儲存（自動上傳）<span class="my">သိမ်းမည်</span>';
+    $('noteLab').innerHTML = isDealerCat() ? '討論進度<span class="my">ဆွေးနွေးမှု တိုးတက်မှု</span>' : '打字<span class="my">စာရိုက်</span>'; // 0.4.42 董事長：盤商、種子商有見到就記討論進度
+    $('saveBtn').innerHTML = cat === '結案' || state.dealerClose ? '結案送主管審核（自動上傳）<span class="my">မန်နေဂျာ စစ်ဆေးရန် ပို့မည်</span>' : '儲存（自動上傳）<span class="my">သိမ်းမည်</span>';
     $('catSwitch').innerHTML = CAT_GROUPS[groupOf(cat)].filter(c => c !== '結案').map(c => `<button type="button" data-setcat="${esc(c)}" aria-pressed="${c === cat}">${esc(SWITCH_LABEL[c] || CAT_LABEL(c))}<span class="my">${esc(CAT_MY[c] || '')}</span></button>`).join('');
     $('catSwitch').querySelectorAll('[data-setcat]').forEach(b => b.addEventListener('click', () => { state.catManual = true; setCat(b.dataset.setcat); }));
   }
@@ -413,7 +416,7 @@
   }
 
   async function openVisit(cat, customerId) {
-    state.cat = cat; state.entryCat = cat; state.catManual = false;
+    state.cat = cat; state.entryCat = cat; state.catManual = false; state.dealerClose = false;
     applyCatLabels();
     resetForm();
     await loadOptions();
@@ -577,10 +580,27 @@
     refreshSave();
   }
   /* ───── 沒拜訪 → 下次再訪（0.4.38 董事長手稿：農民進度 → 拜訪；NO＝沒見到農民或農民拒絕 → 下次再訪）───── */
-  const noMeetShown = () => { const s = $('farmer').value; return !!s && s !== '__new' && groupOf(state.cat) === 'farmer' && state.cat !== '結案'; };
+  // 0.4.42 董事長：盤商、種子商也照農民進度拜訪（被拒絕就下次再訪）；結案畫面不顯示
+  const noMeetShown = () => { const s = $('farmer').value; return !!s && s !== '__new' && state.cat !== '結案' && !state.dealerClose; };
+  const NM_TEXT = {
+    farmer: { yes: '有見到農民，開始拜訪<span class="my">တွေ့ပြီ၊ စတင်မည်</span>', no: '沒見到／農民拒絕 → 下次再訪<span class="my">မတွေ့ / ငြင်း → နောက်မှ</span>',
+      opts: [['沒見到農民', '沒見到農民／မတွေ့'], ['農民拒絕', '農民拒絕／ငြင်းဆို'], ['其他', '其他／အခြား']] },
+    dealer: { yes: '有見到，開始討論<span class="my">တွေ့ပြီ၊ ဆွေးနွေးမည်</span>', no: '沒見到／被拒絕 → 下次再訪<span class="my">မတွေ့ / ငြင်း → နောက်မှ</span>',
+      opts: [['沒見到老闆', '沒見到老闆／ပိုင်ရှင် မတွေ့'], ['對方拒絕', '對方拒絕／ငြင်းဆို'], ['其他', '其他／အခြား']] }
+  };
+  /** 沒見到的按鈕字、原因選項：農民和盤商／種子商用不同說法（換組才重畫，選好的原因不會被洗掉） */
+  function nmLabels() {
+    const g = groupOf(state.cat) === 'dealer' ? 'dealer' : 'farmer', sel = $('nmReason');
+    if (sel.dataset && sel.dataset.group === g) return;
+    if (sel.dataset) sel.dataset.group = g;
+    $('meetYes').innerHTML = NM_TEXT[g].yes; $('meetNo').innerHTML = NM_TEXT[g].no;
+    sel.innerHTML = NM_TEXT[g].opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+    sel.value = NM_TEXT[g].opts[0][0];
+  }
   const noMeetOn = () => !!state.noMeet && noMeetShown();
   function refreshNoMeet() {
     const shown = noMeetShown();
+    nmLabels();
     $('noMeetBox').hidden = !shown;
     if (!shown) state.noMeet = false;
     const on = noMeetOn();
@@ -588,6 +608,7 @@
     $('noMeetForm').hidden = !on;
     // 沒見到人：不填拜訪內容、試作、種植失敗（照片仍可拍，當作有去過的證明）
     ['noteBox', 'trialBox', 'plantFailBox'].forEach(id => { if (on) $(id).hidden = true; });
+    const pb = $('priceBox'); if (pb) pb.hidden = on || state.cat !== '盤商' || !!state.dealerClose; // 盤商沒見到：不記價格
     if (on && !$('nmNext').value) { const d = new Date(Date.now() + 7 * 86400000); $('nmNext').value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
   }
   function setNoMeet(on) {
@@ -598,7 +619,7 @@
     if (!on) refreshTrialBox();
     refreshSave();
   }
-  function resetNoMeet() { state.noMeet = false; $('nmReason').value = '沒見到農民'; $('nmNote').value = ''; $('nmNext').value = ''; $('noteBox').hidden = false; refreshNoMeet(); }
+  function resetNoMeet() { state.noMeet = false; $('nmReason').selectedIndex = 0; $('nmNote').value = ''; $('nmNext').value = ''; $('noteBox').hidden = false; refreshNoMeet(); }
   /** 沒拜訪時要的日期：必須是明天到一年內 */
   function noMeetProblem() {
     if (!noMeetOn()) return '';
@@ -633,11 +654,18 @@
   }
   /** 結案（2026-11-12 手稿）：價格、產量、收購客戶必填；地區、電話可空 */
   function closeProblem() {
+    if (state.dealerClose) { // 0.4.42 盤商、種子商結案：洽談結果＋說明必填，送主管審核
+      const sel = $('farmer').value;
+      if (!sel || sel === '__new') return '請先選要結案的' + state.cat + '／ဖောက်သည် ရွေးပါ';
+      const miss = [['dcOutcome', '洽談結果'], ['dcNote', '說明']].filter(([id]) => !String($(id).value).trim()).map(([, n]) => n);
+      return miss.length ? `結案要填：${miss.join('、')}／ပိတ်သိမ်းရန် ဖြည့်ပါ` : '';
+    }
     if (state.cat !== '結案') return '';
     const miss = [['cPrice', '價格'], ['cYield', '產量'], ['cBuyer', '收購客戶']].filter(([id]) => !String($(id).value).trim()).map(([, n]) => n);
     return miss.length ? `結案要填：${miss.join('、')}／ပိတ်သိမ်းရန် ဖြည့်ပါ` : '';
   }
   function collectClosing() {
+    if (state.dealerClose) return { outcome: $('dcOutcome').value, note: $('dcNote').value.trim() }; // 0.4.42 盤商、種子商
     if (state.cat !== '結案') return null;
     return { region: $('cRegion').value, price: $('cPrice').value.trim(), yield: $('cYield').value.trim(), buyer: $('cBuyer').value.trim(), phone: $('cPhone').value.trim() };
   }
@@ -942,7 +970,7 @@
     refreshPriceBtn();
   }
   function collectPrices() {
-    if (state.cat !== '盤商') return []; // 0.4.41 董事長：種子商不用價格（從盤商切過來時藏起來的價格也不送）
+    if (state.cat !== '盤商' || noMeetOn() || state.dealerClose) return []; // 0.4.41 董事長：種子商不用價格（從盤商切過來時藏起來的價格也不送）
     return [...$('priceRows').querySelectorAll('.price-row')].map(r => ({
       crop: r.querySelector('.pc').value.trim(), variety: r.querySelector('.pv').value.trim(),
       price: r.querySelector('.pp').value.trim(), unit: r.querySelector('.pu').value.trim()
@@ -954,7 +982,7 @@
     const sel = $('farmer').value;
     const isNew = sel === '__new';
     const nameOk = !isNew || $('pName').value.trim();
-    const hasContent = noMeetOn() || state.photos.length || state.audio || $('note').value.trim() || collectPrices().length || state.trialMode || (state.cat === '結案' && !closeProblem()) || (sel && sel !== '__new' && collectProfile());
+    const hasContent = noMeetOn() || state.photos.length || state.audio || $('note').value.trim() || collectPrices().length || state.trialMode || ((state.cat === '結案' || state.dealerClose) && !closeProblem()) || (sel && sel !== '__new' && collectProfile());
     $('note').placeholder = noteExample().join('\n'); // 範例跟著農民進度換
     const tp = noMeetProblem() || trialProblem() || closeProblem();
     const ok = sel && nameOk && !state.rec && !state.busyPhotos && !tp && (isNew || hasContent);
@@ -976,6 +1004,15 @@
       const who = ($('farmer').selectedOptions && $('farmer').selectedOptions[0] ? $('farmer').selectedOptions[0].text : '') || $('pName').value;
       const msg = `確定要把這位農民結案嗎？\nလယ်သမား ပိတ်သိမ်းမှာ သေချာပါသလား\n\n農民：${who}\n價格：${$('cPrice').value}\n產量：${$('cYield').value}\n收購客戶：${$('cBuyer').value}\n\n${state.options && state.options.closeConfirm ? '送出後要等主管確認才算結案。' : '存檔後這位農民就結案，不再提醒回訪。'}`;
       if (!confirm(msg)) { refreshSave(); return; }
+    }
+    if (state.dealerClose) { // 0.4.42 盤商、種子商結案：送出前確認
+      const who = $('farmer').selectedOptions && $('farmer').selectedOptions[0] ? $('farmer').selectedOptions[0].text : '';
+      if (!confirm(`確定要送主管審核結案嗎？
+မန်နေဂျာထံ ပိတ်သိမ်းရန် ပို့မှာ သေချာပါသလား
+
+${state.cat}：${who}
+洽談結果：${$('dcOutcome').value}
+說明：${$('dcNote').value.trim()}`)) { refreshSave(); return; }
     }
     const sel = $('farmer').value;
     const isNew = sel === '__new';
@@ -1080,6 +1117,7 @@
     $('profileBox').hidden = true;
     Object.values(PROFILE_INPUTS).forEach(id => { $(id).value = ''; });
     resetTrialForm();
+    state.dealerClose = false; $('dcOutcome').value = ''; $('dcNote').value = ''; applyCatLabels(); // 0.4.42 存完回到一般拜訪
     resetNoMeet();
     refreshSave();
   }
@@ -1207,6 +1245,7 @@
     $('pVarCo').addEventListener('change', () => { fillVarieties(''); refreshSave(); }); // 0.4.31 換種子公司就重選品種
     $('plantFail').addEventListener('change', refreshPlantFail); // 0.4.33 一般拜訪勾「種植失敗」
     $('note').addEventListener('input', refreshSave);
+    ['dcOutcome', 'dcNote'].forEach(id => { $(id).addEventListener('input', refreshSave); $(id).addEventListener('change', refreshSave); }); // 0.4.42
     ['cRegion', 'cPrice', 'cYield', 'cBuyer', 'cPhone'].forEach(id => { $(id).addEventListener('input', refreshSave); $(id).addEventListener('change', refreshSave); });
     $('photoInput').addEventListener('change', e => addPhotos(e.target.files, '相機', $('photoBtn')).finally(() => { e.target.value = ''; }));
     $('albumInput').addEventListener('change', e => addPhotos(e.target.files, '相簿', $('albumBtn')).finally(() => { e.target.value = ''; }));
@@ -1214,6 +1253,13 @@
     $('saveBtn').addEventListener('click', save);
     // 0.4.40 最下面的結案按鈕：進結案畫面（捲回最上面填）；在結案畫面再按就回到進來時的類別
     $('closeModeBtn').addEventListener('click', async () => {
+      if (isDealerCat()) { // 0.4.42 盤商、種子商：不換類別，切換結案模式（洽談成功或失敗都送主管審核）
+        state.dealerClose = !state.dealerClose;
+        if (state.dealerClose) { state.noMeet = false; $('dcOutcome').value = ''; $('dcNote').value = ''; }
+        applyCatLabels(); refreshNoMeet(); refreshSave();
+        $('visit').scrollIntoView({ block: 'start' });
+        return;
+      }
       state.catManual = true;
       const back = state.entryCat && state.entryCat !== '結案' && groupOf(state.entryCat) === 'farmer' ? state.entryCat : '農戶';
       await setCat(state.cat === '結案' ? back : '結案');
