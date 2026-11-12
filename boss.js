@@ -515,8 +515,11 @@
   /** 符合篩選的客戶。有打搜尋字時找全部客戶（不限「要注意的」），找不到人才不會以為客戶不見 */
   function custFiltered() {
     const f = state.cf, q = f.q.trim().toLowerCase();
+    // 0.4.85 中4（第11任 0.4.84 清單）：搜尋框寫「搜尋全部客戶」→ 有搜尋字時真的搜全部，不受業務、地區、類型篩選限制；
+    // 篩選本身沒動，清空搜尋就回到原本的篩選
+    if (q) return state.data.customers.filter(c => [c.name, c.phone, c.id, c.crop, c.area].some(x => String(x == null ? '' : x).toLowerCase().includes(q)));
     return state.data.customers.filter(c => (!f.staff || (c.staff || NO_STAFF) === f.staff) && (!f.area || c.area === f.area) && (!f.type || (c.type || '農民') === f.type)
-      && (q ? [c.name, c.phone, c.id, c.crop, c.area].some(x => String(x == null ? '' : x).toLowerCase().includes(q)) : (f.show !== 'attn' || attnOf(c))));
+      && (f.show !== 'attn' || attnOf(c)));
   }
   /** 右邊（手機在下面）要顯示誰的履歷：有指定就是他，沒有就是篩選結果的第一位 */
   function custSelected() {
@@ -691,7 +694,10 @@
   }
 
   async function downloadReport(btn) {
-    const label = btn.innerHTML; // 0.4.75（1號主管清單低9）：存 innerHTML，緬文小字才不會黏成一串
+    // 0.4.75（1號主管清單低9）：存 innerHTML，緬文小字才不會黏成一串
+    // 0.4.85 低4：原文字記在 data 屬性（第一次按才記）——失敗一次後按鈕變成錯誤訊息，再按時不能把錯誤訊息當原文字
+    if (btn.dataset.label == null) btn.dataset.label = btn.innerHTML;
+    const label = btn.dataset.label;
     btn.textContent = '下載中…'; btn.disabled = true;
     try {
       const r = await api({ action: 'report', trialId: btn.dataset.report });
@@ -715,11 +721,11 @@
     if (!p.ok) return sel + `<p class="empty">${esc(p.message || '讀取失敗')}</p>`;
     const planHtml = list => list.length ? `<div class="plans">${list.map(x => `<span>${esc(x.label)}（${esc(x.period)}）<span class="bar"><i style="width:${Math.max(0, Math.min(100, x.pct))}%"></i></span>${x.done}／${x.target}${x.done >= x.target ? ' <span class="pill p-grn">達成</span>' : ''}</span>`).join('')}</div>` : '<span class="sub">沒有目標</span>';
     const cats = ['試作', '推廣', '農戶', '盤商', '種子商']; // 「農戶」顯示成「一般拜訪」；盤商、種子商分開算（2026-11-11 董事長）
+    // 0.4.85 中5：各地區表選過去月份時只有拜訪數照月份，客戶數、進行中試作是今天的 → 表頭寫所選月份、那幾欄標（目前）
     return sel + `<h3>每位業務（${esc(p.label)}）</h3><div class="tbl"><table><thead><tr><th>業務</th><th>拜訪</th>${cats.map(c => `<th>${c === '農戶' ? '一般拜訪' : c}</th>`).join('')}<th>拜訪過的客戶</th><th>新增客戶</th><th>試作 開始／完成</th><th>計劃達成</th></tr></thead><tbody>
       ${p.staff.map(s => `<tr><td><b>${esc(s.name)}</b></td><td>${s.visits}</td>${cats.map(c => `<td>${s.byCategory[c] || 0}</td>`).join('')}<td>${s.customersVisited}</td><td>${s.newCustomers}</td><td>${s.trialsStarted}／${s.trialsEnded}</td><td>${planHtml(s.plan)}</td></tr>`).join('') || '<tr><td colspan="11" class="empty">沒有業務帳號</td></tr>'}
       </tbody></table></div>
-      <h3>各地區</h3><div class="tbl"><table><thead><tr><th>地區</th><th>農民</th><th>盤商</th><th>種子商</th><th>本月拜訪</th><th>進行中的試作</th></tr></thead><tbody>
-      ${p.regions.map(r => `<tr><td>${esc(r.area)}</td><td>${r.customers}</td><td>${r.dealers}</td><td>${r.seeds || 0}</td><td>${r.visits}</td><td>${r.trialsActive}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">還沒有客戶</td></tr>'}
+      <h3>各地區（${esc(p.label)}）</h3><div class="tbl"><table><thead><tr><th>地區</th><th>農民（目前）</th><th>盤商（目前）</th><th>種子商（目前）</th><th>${Number(state.pm.slice(5))} 月拜訪</th><th>進行中的試作（目前）</th></tr></thead><tbody>      ${p.regions.map(r => `<tr><td>${esc(r.area)}</td><td>${r.customers}</td><td>${r.dealers}</td><td>${r.seeds || 0}</td><td>${r.visits}</td><td>${r.trialsActive}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">還沒有客戶</td></tr>'}
       </tbody></table></div><p class="sub">目標在試算表「計劃」分頁設定：月份空白＝每個月都適用；業務空白＝每位業務各自的目標；指標有拜訪次數、拜訪客戶數、新增客戶、開始試作、完成試作。</p>`;
   }
   /* ───── 任務：主管、總經理派給業務（每條跟著一位農民）；總經理另外派給主管（可以不指定客戶）（2026-11-12）─────
@@ -789,7 +795,9 @@
   function bindTasks() {
     const form = $('taskForm');
     if (form) {
-      const keep = () => { state.tf = { staff: $('tStaff').value, cid: $('tFarmer').value, text: $('tText').value }; };
+      // 0.4.85 高2（第11任 0.4.84 清單）：keep() 原本整個換掉 state.tf，送出時第一步就呼叫 → rid、ridKey 被清，斷線後再按每次都是新代號（後台認不出、派成兩條）
+      // → 只更新三個欄位，原本的 rid、ridKey 留著（內容改了，送出時 ridKey 對不上才換新代號）
+      const keep = () => { const o = state.tf || {}; state.tf = { staff: $('tStaff').value, cid: $('tFarmer').value, text: $('tText').value, rid: o.rid || '', ridKey: o.ridKey || '' }; };
       ['tFarmer', 'tText'].forEach(id => $(id).addEventListener('input', keep));
       // 換對象（業務 ↔ 主管）時客戶選單不一樣，重畫；原本選的客戶清掉
       $('tStaff').addEventListener('change', () => { keep(); state.tf.cid = ''; state.taskMsg = ''; render(); });
@@ -1028,9 +1036,12 @@
     if ((state.tab === 'progress' && state.pm === m) || (state.tab === 'today' && monthsBack(1)[0] === m)) render();
   }
 
+  const VISIT_TABLE_MAX = 500; // 後台 bossData_ 的 visits 只回最近 500 筆（Code.gs slice(-500)），兩邊要一起改
   function renderTable() {
     const rows = state.data.visits.slice().sort((a, b) => b.time.localeCompare(a.time));
-    return `<div class="tbl"><table><thead><tr><th>拜訪時間</th><th>客戶</th><th>業務</th><th>作物狀況</th><th>問題</th><th>下一步</th><th>狀態</th></tr></thead><tbody>
+    // 0.4.85 中6：後台只給最近 500 筆（slice(-500)）→ 滿 500 筆時說清楚，不讓主管以為全部都在這裡
+    const capNote = rows.length >= VISIT_TABLE_MAX ? `<p class="sub">只顯示最近 ${VISIT_TABLE_MAX} 筆，更早的請看客戶履歷或開試算表</p>` : '';
+    return capNote + `<div class="tbl"><table><thead><tr><th>拜訪時間</th><th>客戶</th><th>業務</th><th>作物狀況</th><th>問題</th><th>下一步</th><th>狀態</th></tr></thead><tbody>
       ${rows.map(v => `<tr><td>${esc(v.time)}</td><td><a href="javascript:void 0" data-go="${esc(v.cid)}">${esc(v.name)}</a></td><td>${esc(v.staff)}</td><td>${esc(v.crop || v.summary || '—')}</td><td>${esc(v.issue || '—')}</td><td>${esc(v.next || '—')}</td><td>${esc(v.status)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">還沒有拜訪紀錄</td></tr>'}
       </tbody></table></div>`;
   }
