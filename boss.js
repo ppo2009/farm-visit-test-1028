@@ -9,9 +9,11 @@
     if (!box || !ul) return;
     const list = (typeof FARM_CONFIG !== 'undefined' && Array.isArray(FARM_CONFIG.mirrors)) ? FARM_CONFIG.mirrors : [];
     box.hidden = !list.length;
-    const here = typeof location !== 'undefined' ? location.origin + location.pathname : '';
+    // Cloudflare 會把 /boss.html 自動轉成 /boss（0.4.30 實測），比對時兩邊都去掉 .html
+    const norm = s => String(s).replace(/\.html$/, '');
+    const here = norm(typeof location !== 'undefined' ? location.origin + location.pathname : '');
     ul.innerHTML = list.map(m => { const u = String(m.url).replace(/\/?$/, '/') + 'boss.html';
-      return `<li><a href="${esc(u)}">${esc(u)}</a>${u === here ? '<span class="pill p-grn">現在用的</span>' : ''}</li>`; }).join('');
+      return `<li><a href="${esc(u)}">${esc(u)}</a>${norm(u) === here ? '<span class="pill p-grn">現在用的</span>' : ''}</li>`; }).join('');
   }
   const DAY = 86400000;
   const s2d = s => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
