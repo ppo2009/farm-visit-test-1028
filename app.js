@@ -417,7 +417,7 @@
   /** 換類別：同一組農民（一般／試作／推廣）客戶清單一樣，只重算試作區；盤商↔種子商客戶清單不同，要重讀 */
   async function setCat(cat) {
     if (!CAT_TYPES[cat] || cat === state.cat) return;
-    if (state.catLocked && ['農戶', '試作', '推廣'].indexOf(cat) >= 0 && cat !== state.entryCat) return; // 0.4.51 鎖死：任何路徑都不能切到另外兩種（結案、回到原類別照常）
+    if (state.catLocked && ['農戶', '試作', '推廣', '盤商', '種子商'].indexOf(cat) >= 0 && cat !== state.entryCat) return; // 0.4.51 鎖死：任何路徑都不能切到另外兩種（結案、回到原類別照常）
     const sameTypes = CAT_TYPES[cat][0] === CAT_TYPES[state.cat][0];
     const closingSwitch = (cat === '結案') !== (state.cat === '結案'); // 0.4.33：切進／切出結案，農民名單不一樣（結案只列自己的）
     state.cat = cat;
@@ -447,7 +447,7 @@
   async function openVisit(cat, customerId) {
     state.cat = cat; state.entryCat = cat; state.catManual = false; state.dealerClose = false;
     // 0.4.47 董事長「一般拜訪農民的時候，試作農民跟推廣農民要鎖死」：只鎖從首頁選一般拜訪進來的；任務、客戶清單進來的照舊（有進行中的試作會自動切過去）
-    state.catLocked = !!state.lockNext && ['農戶', '試作', '推廣'].indexOf(cat) >= 0; state.lockNext = false;
+    state.catLocked = !!state.lockNext && ['農戶', '試作', '推廣', '盤商', '種子商'].indexOf(cat) >= 0; state.lockNext = false; // 0.4.53 盤商、種子商也鎖
     if (state.catLocked) state.catManual = true; // 鎖死就不自動切到試作
     applyCatLabels();
     resetForm();
@@ -1283,6 +1283,7 @@ ${state.cat}：${who}
     $('farmerBtn').addEventListener('click', () => {
       const open = $('farmerMenu').hidden;
       $('farmerMenu').hidden = !open; $('farmerBtn').setAttribute('aria-expanded', String(open));
+      $n('dealerMenu').hidden = true; // 0.4.53 兩個選單一次只開一個
     });
     document.querySelectorAll('[data-farmercat]').forEach(b => b.addEventListener('click', async () => {
       $('farmerMenu').hidden = true; $('farmerBtn').setAttribute('aria-expanded', 'false');
@@ -1291,7 +1292,18 @@ ${state.cat}：${who}
       await openVisit(cat);
       if (cat !== '農戶') state.catManual = true; // 明確選了試作／推廣：選農民後不要自動跳回別的類別
     }));
-    $('dealerBtn').addEventListener('click', () => openVisit('盤商'));
+    // 0.4.53 董事長：盤商、種子商也要互相鎖死 → 首頁「盤商或種子商」改成點開選一種（跟農民一樣），選了就鎖另一種
+    $('dealerBtn').addEventListener('click', () => {
+      const m = $n('dealerMenu');
+      if (!document.getElementById('dealerMenu')) { openVisit('盤商'); return; } // 舊頁面（快取混版）沒有選單：照舊直接進盤商
+      const open = m.hidden; m.hidden = !open; $('dealerBtn').setAttribute('aria-expanded', String(open));
+      $('farmerMenu').hidden = true; $('farmerBtn').setAttribute('aria-expanded', 'false');
+    });
+    document.querySelectorAll('[data-dealercat]').forEach(b => b.addEventListener('click', async () => {
+      $n('dealerMenu').hidden = true; $('dealerBtn').setAttribute('aria-expanded', 'false');
+      state.lockNext = true;
+      await openVisit(b.dataset.dealercat);
+    }));
     initHomeTabs();
     $('syncBadge').addEventListener('click', () => { setHomeTab('punch'); const q = document.querySelector('.queue'); if (q && q.scrollIntoView) q.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
     $('backBtn').addEventListener('click', () => {

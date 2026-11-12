@@ -53,6 +53,8 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
 /* 0.4.45 董事長截圖：三個選項（一般拜訪／試作／推廣）同一排左中右，不要上下疊三排 */
 .farmermenu{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px;padding:10px;border:2px solid var(--paddy);border-radius:16px;background:var(--surface)}
 .farmermenu[hidden]{display:none}
+.dealermenu{grid-template-columns:repeat(2,minmax(0,1fr));border-color:#9a6a00}
+.dealermenu button{border-color:#9a6a00;color:#7a5200;background:#f6ecd6}
 .farmermenu button{min-height:56px;border:1.5px solid var(--paddy);background:var(--paddy-soft);color:var(--paddy);border-radius:12px;font-weight:700;font-size:1.05rem;cursor:pointer;padding:6px 4px;word-break:keep-all;overflow-wrap:anywhere;min-width:0}
 /* 0.4.32 農民那組按鈕寬度照字數分（一般拜訪農民 6 字、試作農民 4、推廣農民 4），長的不會被擠成兩行；0.4.40 結案搬到畫面最下面 */
 .catswitch[data-group="farmer"]{display:grid;grid-template-columns:6.6fr 4.6fr 4.6fr}
@@ -200,13 +202,18 @@ footer{margin-top:18px;text-align:center}
   <div class="hpanel" id="hp-punch" role="tabpanel" aria-labelledby="htab-punch">
   <div class="cats">
     <button type="button" class="cat hub" id="farmerBtn" aria-expanded="false" aria-controls="farmerMenu">農民 ▾<span class="my">လယ်သမား</span><small class="hint">點開選：一般拜訪／試作／推廣<br>လယ်သမား ရွေး → မှတ်တမ်း・ဓာတ်ပုံ・စာ・အသံ</small></button>
-    <button type="button" class="cat c3 hub" id="dealerBtn">盤商或種子商<span class="my">ကုန်သည် / မျိုးစေ့ဆိုင်</span><small class="hint">選擇 → 拜訪內容・農作物價格<br>ရွေး → သွားရောက်မှု・သီးနှံဈေးနှုန်း</small></button>
+    <button type="button" class="cat c3 hub" id="dealerBtn" aria-expanded="false" aria-controls="dealerMenu">盤商或種子商 ▾<span class="my">ကုန်သည် / မျိုးစေ့ဆိုင်</span><small class="hint">選擇 → 拜訪內容・農作物價格<br>ရွေး → သွားရောက်မှု・သီးနှံဈေးနှုန်း</small></button>
   </div>
   <!-- 0.4.32 董事長 2026-11-12：「農民」改成下拉選單：一般拜訪農民／試作農民／推廣農民，選了直接進那一種打卡（結案在打卡畫面上方切換） -->
   <div class="farmermenu" id="farmerMenu" role="menu" hidden>
     <button type="button" role="menuitem" data-farmercat="農戶">一般拜訪農民<span class="my">ပုံမှန်သွားရောက်</span></button>
     <button type="button" role="menuitem" data-farmercat="試作">試作農民<span class="my">စမ်းသပ်စိုက်ပျိုး</span></button>
     <button type="button" role="menuitem" data-farmercat="推廣">推廣農民<span class="my">မြှင့်တင်ရောင်းချ</span></button>
+  </div>
+  <!-- 0.4.53 董事長：盤商、種子商互相鎖死 → 點「盤商或種子商」先選一種 -->
+  <div class="farmermenu dealermenu" id="dealerMenu" role="menu" hidden>
+    <button type="button" role="menuitem" data-dealercat="盤商">盤商<span class="my">ကုန်သည်</span></button>
+    <button type="button" role="menuitem" data-dealercat="種子商">種子商<span class="my">မျိုးစေ့ဆိုင်</span></button>
   </div>
   <div class="queue">
     <p class="count" id="pendingCount"></p>
