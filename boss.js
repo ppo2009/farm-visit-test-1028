@@ -131,7 +131,7 @@
     $('loginBtn').disabled = true;
     try {
       const r = await api(payload);
-      if (r.code === 'MUST_CHANGE') { state.mustChange = true; $('newPwBox').hidden = false; $('loginMsg').textContent = r.message; return; }
+      if (r.code === 'MUST_CHANGE') { state.mustChange = true; state.mustChangeAcct = payload.account.toLowerCase(); $('newPwBox').hidden = false; $('loginMsg').textContent = r.message; return; }
       if (!r.ok) { showLogin(r.message || '登入失敗'); return; }
       state.key = r.deviceKey; keyStore.set(r.deviceKey);
       ['pw', 'newPw', 'newPw2'].forEach(id => { $(id).value = ''; });
@@ -146,8 +146,15 @@
 
   // 登出時把上一個人的畫面狀態全部清掉（同一台電腦換帳號：上一位打開的匯報、草稿、表單不能帶給下一位；
   // 2026-11-12 實測抓到：主管打開過的匯報，總經理一登入就自己展開、被標成已讀）
+  // 總經理BUG(2號)低6：「要設定新密碼」只在登入成功時清，換帳號、登出都不清 → 下一個人被卡在改密碼欄
+  function clearMustChange() {
+    state.mustChange = false;
+    const box = $('newPwBox'); if (box) box.hidden = true;
+    ['newPw', 'newPw2'].forEach(id => { const e = $(id); if (e) e.value = ''; });
+  }
   function logout() {
     state.key = null; keyStore.set(null); state.data = null;
+    clearMustChange();
     // 讀取中標記與快取也清掉：換人後舊請求的回應會被丟掉（S7），標記不清就永遠是「讀取中」、新的人讀不到（第二輪自行審查 T5）
     Object.assign(state, { progReq: {}, histReq: {}, photoReq: {}, prog: {}, hist: {}, photos: {}, audios: {} });
     Object.assign(state, { tab: 'today', trial: null, briefOpen: '', bf: null, replyDraft: {}, tf: null, af: null, newPw: null,
@@ -220,8 +227,10 @@
     const curTab = document.querySelector('.tab[data-tab][aria-selected="true"]');
     if (state.tab !== state.lastTab && curTab && curTab.scrollIntoView) curTab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     state.lastTab = state.tab;
-    // 主管匯報分頁的紅點：總經理＝還沒看過的匯報
-    const unread = state.data.role === '總經理' ? (state.data.briefs || []).filter(b => !b.read).length : 0;
+    // 主管匯報分頁的紅點：總經理＝還沒看過的匯報（含 100 份以外的舊未讀，後台算的 briefUnread）；
+    // 主管＝總經理有新回覆、這台電腦還沒打開看過的（總經理BUG(2號)中2，不加試算表欄位，記在瀏覽器）
+    const unread = state.data.role === '總經理' ? Math.max((state.data.briefs || []).filter(b => !b.read).length, Number(state.data.briefUnread) || 0)
+      : (state.data.briefs || []).filter(newReply).length;
     $('briefBadge').hidden = !unread; $('briefBadge').textContent = unread ? String(unread) : '';
     $('panel').innerHTML = ({ today: renderToday, latest: renderLatest, cal: renderCal, trial: renderTrial, map: renderMap, table: renderTable, reports: renderReports, progress: renderProgress, tasks: renderTasks, accounts: renderAccounts, briefs: renderBriefs })[state.tab]();
     if (state.tab === 'tasks') bindTasks();
@@ -639,6 +648,15 @@
   /* ───── 任務：主管、總經理派給業務（每條跟著一位農民）；總經理另外派給主管（可以不指定客戶）（2026-11-12）─────
      業務在手機打勾；主管在這裡「我的任務」按「完成了」 */
   const isGM = () => state.data.role === '總經理';
+  // 總經理BUG(2號)中2：主管看過的回覆時間記在這台電腦（不加試算表欄位）；回覆時間變了＝有新回覆。換電腦第一次會全部標新回覆
+  function seenKey() { return 'farm-brief-seen-' + String((state.data && state.data.account) || ''); }
+  // 讀不到瀏覽器儲存（無痕模式、被擋）回 null：記不住看過沒，就不標新回覆（不然每次打開都一直亮紅點）
+  function seenReplies() { try { if (typeof localStorage === 'undefined') return null; return JSON.parse(localStorage.getItem(seenKey()) || '{}') || {}; } catch (e) { return null; } }
+  function markReplySeen(b) { const s = seenReplies(); if (!s) return; s[b.id] = String(b.replyAt || ''); try { localStorage.setItem(seenKey(), JSON.stringify(s)); } catch (e) { /* 無痕模式存不了 */ } }
+  function newReply(b) {
+    if (!(b && b.reply && b.replyAt && state.data && state.data.role !== '總經理')) return false;
+    const s = seenReplies(); return !!s && s[b.id] !== String(b.replyAt);
+  }
   // 0.4.24：客戶已結案、任務還沒做 → 標出來，主管看得到該取消；0.4.25 主管「我的任務」也標（第5任獨立審查 低4）
   const closedPill = t => (t.status === '待辦' && t.cid && (state.data.customers || []).some(c => c.id === t.cid && c.status === '已結束') ? '<span class="pill p-red">客戶已結案</span> ' : '');
   function taskLine(t, cancel) {
@@ -749,13 +767,14 @@
   }
   function briefItem(b, gm) {
     const unread = gm && !b.read;
-    return `<details class="brief" data-brief="${esc(b.id)}"${unread ? ' data-unread="1"' : ''}${state.briefOpen === b.id ? ' open' : ''}>
-      <summary>${unread ? '<span class="pill p-red">未讀</span>' : ''}${b.reply ? '<span class="pill p-grn">已回覆</span>' : ''}<b>${esc(b.boss)}</b>
+    const fresh = !gm && newReply(b); // 總經理BUG(2號)中2：主管看得到「新回覆」
+    return `<details class="brief" data-brief="${esc(b.id)}"${unread ? ' data-unread="1"' : ''}${fresh ? ' data-newreply="1"' : ''}${state.briefOpen === b.id ? ' open' : ''}>
+      <summary>${unread ? '<span class="pill p-red">未讀</span>' : ''}${fresh ? '<span class="pill p-red">新回覆</span>' : ''}${b.reply ? '<span class="pill p-grn">已回覆</span>' : ''}<b>${esc(b.boss)}</b>
         <span class="sub">${esc(b.from)} ～ ${esc(b.to)}・${esc(String(b.date).slice(5, 16))} 送出</span></summary>
       <div class="body">${briefTexts(b)}
         <div class="stats-box"><b>系統附上的數字</b><div class="pre">${esc(b.stats)}</div></div>
         ${b.reply ? `<div class="answer"><b>總經理回覆</b><span class="sub">（${esc(b.replyBy)} ${esc(String(b.replyAt).slice(5, 16))}）</span><div class="pre">${esc(b.reply)}</div></div>` : ''}
-        ${gm ? `<form class="reply" data-replyform="${esc(b.id)}"><textarea maxlength="1000" placeholder="回覆給 ${esc(b.boss)}（例如：好，下週先處理 A 區）" aria-label="回覆">${esc((state.replyDraft || {})[b.id] || '')}</textarea>
+        ${gm ? `<form class="reply" data-replyform="${esc(b.id)}"><textarea maxlength="1000" placeholder="${b.reply ? '補充回覆給 ' + esc(b.boss) + '（會接在上一則回覆後面，不會蓋掉）' : '回覆給 ' + esc(b.boss) + '（例如：好，下週先處理 A 區）'}" aria-label="回覆">${esc((state.replyDraft || {})[b.id] || '')}</textarea>
           <button class="btn" type="submit">送出回覆</button></form>` : ''}
       </div></details>`;
   }
@@ -817,6 +836,9 @@
       // 重畫時本來就開著的那一份也會觸發 toggle：只有「這次才打開」才算看過
       if (state.briefOpen === el.dataset.brief) return;
       state.briefOpen = el.dataset.brief;
+      if (el.dataset.newreply === '1' && !isGM()) { // 總經理BUG(2號)中2：主管打開＝看過這次回覆
+        const b = (state.data.briefs || []).find(x => x.id === el.dataset.brief); if (b) { markReplySeen(b); render(); } return;
+      }
       if (el.dataset.unread !== '1' || !isGM()) return;
       el.dataset.unread = '0';
       let r;
@@ -943,6 +965,8 @@
   $('reload').addEventListener('click', load);
   $('logout').addEventListener('click', logout);
   $('loginForm').addEventListener('submit', onLogin);
+  // 總經理BUG(2號)低6：帳號欄改成別人＝不是剛剛被要求改密碼的那位，收起改密碼欄
+  $('acct').addEventListener('input', () => { if (state.mustChange && $('acct').value.trim().toLowerCase() !== state.mustChangeAcct) clearMustChange(); });
   biDom(document.body); // 登入頁、標題列、分頁名稱補緬文
   renderMirrors();
   state.key = keyStore.get();
