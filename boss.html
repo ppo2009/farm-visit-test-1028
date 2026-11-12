@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2f6b3a">
+<link rel="icon" href="icon-192.png">
+<title>農戶拜訪總覽</title>
+<script src="inapp.js"></script>
+<style>
+/* 版面概念：上方一排分頁，總經理先看「今天該處理什麼」，再往下看細節 */
+/* 0.4.27 一律淺色（不跟手機深色模式）；0.4.28 董事長 2026-11-12：主管網頁改「主管的顏色」＝整頁淡藍底、卡片白色，跟業務手機的白底分得出來 */
+:root{color-scheme:light;--bg:#e8f1fa;--surface:#ffffff;--line:#d9d4c2;--fg:#22281f;--muted:#5f6656;--paddy:#2f6b3a;--paddy-soft:#dcebd9;--turmeric:#9a6a0c;--turmeric-soft:#f6e6bf;--chili:#b23a2b;--chili-soft:#f3d6d0}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important} /* 有設 display 的元素也要能藏起來（2026-11-11 抓到改密碼欄位一直顯示） */
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;font-size:15px;line-height:1.6;
+  padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+.wrap{max-width:1100px;margin:0 auto}
+button{font:inherit;color:inherit}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:6px 16px;margin-bottom:12px}
+h1{font-size:1.4rem;margin:0}
+.sub{color:var(--muted);font-size:.85rem}
+a{color:var(--paddy)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px}
+.stat b{display:block;font-size:1.6rem;font-variant-numeric:tabular-nums}
+.stat.red b{color:var(--chili)} .stat.yel b{color:var(--turmeric)} .stat.grn b{color:var(--paddy)}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;margin-bottom:14px}
+.tab{border:1.5px solid transparent;border-bottom:0;border-radius:10px 10px 0 0;margin-bottom:-1px;background:none;padding:10px 14px;cursor:pointer;color:var(--muted);font-weight:700;white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--paddy);border-color:var(--paddy);background:var(--surface)} /* 0.4.28：跟業務手機一樣，選到的分頁加框 */
+/* 手機（2026-11-12 逐頁檢查）：分頁原本橫向捲動，只看得到前 4 個，「任務」「主管匯報」「更多」藏在右邊看不到 → 改成折行全部看得到；
+   上方 4 個數字卡原本兩兩一排佔半個畫面 → 一排 4 個、字縮小 */
+@media (max-width:620px){
+  .tabs{flex-wrap:wrap;overflow:visible}
+  .tabs .tab{flex:1 1 30%;padding:8px 6px;white-space:normal}
+  .stats{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+  .stats .card{padding:8px 6px}
+  .stat b{font-size:1.2rem}
+  .stat .sub{font-size:.7rem;line-height:1.3;display:block}
+}
+section h3{margin:16px 0 8px;font-size:1rem;display:flex;gap:8px;align-items:center}
+/* 0.4.23（2026-11-12 總經理逐頁檢查）：手機寬度總覽頁整頁被撐到 544 點寬、要左右滑。
+   原因：清單是 grid，欄寬預設會等於「最寬那筆不能斷行的內容」；照片說明標籤（第1張…｜第2張…｜無定位）原本不准換行，一長就把整欄撐寬。
+   修：欄寬固定不超過畫面（minmax(0,1fr)）、每筆可縮；標籤改成能自己換行（短的照樣一整塊不拆開）。 */
+ul.list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+ul.list li{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0;overflow-wrap:anywhere}
+.pill{font-size:.75rem;font-weight:700;padding:1px 9px;border-radius:99px;display:inline-block;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.p-red{background:var(--chili-soft);color:var(--chili)} .p-yel{background:var(--turmeric-soft);color:var(--turmeric)} .p-grn{background:var(--paddy-soft);color:var(--paddy)}
+.empty{color:var(--muted)}
+.cal-wrap{overflow-x:auto}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(110px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:770px}
+.dow{background:var(--bg);padding:6px 8px;font-size:.75rem;font-weight:700;color:var(--muted)}
+.day{background:var(--surface);min-height:100px;padding:6px;display:flex;flex-direction:column;gap:4px}
+.day .d{font-size:.75rem;color:var(--muted)}
+.day.today{box-shadow:inset 0 0 0 2px var(--paddy)}
+.ev{font-size:.72rem;line-height:1.35;padding:3px 6px;border-radius:5px;border-left:3px solid;cursor:pointer;background:none;text-align:left;border-top:0;border-right:0;border-bottom:0}
+.ev.visit{background:var(--paddy-soft);border-color:var(--paddy)} .ev.follow{background:var(--turmeric-soft);border-color:var(--turmeric)} .ev.late{background:var(--chili-soft);border-color:var(--chili);font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 12px;cursor:pointer;font-size:.85rem}
+.chip[aria-pressed="true"]{background:var(--paddy);color:var(--surface);border-color:var(--paddy)}
+.profile{display:flex;flex-wrap:wrap;gap:4px 22px;margin-bottom:12px}
+.timeline{position:relative;padding-left:22px}
+.timeline::before{content:"";position:absolute;left:6px;top:8px;bottom:8px;width:2px;background:var(--line)}
+.entry{position:relative;padding-bottom:20px}
+.entry::before{content:"";position:absolute;left:-21px;top:6px;width:12px;height:12px;border-radius:50%;background:var(--surface);border:3px solid var(--paddy)}
+.entry .box{margin-top:6px;display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px}
+@media (max-width:620px){.entry .box{grid-template-columns:minmax(0,1fr)}}
+.photo{aspect-ratio:4/3;max-width:100%;border-radius:8px;background:var(--paddy-soft);display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--muted);font-size:.8rem}
+.photo img{width:100%;height:100%;object-fit:cover;display:block}
+dl.kv{display:grid;grid-template-columns:4.5em minmax(0,1fr);gap:2px 10px;margin:0;font-size:.9rem}
+dl.kv dt{color:var(--muted)} dl.kv dd{margin:0}
+.map svg{width:100%;height:auto;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.8rem;color:var(--muted);margin-top:8px}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;background:var(--c)}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:820px;font-size:.84rem}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:var(--bg);color:var(--muted)}
+#login{max-width:420px;margin:12vh auto 0;text-align:center}
+#login .card{display:grid;gap:14px;justify-items:center}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 12px;cursor:pointer}
+.lform{display:grid;gap:10px;width:100%}
+.lform input{font:inherit;color:inherit;width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.btn.primary{background:var(--paddy);color:var(--surface);border-color:var(--paddy);font-weight:700;padding:10px}
+.err{color:var(--chili)}
+.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px}
+.photos .photo{aspect-ratio:1}
+.pre{white-space:pre-wrap}
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.bar{display:inline-block;width:90px;height:7px;border-radius:99px;background:var(--line);overflow:hidden;vertical-align:middle;margin:0 6px}
+.bar i{display:block;height:100%;background:var(--paddy)}
+.plans{display:grid;gap:3px;font-size:.82rem}
+.taskform{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}.taskform input,.taskform select{font:inherit;color:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);min-width:0}
+.taskform input,.taskform .btn,.taskform .sub{grid-column:1/-1}
+.pwbox{border:2px solid var(--turmeric);background:var(--turmeric-soft);border-radius:10px;padding:12px;margin-bottom:12px}.pwbox code{font-size:1.4rem;font-weight:700;letter-spacing:.08em;user-select:all}
+.acctlist{list-style:none;padding:0}.acctlist li{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}.acctlist li .btn{margin-left:auto}
+ol.tasks li{margin:4px 0}
+.filters select{font:inherit;color:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.subtabs{margin-top:-10px;border-bottom:1px dashed var(--line)}.subtabs .tab{font-size:.88rem;padding:8px 12px}
+#moreBtn[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--paddy)}
+/* 總覽：每位業務一張卡片（2026-11-12 規劃 A） */
+.staffcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-bottom:6px}
+.scard{text-align:left;cursor:pointer;display:grid;gap:4px;font-size:.88rem}
+.scard:hover{border-color:var(--paddy)}
+.scard .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.scard .top b{font-size:1.05rem}
+.scard .row{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center}
+.scard .bar{width:100%;margin:2px 0 0}
+/* 客戶頁：搜尋＋篩選＋分組清單，右邊（手機在下面）是履歷（規劃 B） */
+.custgrid{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:820px){.custgrid{grid-template-columns:minmax(0,1fr)}}
+.custtools{display:grid;gap:8px;margin-bottom:10px}
+.custtools input{font:inherit;color:inherit;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);width:100%}
+.custtools .filters{margin:0}
+details.grp{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
+details.grp summary{cursor:pointer;padding:9px 12px;font-weight:700}
+details.grp ul{list-style:none;margin:0;padding:0 6px 6px}
+.crow{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;border:0;background:none;text-align:left;padding:8px 6px;border-top:1px solid var(--line);cursor:pointer;border-radius:0}
+.crow[aria-current="true"]{background:var(--paddy-soft)}
+.crow .sub{display:block}
+.my{font-family:"Noto Sans Myanmar","Myanmar Text","Padauk",sans-serif;font-size:.78em;color:var(--muted);font-weight:400;margin-left:4px} /* 緬文小字（2026-11-12 主管頁雙語） */
+.tab .my,h1 .my{display:block;margin-left:0}
+button .my,.chip .my,.pill .my{color:inherit;opacity:.85}
+.sounds{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.sounds .btn{background:var(--paddy-soft);border-color:transparent;color:var(--paddy);font-weight:700}
+/* 總經理、主管匯報、我的任務（2026-11-12） */
+.badge{display:inline-block;min-width:1.4em;margin-left:4px;padding:0 5px;border-radius:99px;background:var(--chili);color:var(--surface);font-size:.72rem;line-height:1.5;text-align:center;vertical-align:top}
+.briefform{display:grid;gap:8px;margin-bottom:14px}
+.briefform textarea,.reply textarea{font:inherit;color:inherit;width:100%;min-height:7em;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);resize:vertical}
+.reply textarea{min-height:3.5em}
+.reply{display:grid;gap:6px;margin-top:8px}
+details.brief{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
+details.brief[data-unread="1"]{border-color:var(--chili)}
+details.brief summary{cursor:pointer;padding:10px 12px;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+details.brief .body{padding:0 12px 12px;display:grid;gap:8px}
+.stats-box{background:var(--bg);border-radius:8px;padding:8px 10px;font-size:.85rem}
+.answer{border-left:3px solid var(--paddy);padding:4px 10px;background:var(--paddy-soft);border-radius:0 8px 8px 0}
+.mytasks li{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.mytasks{list-style:none;padding:0}.mytasks li .btn{margin-left:auto}
+</style>
+</head>
+<body>
+<div id="login" hidden>
+  <div class="card">
+    <h1>農戶拜訪總覽</h1>
+    <p class="sub">主管、總經理專用。帳號和密碼請向總經理索取（主管不能自己改密碼）。<br>မန်နေဂျာ / အထွေထွေမန်နေဂျာ သီးသန့်။ အကောင့်နှင့် စကားဝှက်ကို အထွေထွေမန်နေဂျာထံ တောင်းပါ။</p>
+    <form id="loginForm" class="lform" autocomplete="on">
+      <input type="text" id="acct" placeholder="帳號" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      <input type="password" id="pw" placeholder="密碼" autocomplete="current-password" required>
+      <div id="newPwBox" hidden class="lform">
+        <span class="sub">第一次登入，請設定你自己的新密碼（至少 6 個字）／စကားဝှက်အသစ် သတ်မှတ်ပါ (၆ လုံးအထက်)</span>
+        <input type="password" id="newPw" placeholder="新密碼" autocomplete="new-password">
+        <input type="password" id="newPw2" placeholder="新密碼再輸入一次" autocomplete="new-password">
+      </div>
+      <button class="btn primary" type="submit" id="loginBtn">登入</button>
+    </form>
+    <p class="sub" id="loginMsg" aria-live="polite"></p>
+  </div>
+</div>
+
+<div class="wrap" id="app" hidden>
+  <header>
+    <h1>農戶拜訪總覽</h1>
+    <span class="sub"><span id="who"></span>・<span id="updated"></span>　<button class="btn" id="reload" type="button">重新整理</button> <a id="sheetLink" target="_blank" rel="noopener">開啟試算表</a> <button class="btn" id="logout" type="button">登出</button></span>
+  </header>
+  <div class="stats" id="stats"></div>
+  <div class="tabs" role="tablist">
+    <!-- 分頁精簡：常用 5 個＋「更多」（2026-11-12 董事長同意介面規劃 C） -->
+    <button class="tab" role="tab" data-tab="today" aria-selected="true">總覽</button>
+    <button class="tab" role="tab" data-tab="latest" aria-selected="false">最新拜訪</button>
+    <button class="tab" role="tab" data-tab="trial" aria-selected="false">客戶</button>
+    <button class="tab" role="tab" data-tab="cal" aria-selected="false">日曆</button>
+    <button class="tab" role="tab" data-tab="reports" aria-selected="false">試作報告</button>
+    <button class="tab" role="tab" data-tab="tasks" aria-selected="false">任務</button>
+    <button class="tab" role="tab" data-tab="briefs" aria-selected="false">主管匯報<b class="badge" id="briefBadge" hidden></b></button>
+    <button class="tab" type="button" id="moreBtn" aria-expanded="false" aria-controls="moreTabs">更多 ▾</button>
+  </div>
+  <div class="tabs subtabs" role="tablist" id="moreTabs" hidden>
+    <button class="tab" role="tab" data-tab="progress" aria-selected="false">工作進度明細</button>
+    <button class="tab" role="tab" data-tab="map" aria-selected="false">田區地圖</button>
+    <button class="tab" role="tab" data-tab="table" aria-selected="false">拜訪紀錄表</button>
+    <button class="tab" role="tab" data-tab="accounts" aria-selected="false">業務帳號</button>
+  </div>
+  <main id="panel"></main>
+</div>
+
+<script src="config.js"></script>
+<script src="boss.js"></script>
+</body>
+</html>
