@@ -169,7 +169,8 @@ details.profile summary{font-weight:700;cursor:pointer}
 #pGps{background:var(--surface,#f6f6f2);color:var(--muted)}
 .price-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px;border:1px solid var(--line);border-radius:10px;position:relative}
 .price-row .pcw{min-width:0;grid-column:1/-1} .price-row .pcw .pc{margin-top:6px} /* 0.4.89 作物下拉（中文／緬文）＋選「其他」才出現的自填框 */
-.price-row .del{position:absolute;right:6px;top:-10px;border:1px solid var(--line);background:var(--surface);border-radius:99px;width:26px;height:26px;cursor:pointer}
+.price-row .del{position:absolute;right:6px;top:12px;border:1px solid var(--line);background:var(--surface);border-radius:99px;width:30px;height:30px;cursor:pointer} /* 0.4.92 低4：原本 top:-10px 壓到作物下拉 → 放進框內，作物那行右邊讓位 */
+.price-row .pcw{padding-right:38px} .price-row .pv{grid-column:1/-1} /* 0.4.92 低4：品種提示「品種 မျိုး（可空白）」在 375 寬被截 → 品種自己一整行 */
 .btn2{border:1px solid var(--paddy);background:none;color:var(--paddy);border-radius:10px;padding:10px;font-weight:700;cursor:pointer;width:100%}
 .save{border:0;border-radius:14px;background:var(--paddy);color:var(--surface);padding:15px;font-weight:900;font-size:1.1rem;cursor:pointer;width:100%}
 .save:disabled{opacity:.4}
@@ -256,7 +257,7 @@ footer{margin-top:18px;text-align:center}
 </style>
 </head>
 <body>
-<div class="tip" id="iosTip" hidden>📱 iPhone 請先按下方「分享」→「加入主畫面」，以後<strong>只從主畫面的圖示打開</strong>，離線存的資料才不會不見。</div>
+<div class="tip" id="iosTip" hidden>📱 iPhone 請先按下方「分享」→「加入主畫面」，以後<strong>只從主畫面的圖示打開</strong>，離線存的資料才不會不見。<span class="my">iPhone တွင် 「Share」→「Add to Home Screen」 နှိပ်ပြီး နောက်ပိုင်း ပင်မစာမျက်နှာရှိ အိုင်ကွန်မှသာ ဖွင့်ပါ။ ဒါမှ အော့ဖ်လိုင်း မှတ်တမ်း မပျောက်ပါ။</span></div><!-- 0.4.92 中2 加緬文（待校對） -->
 
 <!-- 登入 -->
 <section id="setup" hidden>
@@ -269,7 +270,7 @@ footer{margin-top:18px;text-align:center}
     <div id="newPwBox" hidden>
       <label class="lab" for="newPw">設定你自己的新密碼（至少 6 個字）<span class="my">စကားဝှက် အသစ်</span></label>
       <input type="password" id="newPw" autocomplete="new-password">
-      <label class="lab" for="newPw2" style="margin-top:8px">新密碼再輸入一次</label>
+      <label class="lab" for="newPw2" style="margin-top:8px">新密碼再輸入一次<span class="my">စကားဝှက် အသစ် ထပ်ရိုက်ပါ</span></label><!-- 0.4.92 中2 加緬文 -->
       <input type="password" id="newPw2" autocomplete="new-password">
     </div>
     <button type="submit" class="save" id="loginBtn">登入<span class="my">ဝင်မည်</span></button>

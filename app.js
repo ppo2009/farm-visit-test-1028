@@ -82,12 +82,12 @@
     // 前一個人還沒送出的任務打勾也要擋：換人後那些打勾永遠送不出去，新的人也登出不了（自行審查 S1）
     const otherTicks = ((await Store.getMeta('taskDone')) || []).filter(t => t.account && t.account !== acctKey);
     if (!others.length && otherTicks.length) {
-      msg.textContent = `這支手機還有 ${otherTicks.length} 個「${otherTicks[0].account}」的任務打勾沒上傳，請先用 ${otherTicks[0].account} 登入，等它傳完再換人。`;
+      msg.textContent = `這支手機還有 ${otherTicks.length} 個「${otherTicks[0].account}」的任務打勾沒上傳，請先用 ${otherTicks[0].account} 登入，等它傳完再換人。／${otherTicks[0].account} ဖြင့် အရင်ဝင်ပြီး မတင်ရသေးသော မှတ်တမ်း တင်ပြီးမှ အကောင့် ပြောင်းပါ။`; // 0.4.92 中2 加緬文
       msg.className = 'sub err'; return;
     }
     if (others.length) {
       // 換人登入同一支手機：前一個人的資料會被記到新帳號名下，所以先擋（2026-11-11 審查發現）
-      msg.textContent = `這支手機還有 ${others.length} 筆「${others[0].account}」沒上傳的資料，請先用 ${others[0].account} 登入，等資料傳完再換人。`;
+      msg.textContent = `這支手機還有 ${others.length} 筆「${others[0].account}」沒上傳的資料，請先用 ${others[0].account} 登入，等資料傳完再換人。／${others[0].account} ဖြင့် အရင်ဝင်ပြီး မတင်ရသေးသော မှတ်တမ်း တင်ပြီးမှ အကောင့် ပြောင်းပါ။`; // 0.4.92 中2 加緬文
       msg.className = 'sub err'; return;
     }
     msg.textContent = '確認中… စစ်ဆေးနေသည်'; msg.className = 'sub';
@@ -700,7 +700,7 @@
      後台 home.newList＝本月自己新增的客戶（已分好類）；五格各幾位，點一格展開那一類的明細（名字、鎮・村・地區、新增日期），再點收起 */
   const NEW_GROUPS = [['一般農民', 'ပုံမှန် လယ်သမား'], ['試作農民', 'စမ်းသပ် လယ်သမား'], ['推廣農民', 'မြှင့်တင် လယ်သမား'], ['盤商', 'ကုန်သည်'], ['種子商', 'မျိုးစေ့ဆိုင်']];
   /** 0.4.82 執行任務清單這一頁的五類名稱（董事長截圖用字：一般農戶）；其他頁照舊叫一般農民 */
-  const TODO_LABEL = g => (g === '一般農民' ? '一般農戶' : g);
+  const TODO_LABEL = g => g; // 0.4.92 低3（第11任第四輪）：原本這頁寫「一般農戶」、其他頁是「一般農民」→ 統一「一般農民」（只改顯示字）
   // 0.4.75 董事長「農民改鎮跟村」：鎮放前面（town＝鎮、village＝村）
   const placeOf = c => { const place = [c.town, c.village, c.area ? String(c.area).trim() /* 0.4.89 地區完整顯示，不切字 */ : ''].filter(Boolean).join('・'); return place; };
   /** 一類一小區塊：標題帶人數，沒有就寫「沒有」 */
@@ -807,10 +807,11 @@
   function harvestItemHtml(x) {
     const left = harvestDaysLeft(x);
     const lv = latestVisitDay(x.lastVisit, [x.cid, x.tempId], state.myVisitList); // 0.4.84 低1：剛拜訪完、後台還沒更新也算
-    const when = left === null ? '' : left < 0 ? `<b class="vage r">已過採收日 ${Math.abs(left)} 天</b>` : left === 0 ? '<b class="vage r">今天採收</b>' : `<b class="vage ${left <= 3 ? 'r' : 'y'}">剩 ${left} 天</b>`;
+    // 0.4.92 中2：天數、最後拜訪加緬文（待校對）
+    const when = left === null ? '' : left < 0 ? `<b class="vage r">已過採收日 ${Math.abs(left)} 天／ရိတ်သိမ်းရက် ${Math.abs(left)} ရက် ကျော်ပြီ</b>` : left === 0 ? '<b class="vage r">今天採收／ယနေ့ ရိတ်သိမ်း</b>' : `<b class="vage ${left <= 3 ? 'r' : 'y'}">剩 ${left} 天／${left} ရက် ကျန်</b>`;
     return `<li data-cid="${esc(x.cid)}"><b>${esc(x.name || '（未命名）')}</b>${x.crop ? '｜' + esc(x.crop) : ''}<br>`
       + `<small>預計採收 ရိတ်သိမ်းမည့်ရက် ${esc(String(x.harvestDate || '').slice(5).replace('-', '/'))}</small>${when ? '・' + when : ''}<br>`
-      + `<small>最後拜訪 ${lv ? esc(lv.slice(5).replace('-', '/')) : '還沒拜訪'}</small></li>`;
+      + `<small>最後拜訪 နောက်ဆုံးသွားရက် ${lv ? esc(lv.slice(5).replace('-', '/')) : '還沒拜訪／မသွားရသေး'}</small></li>`;
   }
   /* 0.4.82 董事長「快採收紅色提醒條能讓手機發出響聲嗎」：提醒條出現（有新的、今天沒收起）時嗶一聲（Web Audio 產生約 0.5 秒，不用外部音檔）＋震動 [200,100,200]（有才呼叫，iPhone 沒有就略過）。
      首頁常重畫（每次同步）→ 另外記「今天已經為哪些人響過」（harvestBeeped，跟收起用的 harvestSeen 同一套判斷）：同一天同一份名單只響一次，多了新的人才再響。
@@ -1408,9 +1409,10 @@
     const box = o.box || $('progressBox');
     const current = o.current || (() => $('farmer').value === cid);
     if (!cid || cid === '__new') { box.hidden = true; box.innerHTML = ''; return; }
+    if (!o.box) state.closeWait = null; // 0.4.92 低5：換客戶先清掉上一位的「等主管確認」（新增農民不會對到，不用清）
     const c = (o.list || state.allCustomers || []).find(f => f.id === cid) || {};
     // 0.4.49 董事長：進度卡標題旁顯示農民姓名、電話（點了直接撥）、地址（農民多半只有地區，沒填地址就顯示地區）
-    const tel = String(c.phone || '').replace(/[^\d+]/g, '');
+    const tel = String(c.phone || '').replace(/[\u1040-\u1049]/g, ch => String(ch.charCodeAt(0) - 0x1040)).replace(/[^0-9+]/g, ''); // 0.4.92 低2：緬文數字先轉 0-9
     const who = [c.name ? `<b>${esc(c.name)}</b>` : '', c.phone ? `📞 <a href="tel:${esc(tel)}">${esc(c.phone)}</a>` : '', (c.address || c.area) ? `📍 ${esc(c.address || c.area)}` : ''].filter(Boolean).join('　');
     const H3 = `<h3>之前的進度／ယခင် တိုးတက်မှု${who ? `<span class="who">${who}</span>` : ''}</h3>`;
     const trials = [];
@@ -1428,6 +1430,16 @@
     // 第8任（1號提醒 dayOf）：改用緬甸日期 mmDay，手機時區不是緬甸也不會差一天（跟伺服器的日期同一把尺）
     const dayOf = ms => mmDay(0, ms || 0);
     const recent = remote ? remote : local.map(v => ({ time: dayOf(v.deviceTime), staff: '我', cat: CAT_LABEL(v.category || ''), text: v.text || '', plantFail: '', closing: '' }));
+    // 0.4.92 低5：打卡畫面（不是首頁）的進度卡：記下這位的結案是不是還在等主管確認，存檔鈕跟著擋
+    let waitHtml = '';
+    // 等確認＝這支手機還有沒上傳、帶結案的拜訪（'local'），或後台最近拜訪裡最新一筆有結案的、結尾是「（待主管確認）」（'server'；退回的結尾不同，可以再送）
+    if (!o.box) {
+      const lastC = (remote || []).find(v => v && v.closing);
+      const w = local.some(v => v && v.status === 'pending' && v.closing) ? 'local' : lastC && /（待主管確認）$/.test(String(lastC.closing)) ? 'server' : '';
+      state.closeWait = { cid, wait: w };
+      if (w) waitHtml = `<p class="err">⏳ ${esc('這位已送結案、等主管確認中，不能再送一次（主管確認或退回後才能再送）／ပိတ်သိမ်းရန် ပို့ပြီးပါပြီ၊ မန်နေဂျာ စစ်ဆေးနေဆဲ၊ ထပ်မပို့ရ')}</p>`;
+      if (typeof refreshSave === 'function') refreshSave();
+    }
     // 0.4.82 多久沒回訪：後台的最後拜訪日、這支手機剛打（還沒同步）的，取比較新的那天
     const age = `<p class="sub">${visitAgeHtml([c.lastVisit, local[0] ? dayOf(local[0].deviceTime) : ''].filter(Boolean).sort().pop(), mmDay(0))}</p>`;
     if (o.home && !c.lastVisit && !trials.length && !recent.length) { box.innerHTML = H3 + age + `<p>這位${c.type && c.type !== '農民' ? '客戶' : '農民'}還沒有拜訪紀錄。<br>` + '<span class="my">မှတ်တမ်း မရှိသေး</span></p>'; return; }
@@ -1447,7 +1459,7 @@
     // 0.4.44 只露最近一次拜訪，其他收進「看更早的」
     const vItems = vs ? vs.split('</li>').filter(Boolean).map(x => x + '</li>') : [];
     const more = vItems.length > 1 ? `<details><summary>看更早的 ${vItems.length - 1} 筆／ယခင်များ</summary><ul>${vItems.slice(1).join('')}</ul></details>` : '';
-    box.innerHTML = `${H3}${age}${head ? `<p class="sub">${head}</p>` : ''}${tr ? `<ul>${tr}</ul>` : ''}` +
+    box.innerHTML = `${H3}${age}${waitHtml}${head ? `<p class="sub">${head}</p>` : ''}${tr ? `<ul>${tr}</ul>` : ''}` +
       (vItems.length ? `<p class="sub">上次拜訪${remote ? '' : '（沒網路，只有這支手機記的）'}：</p><ul>${vItems[0]}</ul>${more}` : '');
   }
 
@@ -1697,6 +1709,9 @@
   }
   /** 量測檢查：數字不能負、採收日不能早於播種日、不能晚於今天 */
   function measureProblem() {
+    // 0.4.92 低1（第11任第四輪）：數字框打成「1,5」「12,000」時瀏覽器給的值是空的（validity.badInput）→ 原本當沒填、整份量測默默不送 → 先擋、請只填數字
+    const badM = [['mCount', '樣本數'], ['mWeight', '總重量'], ['mLength', '長度'], ['mRows', '穗行數']].filter(([id]) => { const el = $n(id); return !!(el && el.validity && el.validity.badInput); }).map(([, n]) => n);
+    if (badM.length) return `${badM.join('、')}請只填數字（用 0～9 和小數點，不要用逗號）／ဂဏန်းသာ ဖြည့်ပါ (ကော်မာ မထည့်ပါနှင့်)`;
     const neg = [['mCount', '樣本數'], ['mWeight', '總重量'], ['mLength', '長度'], ['mRows', '穗行數']].filter(([id]) => String($n(id).value).trim() !== '' && !(Number($n(id).value) >= 0)).map(([, n]) => n);
     if (neg.length) return `${neg.join('、')}不能是負數／အနှုတ် မဖြစ်ရ`;
     if (!MEASURE_FILLED.some(id => String($n(id).value).trim() !== '')) return ''; // 0.4.80 中1：沒量就不檢查日期（預帶的日期不能擋結案）
@@ -1715,17 +1730,27 @@
   }
   /** 結案（2026-11-12 手稿）：價格、產量、收購客戶必填；地區、電話可空 */
   function closeProblem() {
+    // 0.4.92 低5（第11任第四輪）：結案（含盤商、種子商結案／簽約）送出後在等主管確認時，同一位還能再送一次 → 後台出兩筆待確認。
+    // state.closeWait 由打卡畫面的進度卡寫（renderProgress：後台最近一筆結案還「待主管確認」，或這支手機還有沒上傳的結案）
+    const waitOf = cid => !!cid && !!state.closeWait && state.closeWait.cid === cid && !!state.closeWait.wait;
+    const WAIT_MSG = '這位已送結案、等主管確認中，不能再送一次（主管確認或退回後才能再送）／ပိတ်သိမ်းရန် ပို့ပြီးပါပြီ၊ မန်နေဂျာ စစ်ဆေးနေဆဲ၊ ထပ်မပို့ရ';
     if (state.dealerClose) { // 0.4.42 盤商、種子商結案：洽談結果＋說明必填，送主管審核
       const sel = $('farmer').value;
       if (!sel || sel === '__new') return '請先選要結案的' + state.cat + '／ဖောက်သည် ရွေးပါ';
+      if (waitOf(sel)) return WAIT_MSG; // 0.4.92 低5
       const miss = [['dcOutcome', '洽談結果'], ['dcNote', '說明']].filter(([id]) => !String($n(id).value).trim()).map(([, n]) => n);
       return miss.length ? `結案要填：${miss.join('、')}／ပိတ်သိမ်းရန် ဖြည့်ပါ` : '';
     }
+    if ((state.cat === '盤商' || state.cat === '種子商') && dealerSignOn() && waitOf($('farmer').value)) return WAIT_MSG; // 0.4.92 低5：簽約同理
     if ((state.cat === '盤商' || state.cat === '種子商') && dealerSignOn()) return String($n('dcNote').value).trim() ? '' : '已簽約要寫簽約內容（簽了什麼、從什麼時候開始）／စာချုပ် အကြောင်းအရာ ရေးပါ'; // 0.4.75
     if (state.cat !== '結案') return '';
     // 業務BUG#3：農民結案只能選已經有的農民，不能在這裡新增（選單已拿掉「＋新增農民」，這裡再擋一次）
     const sel0 = $('farmer').value;
     if (!sel0 || sel0 === '__new') return '請先選要結案的農民／လယ်သမား ရွေးပါ';
+    if (waitOf(sel0)) return WAIT_MSG; // 0.4.92 低5
+    // 0.4.92 低1：價格打成「12,000」→ 原本被當沒填、提示「結案要填：價格」（明明有打）→ 先說請只填數字
+    const badC = [['cPrice', '價格'], ['cYield', '產量']].filter(([id]) => { const el = $(id); return !!(el && el.validity && el.validity.badInput); }).map(([, n]) => n);
+    if (badC.length) return `${badC.join('、')}請只填數字（用 0～9 和小數點，不要用逗號）／ဂဏန်းသာ ဖြည့်ပါ (ကော်မာ မထည့်ပါနှင့်)`;
     const miss = [['cPrice', '價格'], ['cYield', '產量'], ['cBuyer', '收購客戶']].filter(([id]) => !String($(id).value).trim()).map(([, n]) => n);
     if (miss.length) return `結案要填：${miss.join('、')}／ပိတ်သိမ်းရန် ဖြည့်ပါ`;
     // 2號 0.4.63 低#6：輸入框的 min=0 只有表單送出才擋，這裡自己檢查：價格、產量要大於 0（不能負數或 0）
@@ -2419,7 +2444,7 @@ ${state.cat}：${who}
         const sentAt = Date.now();
         const data = await post(cfg.gasUrl, { action: 'sync', deviceKey: cfg.deviceKey }).catch(() => null);
         if (data && data.ok) await rememberServer(data, sentAt, cfg.deviceKey); // 0.4.91 高1：帶送出時的金鑰，換了帳號就整份丟掉
-        else if (data && data.code === 'BAD_LOGIN') { await onLoginExpired(cfg.deviceKey, data.message); return; } // 0.4.87 高1、中6
+        else if (data && data.code === 'BAD_LOGIN') { await onLoginExpired(cfg.deviceKey, (data.message || '登入已失效') + '。沒上傳的資料還在手機裡，重新登入後會自動補傳。／ပြန်ဝင်ပြီးလျှင် ကျန်သော မှတ်တမ်း တင်မည်။'); return; } // 0.4.87 高1、中6；0.4.92 中2 比照上傳那條加緬文
       }
       $('syncState').textContent = r && r.error ? r.error : '';
       // 0.4.81（0.4.80 巡檢中1）：上傳、同步完成 → 種植資料的紀錄切回來要重讀（這裡不馬上重讀，省流量）
