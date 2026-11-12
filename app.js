@@ -1041,10 +1041,13 @@
       const lv = lastOf(t.cid);
       return !lv || lv < due ? w : null;
     };
-    $('trialList').innerHTML = list.map(t => { const w = week(t.start), m = measure(t); return `<li class="go" data-cid="${esc(t.cid)}" data-cat="${esc(t.cat || '試作')}"><span>${esc(nameOf(t.cid))}<br><small>${esc(catBi(t.cat || '試作'))}・${esc(t.item || '—')}${t.pending ? '（未上傳）မတင်ရသေး' : ''}</small></span>${m ? `<span class="pill late">第 ${m} 週該量測<br>အပတ် ${m} တိုင်းရန်</span>` : w ? `<span class="pill wait">第 ${w} 週<br>အပတ် ${w}</span>` : ''}</li>`; }).join('')
+    // 0.5.01 董事長：結案已送、等主管確認 → 這件顯示「結案待確認」，不算進行中、不提醒量測（後台 held；這支手機還沒上傳的結案也算；退回後後台不再標 held，自動回到進行中）
+    const localClose = new Set(mine.filter(v => v && v.closing && v.status === 'pending' && v.farmerId).map(v => v.farmerId));
+    const heldOf = t => !!t.held || localClose.has(t.cid);
+    $('trialList').innerHTML = list.map(t => { const held = heldOf(t), w = week(t.start), m = held ? null : measure(t); return `<li class="go" data-cid="${esc(t.cid)}" data-cat="${esc(t.cat || '試作')}"><span>${esc(nameOf(t.cid))}<br><small>${esc(catBi(t.cat || '試作'))}・${esc(t.item || '—')}${t.pending ? '（未上傳）မတင်ရသေး' : ''}</small></span>${held ? '<span class="pill wait">結案待確認<br>ပိတ်သိမ်းရန် စစ်ဆေးဆဲ</span>' : m ? `<span class="pill late">第 ${m} 週該量測<br>အပတ် ${m} တိုင်းရန်</span>` : w ? `<span class="pill wait">第 ${w} 週<br>အပတ် ${w}</span>` : ''}</li>`; }).join('')
       || `<li class="empty">${h ? '目前沒有進行中的試作／လုပ်ဆောင်ဆဲ စမ်းသပ်ကွက် မရှိ' : '連上網路後會顯示／အင်တာနက်ချိတ်ပြီးမှ ပြမည်'}</li>`;
     $('trialList').querySelectorAll('li.go').forEach(li => li.addEventListener('click', () => { state.lockNext = true; openVisit(li.dataset.cat === '推廣' ? '推廣' : '試作', li.dataset.cid); })); // 0.4.63 鎖死
-    const ms = $('msTrials'); if (ms) ms.textContent = String(list.length); // 0.4.69 最上面一排：進行中試作（舊頁面沒有這格就不畫）
+    const ms = $('msTrials'); if (ms) ms.textContent = String(list.filter(t => !heldOf(t)).length); // 0.4.69 最上面一排：進行中試作（舊頁面沒有這格就不畫）；0.5.01 結案待確認的不算
   }
 
   /**
@@ -2608,7 +2611,7 @@ ${state.cat}：${who}
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.00'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.01'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
