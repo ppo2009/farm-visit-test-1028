@@ -90,6 +90,9 @@ li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px
 #cropBox{margin:8px 0}
 #cropBox.croprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end}
 #cropBox.croprow[hidden]{display:none}
+.todoboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start} /* 0.4.63 主管任務｜我的進度 兩欄 */
+.tasksum{border:1.5px solid var(--paddy);border-radius:12px;padding:10px 12px;margin:6px 0 10px;background:var(--surface)}
+.tasksum[hidden]{display:none}
 .closerow{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;align-items:end} /* 0.4.62 結案七欄同一列，窄螢幕自動換行 */
 .meetswitch{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .meetswitch .btn2[aria-pressed="true"]{background:var(--paddy);color:var(--surface)}
@@ -228,15 +231,20 @@ footer{margin-top:18px;text-align:center}
 
   <!-- 分頁 2 執行任務清單：要去做的事（任務打勾＋回訪日程） -->
   <div class="hpanel" id="hp-todo" role="tabpanel" aria-labelledby="htab-todo" hidden>
-  <h2>任務清單<span class="my">လုပ်ရန်စာရင်း</span><span class="sub">主管、總經理派的，做完打勾／မန်နေဂျာ၊ အထွေထွေမန်နေဂျာ ပေးသောအလုပ်၊ ပြီးလျှင် အမှန်ခြစ်ပါ</span></h2>
+  <!-- 0.4.63 董事長：指派任務＝主管派下來的任務；這頁要一邊看主管派的任務、一邊看自己的進度 → 左右兩欄（手機上下排） -->
+  <div class="todoboard">
+  <div class="todocol">
+  <h2>主管指派的任務<span class="my">မန်နေဂျာ ပေးသော အလုပ်</span><span class="sub">誰派、什麼時候派、做完沒；做完打勾／ပြီးလျှင် အမှန်ခြစ်ပါ</span></h2>
+  <div class="tasksum" id="taskSummary"></div>
   <ul id="taskList"></ul>
-
+  </div>
+  <div class="todocol">
+  <h2>我的進度<span class="my">ကျွန်ုပ်၏ တိုးတက်မှု</span><span class="sub">這個月的目標和拜訪次數／ဤလ ပစ်မှတ်</span></h2>
+  <ul id="todoPlan"></ul>
   <h2>日程清單<span class="my">သွားရန်ရက်စာရင်း</span><span class="sub">逾期＋未來 7 天要回訪的／ရက်ကျော်နှင့် နောက် ၇ ရက်အတွင်း ပြန်သွားရန်</span></h2>
   <ul id="scheduleList"></ul>
-
-  <!-- 0.4.59 原「指派任務」分頁併進來：主管、總經理派給我的任務紀錄（誰派、什麼時候、做完沒），打勾在上面任務清單 -->
-  <h2>指派任務紀錄<span class="my">ပေးထားသော အလုပ်</span><span class="sub">主管、總經理派給你的任務紀錄；做完請在上面任務清單打勾／ပြီးလျှင် အပေါ်တွင် အမှန်ခြစ်ပါ</span></h2>
-  <ul id="assignedList"></ul>
+  </div>
+  </div>
   </div>
 
   <!-- 分頁 4 我的進度：我的試作、月計劃、工作進度 -->
