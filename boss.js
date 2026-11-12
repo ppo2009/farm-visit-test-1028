@@ -709,12 +709,20 @@
 
   /* ───── 主管匯報（2026-11-12）：主管寫給總經理，系統附上這段期間的數字；總經理看、回覆 ───── */
   function newRid() { const a = new Uint8Array(12); crypto.getRandomValues(a); return Array.from(a, x => x.toString(16).padStart(2, '0')).join(''); }
+  /** 匯報內容：有中文翻譯就「中文翻譯」＋「緬文原文」都列（0.4.34 董事長：主管打緬文，總經理要看到緬文跟中文） */
+  function briefTexts(b) {
+    const orig = `<div class="pre">${esc(b.text)}</div>`;
+    if (b.zh) return `<div class="zh-box"><b>中文翻譯</b><div class="pre">${esc(b.zh)}</div></div><div class="orig-box"><b>緬文原文</b>${orig}</div>`;
+    if (b.zhState === '待翻譯') return `${orig}<p class="sub">中文翻譯處理中（翻譯額度恢復後自動補上）</p>`;
+    if (b.zhState === '翻譯失敗') return `${orig}<p class="sub">⚠ 中文翻譯失敗，請到試算表「主管匯報」把翻譯狀態改回「待翻譯」重試</p>`;
+    return orig;
+  }
   function briefItem(b, gm) {
     const unread = gm && !b.read;
     return `<details class="brief" data-brief="${esc(b.id)}"${unread ? ' data-unread="1"' : ''}${state.briefOpen === b.id ? ' open' : ''}>
       <summary>${unread ? '<span class="pill p-red">未讀</span>' : ''}${b.reply ? '<span class="pill p-grn">已回覆</span>' : ''}<b>${esc(b.boss)}</b>
         <span class="sub">${esc(b.from)} ～ ${esc(b.to)}・${esc(String(b.date).slice(5, 16))} 送出</span></summary>
-      <div class="body"><div class="pre">${esc(b.text)}</div>
+      <div class="body">${briefTexts(b)}
         <div class="stats-box"><b>系統附上的數字</b><div class="pre">${esc(b.stats)}</div></div>
         ${b.reply ? `<div class="answer"><b>總經理回覆</b><span class="sub">（${esc(b.replyBy)} ${esc(String(b.replyAt).slice(5, 16))}）</span><div class="pre">${esc(b.reply)}</div></div>` : ''}
         ${gm ? `<form class="reply" data-replyform="${esc(b.id)}"><textarea maxlength="1000" placeholder="回覆給 ${esc(b.boss)}（例如：好，下週先處理 A 區）" aria-label="回覆">${esc((state.replyDraft || {})[b.id] || '')}</textarea>
