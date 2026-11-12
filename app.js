@@ -441,26 +441,35 @@
    *  0.4.98（第13任 手機8）：原本只記一筆、不分帳號 → 連續兩位農民逾時，前一位的被蓋掉；換人登入同一支手機，上一位的比對結果提示給下一位。
    *  改成一筆一位（帳號＋客戶編號），只比現在這個帳號的（舊版存的單筆沒有帳號：照舊比） */
   async function plantPendingCheck() {
-    const raw = await Store.getMeta('plantPending');
-    const list = Array.isArray(raw) ? raw : raw && raw.cid ? [raw] : [];
-    if (!list.length) return '';
+    const asList = raw => (Array.isArray(raw) ? raw : raw && raw.cid ? [raw] : []);
+    const raw0 = await Store.getMeta('plantPending');
+    if (!asList(raw0).length) return '';
     const acct = ((await getConfig()) || {}).account || '';
     const farmers = (await Store.getMeta('farmers')) || [];
     const same = (a, b) => { const x = String(a == null ? '' : a).trim(), y = String(b == null ? '' : b).trim(); return x === y || (x !== '' && y !== '' && isFinite(Number(x)) && isFinite(Number(y)) && Number(x) === Number(y)); };
-    let res = '', changed = false;
-    const keep = list.filter(pp => {
-      if (!pp || !pp.cid) { changed = true; return false; }
-      if (Date.now() - (pp.at || 0) > 86400000) { changed = true; if (!res) res = 'expired'; return false; }
-      if (pp.account && acct && pp.account !== acct) return true; // 別的帳號的：留著，等他登入再比
-      const f = farmers.find(x => x.id === pp.cid);
-      if (!f) return true;
-      const ok = Object.keys(pp.profile || {}).every(k => same(f[k], pp.profile[k])) && (pp.clear || []).every(k => String(f[k] == null ? '' : f[k]).trim() === '');
-      if (!ok) return true;
-      changed = true; res = 'saved';
-      toast(`剛才的種植資料修改已存好（${f.name || pp.cid}）／ယခင် ပြင်ဆင်ချက် သိမ်းပြီးပါပြီ`);
-      return false;
-    });
-    if (changed) await Store.setMeta('plantPending', keep.length ? keep : null);
+    let res = '', msgs = [];
+    // 0.4.99（第13任，0.4.98 審查手機低）：①手機時間被往回調時「現在－記錄時間」是負數，原本永遠不過期 → 負數也當過期；
+    //   ②讀清單、比對、寫回放在同一個資料庫交易（Store.updateMeta）裡，中間另一位剛逾時寫進來的不會被舊清單蓋掉（舊環境沒有 updateMeta 就照舊讀了再寫）
+    const work = raw => {
+      res = ''; msgs = []; let changed = false;
+      const keep = asList(raw).filter(pp => {
+        if (!pp || !pp.cid) { changed = true; return false; }
+        const age = Date.now() - (pp.at || 0);
+        if (age > 86400000 || age < 0) { changed = true; if (!res) res = 'expired'; return false; }
+        if (pp.account && acct && pp.account !== acct) return true; // 別的帳號的：留著，等他登入再比
+        const f = farmers.find(x => x.id === pp.cid);
+        if (!f) return true;
+        const ok = Object.keys(pp.profile || {}).every(k => same(f[k], pp.profile[k])) && (pp.clear || []).every(k => String(f[k] == null ? '' : f[k]).trim() === '');
+        if (!ok) return true;
+        changed = true; res = 'saved';
+        msgs.push(`剛才的種植資料修改已存好（${f.name || pp.cid}）／ယခင် ပြင်ဆင်ချက် သိမ်းပြီးပါပြီ`);
+        return false;
+      });
+      return changed ? (keep.length ? keep : null) : raw;
+    };
+    if (typeof Store.updateMeta === 'function') await Store.updateMeta('plantPending', work);
+    else { const out = work(raw0); if (out !== raw0) await Store.setMeta('plantPending', out); }
+    msgs.forEach(t => toast(t));
     return res;
   }
   async function savePlant() {
@@ -486,7 +495,8 @@
         return;
       }
       if (!r || !r.ok) { $n('plHint').textContent = (r && r.message) || '存檔失敗，請再試一次／မအောင်မြင်'; return; }
-      if (Array.isArray(r.farmers)) await Store.setMeta('farmers', r.farmers);
+      // 0.4.99（審查手機低）：存檔最多等 60 秒，期間登出、換人登入 → 上一位的回應晚到，不能把他的客戶清單寫進新帳號（跟其他回應一樣先確認還是同一把金鑰）
+      if (Array.isArray(r.farmers)) { const nowCfg = await getConfig(); if (nowCfg && nowCfg.deviceKey === cfg.deviceKey) await Store.setMeta('farmers', r.farmers); }
       { // 0.4.94 中4：這位這次存好了，先前逾時那筆不用再比（0.4.98 手機8：只拿掉這個帳號這一位的）
         const raw = await Store.getMeta('plantPending'), acct = cfg.account || '';
         const list = Array.isArray(raw) ? raw : raw && raw.cid ? [raw] : [];
@@ -637,7 +647,13 @@
     const ymdValid = x => { const s = String(x || '').slice(0, 10); return /^\d{4}-\d\d-\d\d$/.test(s) && isFinite(Date.parse(s)); };
     (visits || []).slice().reverse().forEach(v => { // 後台新到舊 → 這裡由舊到新
       if (v.noMeet && !(v.photos || []).length) return; // 沒見到、沒照片的不算生長紀錄
-      if (!v.text && !(v.photos || []).length && !v.closing) return;
+      if (!v.text && !(v.photos || []).length && !v.closing && !v.closeHidden) return;
+      // 0.4.99（第13任，0.4.98 審查 Word 中1、中2）：跟 Word「生長過程」同一套規則（Code.gs farmerReport_ 的 inGrowth）——
+      //   待主管確認、被退回的結案不放（退回＝沒結案；待確認＝還沒審核，照片內容不露出），照樣列在下面田間報告；
+      //   早於種植日期的拜訪（上一季）不放，只數筆數
+      const cst = (v.closingDetail && v.closingDetail.state) || v.closeHidden || (v.closeRejected ? '已退回' : v.closePending ? '待確認' : '');
+      if ((v.closing || v.closeHidden) && (cst === '待確認' || cst === '已退回')) return;
+      if (ymdValid(plantDate) && ymdValid(v.time) && String(v.time).slice(0, 10) < String(plantDate).slice(0, 10)) { early++; return; }
       let st = STAGES.indexOf(v.stage) >= 0 ? v.stage : v.closing ? '採收' : '', guessed = false;
       if (!st) { st = stageGuess(plantDate, v.time); guessed = !!st; }
       if (!st) { const pdOk = ymdValid(plantDate), vOk = ymdValid(v.time); if (pdOk && vOk) early++; else if (!pdOk) noPd++; else badDay++; return; }
@@ -649,7 +665,7 @@
         + (es.length ? es.map(({ v, guessed }) => `<div class="gent"><b>${esc(String(v.time || '').slice(0, 10))}</b>${guessed ? '<small>（推算 ခန့်မှန်း）</small>' : ''}${v.text ? '　' + esc(short(v.text)) : v.closing ? '　' + esc(short(v.closing)) : ''}`
           + `${(v.photos || []).length ? `<div class="pgrid">${v.photos.map((id, i) => `<button type="button" class="btn2 small" data-hph="${esc(id)}">📷 照片 ${i + 1}</button>`).join('')}</div>` : ''}</div>`).join('')
           : '<div class="gent"><small>還沒有照片／ဓာတ်ပုံ မရှိသေး</small></div>') + '</li>'; }).join('');
-    return `<h3>生長過程／ကြီးထွားမှု အဆင့်ဆင့်</h3>${noPd ? `<p class="sub">有 ${noPd} 筆拜訪沒標階段、也沒有種植日期，無法推算／အဆင့် မသိနိုင်</p>` : ''}${early ? `<p class="sub">有 ${early} 筆拜訪早於種植日期，無法推算階段／စိုက်ရက်မတိုင်မီ</p>` : ''}${badDay ? `<p class="sub">有 ${badDay} 筆拜訪日期不明，無法推算階段／ရက်စွဲ မသိ</p>` : ''}<ol class="growtl">${li}</ol>`;
+    return `<h3>生長過程／ကြီးထွားမှု အဆင့်ဆင့်</h3>${noPd ? `<p class="sub">有 ${noPd} 筆拜訪沒標階段、也沒有種植日期，無法推算／အဆင့် မသိနိုင်</p>` : ''}${early ? `<p class="sub">有 ${early} 筆拜訪早於種植日期（上一季），不列在生長過程／စိုက်ရက်မတိုင်မီ</p>` : ''}${badDay ? `<p class="sub">有 ${badDay} 筆拜訪日期不明，無法推算階段／ရက်စွဲ မသိ</p>` : ''}<ol class="growtl">${li}</ol>`;
   }
   /* 0.4.77 董事長「種植資料要詳細列出結案的照片、文字、重量、之前田間報告」＋範例紙卡：結案區塊（照片排格子、量測卡一行一項） */
   const MEASURE_ROWS = [['variety', '品種', 'မျိုး'], ['sample', '樣本', 'နမူနာ'], ['weight', '總重量', 'အလေးချိန်'], ['length', '長度', 'အရှည်'], ['rows', '穗行數', 'အစေ့တန်း'],
@@ -2582,7 +2598,7 @@ ${state.cat}：${who}
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.4.98'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.4.99'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
