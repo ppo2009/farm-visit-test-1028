@@ -100,8 +100,10 @@
         msg.textContent = data.message; return;
       }
       if (!data.ok) { msg.textContent = data.message || '登入失敗'; msg.className = 'sub err'; return; }
-      await rememberServer(data, sentAt);
+      // 0.4.91 高1：rememberServer 改成一定要帶金鑰、而且要等於現在登入的 → 先寫好這次登入，再存登入回應（用這次拿到的金鑰）
       await Store.setMeta('config', { gasUrl: FARM_CONFIG.gasUrl, deviceKey: data.deviceKey, name: data.name, account: data.account, role: data.role });
+      await Store.setMeta('loginLost', null); state.loginLost = null; // 0.4.91 中4：重新登入了，先前延後的登入失效作廢
+      await rememberServer(data, sentAt, data.deviceKey);
       // 第 1 期留下、沒有標帳號的待傳資料：歸給這支手機升級後第一個登入的人並標上帳號，
       // 之後換別人登入會被擋，不會記到別人名下（2026-11-11 GPT-6.1 審查 G03）
       for (const v of await Store.allVisits()) if (v.status === 'pending' && !v.account) { v.account = data.account; await Store.putVisit(v); }
@@ -125,12 +127,14 @@
   async function logout() {
     // 0.4.87 中6：比照返回鍵——打卡畫面還沒儲存要先確認；錄音中先停掉、表單清掉（不讓錄音器開著跑到登入頁）
     if (state.view === 'visit' && formDirty() && !confirm('還沒儲存，確定要登出嗎？剛剛填的資料（照片、錄音、打字等）會不見。\nမသိမ်းရသေးပါ။ ထွက်လျှင် ပျောက်မည်။')) return;
-    if (state.view === 'visit' || state.rec) resetForm();
+    // 0.4.91 中2（第11任第三輪清單）：原本這裡就先清表單，接著「還有沒上傳」被擋、或第二次確認按取消 → 表單沒了也沒登出
+    // → 待上傳檢查、第二次確認都通過了，才清表單（停錄音）
     const pending = (await Store.allVisits()).filter(v => v.status === 'pending').length;
     // 任務打勾也要先送出（GPT-6.1 R4-07）；只算自己帳號的：別人的（舊版換人留下的）在這支手機用自己帳號永遠送不掉，不能因此擋住登出（自行審查 S1）
     const ticks = (await mineTicks()).length;
     if (pending || ticks) { toast(`還有 ${[pending ? pending + ' 筆拜訪' : '', ticks ? ticks + ' 個任務打勾' : ''].filter(Boolean).join('、')}沒上傳，先連上網路等它傳完再登出／မတင်ရသေးသော မှတ်တမ်းရှိသည်၊ အင်တာနက်ချိတ်ပြီး တင်ပြီးမှ ထွက်ပါ`); return; }
     if (!confirm('確定要登出嗎？之後要再輸入帳號密碼。\nထွက်မှာ သေချာပါသလား။ နောက်တစ်ကြိမ် အကောင့်နှင့် စကားဝှက် ပြန်ထည့်ရမည်။')) return;
+    if (state.view === 'visit' || state.rec) resetForm(); // 0.4.91 中2：全部確認過才清表單、停錄音
     // 0.4.75 董事長「右上角登出，而且實際上也要登出」：先請後台停用這支手機的裝置金鑰（最多等 5 秒；沒網路、逾時、舊後台不認得、出錯都照樣登出）
     const lb = $n('logoutBtn'), lbl = lb.innerHTML; lb.disabled = true; lb.textContent = '登出中…／ထွက်နေသည်'; // 0.4.80 低1：等後台時不讓重按
     try { await Promise.race([gasCall({ action: 'logout' }), new Promise(r => setTimeout(r, 5000))]); } catch (e) { /* 照樣清本機、回登入頁 */ } finally { lb.disabled = false; lb.innerHTML = lbl; }
@@ -224,7 +228,9 @@
   /** 0.4.84（BUG清單_0.4.83 低1）：最後拜訪日＝後台 lastVisit 跟這支手機自己帳號的拜訪（myVisits，用緬甸日期 mmDay）取比較新的那天。
       有打字、錄音的拜訪，後台要等背景翻譯（最多約 10 分鐘）才更新 lastVisit；這段時間只看後台會還是紅字 */
   function latestVisitDay(serverDay, cid, mine) {
-    const own = (mine || []).filter(v => v && v.farmerId === cid && Number(v.deviceTime) > 0).map(v => mmDay(0, Number(v.deviceTime)));
+    // 0.4.91 低2：cid 可以給 [正式編號, 臨時編號]——剛新增的客戶，手機拜訪記的是 T_ 臨時編號，上傳後後台給正式編號（2 號在 customerOut_ 加 tempId）；舊後台沒有 tempId 照舊
+    const ids = [].concat(cid).filter(Boolean);
+    const own = (mine || []).filter(v => v && ids.indexOf(v.farmerId) >= 0 && Number(v.deviceTime) > 0).map(v => mmDay(0, Number(v.deviceTime)));
     return [String(serverDay || '').slice(0, 10)].concat(own).filter(d => /^\d{4}-\d\d-\d\d$/.test(d)).sort().pop() || '';
   }
   const visitAgeHtml = (lastVisit, today) => { const a = visitAge(lastVisit, today); return `<span class="vage ${a.lv}">${esc(a.text)}</span>`; };
@@ -257,7 +263,7 @@
     if (typeof document.querySelectorAll === 'function') document.querySelectorAll('#mineType [data-mtype]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mtype === mtype)));
     const isFarmer = FARMER_GROUPS.indexOf(mtype) >= 0;
     const keep = sel.value;
-    sel.innerHTML = `<option value="">— 選一位${mtype} ${MINE_TYPES[mtype]} ရွေးပါ —</option>` + list.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).trim() /* 0.4.89 地區完整顯示（業務－地區），不切字 */) : ''}${isFarmer ? '｜' + esc(growLabel(growOfId[f.id])) : ''}｜${esc(visitAge(latestVisitDay(f.lastVisit, f.id, state.myVisitList), today).text.split('／')[0])}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`).join(''); // 0.4.82 選項加「距上次拜訪 N 天」（選項不能上色，靠文字）
+    sel.innerHTML = `<option value="">— 選一位${mtype} ${MINE_TYPES[mtype]} ရွေးပါ —</option>` + list.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).trim() /* 0.4.89 地區完整顯示（業務－地區），不切字 */) : ''}${isFarmer ? '｜' + esc(growLabel(growOfId[f.id])) : ''}｜${esc(visitAge(latestVisitDay(f.lastVisit, [f.id, f.tempId], state.myVisitList), today).text.split('／')[0])}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`).join(''); // 0.4.82 選項加「距上次拜訪 N 天」（選項不能上色，靠文字）
     sel.value = keep && list.some(f => f.id === keep) ? keep : '';
     sel.disabled = !list.length;
     state.mineGrow = growOfId;
@@ -800,7 +806,7 @@
   }
   function harvestItemHtml(x) {
     const left = harvestDaysLeft(x);
-    const lv = latestVisitDay(x.lastVisit, x.cid, state.myVisitList); // 0.4.84 低1：剛拜訪完、後台還沒更新也算
+    const lv = latestVisitDay(x.lastVisit, [x.cid, x.tempId], state.myVisitList); // 0.4.84 低1：剛拜訪完、後台還沒更新也算
     const when = left === null ? '' : left < 0 ? `<b class="vage r">已過採收日 ${Math.abs(left)} 天</b>` : left === 0 ? '<b class="vage r">今天採收</b>' : `<b class="vage ${left <= 3 ? 'r' : 'y'}">剩 ${left} 天</b>`;
     return `<li data-cid="${esc(x.cid)}"><b>${esc(x.name || '（未命名）')}</b>${x.crop ? '｜' + esc(x.crop) : ''}<br>`
       + `<small>預計採收 ရိတ်သိမ်းမည့်ရက် ${esc(String(x.harvestDate || '').slice(5).replace('-', '/'))}</small>${when ? '・' + when : ''}<br>`
@@ -874,7 +880,7 @@
     const today = await phoneToday(h); // 0.4.87 低3：先校正手機時間（phoneToday 會設 state.clockOff），再畫快採收（剩幾天、今天響過沒都用 mmDay）
     await renderHarvest(h); // 0.4.82 快採收提醒條
     const list = (h ? h.schedule : []).map(s => Object.assign({}, s, { late: s.due < today })); // 逾期用手機的今天重算
-    const lastOf = {}; ((await Store.getMeta('farmers')) || []).forEach(f => { lastOf[f.id] = latestVisitDay(f.lastVisit, f.id, state.myVisitList); }); // 0.4.82 日程那列加「距上次拜訪 N 天」；0.4.84 低1 合併這支手機的拜訪
+    const lastOf = {}; ((await Store.getMeta('farmers')) || []).forEach(f => { lastOf[f.id] = latestVisitDay(f.lastVisit, [f.id, f.tempId], state.myVisitList); }); // 0.4.82 日程那列加「距上次拜訪 N 天」；0.4.84 低1 合併這支手機的拜訪
     const soon = {}; ((h && Array.isArray(h.harvestSoon)) ? h.harvestSoon : []).forEach(x => { soon[x.cid] = true; }); // 0.4.82 日程裡快採收的人加標籤
     $('scheduleList').innerHTML = list.map(s => `<li class="go" data-id="${esc(s.id)}" data-type="${esc(s.type)}"><span>${esc(s.name)}<br><small>${esc(catBi(s.type || '農民'))}・應回訪 ပြန်သွားရန် ${esc(s.due.slice(5).replace('-', '/'))}</small><br>${visitAgeHtml(lastOf[s.id], today)}${soon[s.id] ? ' <span class="pill late">快採收 ရိတ်သိမ်းခါနီး</span>' : ''}</span>${s.late ? '<span class="pill late">逾期 ရက်ကျော်</span>' : s.due === today ? '<span class="pill wait">今天 ယနေ့</span>' : ''}</li>`).join('')
       || `<li class="empty">${h ? '這 7 天沒有排到回訪／၇ ရက်အတွင်း သွားရန် မရှိ' : '連上網路後會顯示／အင်တာနက်ချိတ်ပြီးမှ ပြမည်'}</li>`;
@@ -933,7 +939,7 @@
     // 最後拜訪日：伺服器的＋這支手機自己存的拜訪（還沒同步的也算，剛量完不會還叫你去量）
     const mine = await myVisits(); // 低#6（第8任）：只算目前帳號的
     const localDay = ms => mmDay(0, ms); // 業務BUG#4：拜訪日也用緬甸日期，跟伺服器的最後拜訪日同一把尺
-    const lastOf = cid => latestVisitDay((people.find(f => f.id === cid) || {}).lastVisit, cid, mine); // 0.4.84 改用共用的 latestVisitDay（同一套：後台與這支手機取較新）
+    const lastOf = cid => { const p0 = people.find(f => f.id === cid) || {}; return latestVisitDay(p0.lastVisit, [cid, p0.tempId], mine); }; // 0.4.91 低2：連臨時編號一起比 // 0.4.84 改用共用的 latestVisitDay（同一套：後台與這支手機取較新）
     /** 量測週：開始後第 2、4、8 週（boss.js 有同一組數字，要改兩邊一起改；2026-11-12 優化 4） */
     const measure = t => {
       if (!isDay(t.start)) return null;
@@ -957,7 +963,7 @@
   async function phoneToday(h) {
     const off = await Store.getMeta('clockOffset');
     if (typeof off === 'number') state.clockOff = off; // 業務BUG#4：給同步用的 mmDay 用
-    if (typeof off !== 'number' && h && h.today) return h.today;
+    // 0.4.91 低3：沒有時間校正值時，原本用後台上次給的 h.today（可能是好幾天前的舊日期），其他地方（mmDay）卻用手機時間 → 改成一律手機時間（緬甸），兩邊一致
     return new Date(Date.now() + (Number(off) || 0) + 6.5 * 3600000).toISOString().slice(0, 10);
   }
   /**
@@ -1968,6 +1974,7 @@
   async function addPhotos(files, source, btn) {
     const list = [...(files || [])];
     if (!list.length) return;
+    if (state.mediaLocked) { toast('正在存檔（等定位），照片等一下再加／သိမ်းနေသည်'); return; } // 0.4.91 中3
     const gen = state.formGen;
     const room = MAX_PHOTOS - state.photos.length - state.busyPhotos; // 0.4.87 中4：還在處理的也要扣（兩批同時處理會超過 6 張，後台只收前 6 張）
     if (room <= 0) { toast(`一次拜訪最多 ${MAX_PHOTOS} 張照片／ဓာတ်ပုံ အများဆုံး ${MAX_PHOTOS} ပုံ`); return; }
@@ -2050,7 +2057,7 @@
     const btn = $('recBtn');
     if (state.rec) { state.rec.stop(); return; }
     // 0.4.87 中5（第11任 0.4.86 清單）：麥克風權限還沒回來時連按兩下會開兩個錄音器，第一個停不掉 → 一進來就設「啟動中」；處理錄音中也不能再開新的
-    if (state.recStarting || state.recBusy) return;
+    if (state.recStarting || state.recBusy || state.mediaLocked) return; // 0.4.91 中3：存檔等定位中也不開新錄音
     if (!navigator.mediaDevices || !window.MediaRecorder) { toast('這支手機的瀏覽器不支援錄音／ဤဖုန်း အသံသွင်း မရ'); return; }
     state.recStarting = true;
     let stream, rec;
@@ -2183,6 +2190,12 @@
    * 業務BUG#4（2號小助手推論，第7任讀程式確認）：存檔要等定位最多 15 秒，這段時間打字會觸發 refreshSave 把按鈕又打開，
    * 再按一次就跑第二個 save，兩筆不同編號都存下來。→ 外面包一層「存檔中」鎖：同時只跑一個，結束（不管成功、取消、失敗）一定解鎖
    */
+  /** 0.4.91 中3：存檔等定位時，錄音、拍照、相簿三顆鈕停用（等完恢復） */
+  function mediaLock(on) {
+    // 拍照、相簿是 <label>（裡面包檔案選擇框），label 設 disabled 沒作用 → 連裡面的選擇框一起停用，外觀加 locked（變淡、按不到）
+    ['recBtn', 'photoBtn', 'albumBtn', 'photoInput', 'albumInput'].forEach(id => { const b = $n(id); b.disabled = !!on; if (b.classList) b.classList.toggle('locked', !!on); });
+    state.mediaLocked = !!on;
+  }
   async function save() {
     if (state.saving) return;
     state.saving = true;
@@ -2194,7 +2207,13 @@
     if (!cfg || !cfg.deviceKey) { showLogin('請先登入／အရင် ဝင်ပါ'); return; }
     // 等定位最多 15 秒：這段時間回首頁（表單被清掉）或改選客戶，這次就不存，不然會存成空白客戶或掛到別人名下（第二輪自行審查 T2）
     const gen0 = state.formGen, sel0 = $('farmer').value;
-    if (!state.gps) { toast('再抓一次位置… တည်နေရာ ပြန်ရှာနေ'); await Promise.race([locate(), new Promise(r => setTimeout(r, 15000))]); }
+    if (!state.gps) {
+      toast('再抓一次位置… တည်နေရာ ပြန်ရှာနေ');
+      // 0.4.91 中3：等定位（最多 15 秒）的期間不能再錄音、拍照、選相簿（不然存的是半成品，錄音、處理中的照片會被丟掉）
+      mediaLock(true);
+      try { await Promise.race([locate(), new Promise(r => setTimeout(r, 15000))]); } finally { mediaLock(false); }
+    }
+    if (state.rec || state.recBusy || state.busyPhotos) { toast('錄音或照片還在處理，這次沒有存；處理完再按一次儲存／အသံ၊ ဓာတ်ပုံ ပြင်ဆင်ပြီးမှ ထပ်နှိပ်ပါ'); refreshSave(); return; } // 0.4.91 中3
     if (gen0 !== state.formGen || $('farmer').value !== sel0) { toast('等定位時換了畫面或客戶，這次沒有存，請再按一次儲存／မသိမ်းရသေး၊ ထပ်နှိပ်ပါ'); refreshSave(); return; }
     if (!sel0) { toast('請先選客戶／ဖောက်သည် ရွေးပါ'); refreshSave(); return; }
     // 0.4.33 董事長：怕業務結案按錯 → 送出前再確認一次（寫出農民、價格、產量、收購客戶）
@@ -2307,6 +2326,7 @@ ${state.cat}：${who}
 
   function resetForm() {
     state.formGen++;
+    state.farmerVal = ''; // 0.4.91 低1：上一次選的客戶也清掉（不然下次先填結案欄位再選農民，會被誤問「換農民」、取消還跳回上一位）
     // 0.4.54 第6任檢查：上一位客戶的進度卡、作物四格會殘留到下一次打卡畫面 → 進畫面就清掉
     const pbx = $('progressBox'); if (pbx) { pbx.hidden = true; pbx.innerHTML = ''; }
     { const hb = $n('closeVisitHist'); hb.hidden = true; hb.innerHTML = ''; hb._tok = null; } // 0.4.73 結案過往紀錄也清掉
@@ -2357,6 +2377,7 @@ ${state.cat}：${who}
     if (!now.deviceKey || now.deviceKey !== sentKey) return 'stale';
     if (state.view === 'visit' && formDirty()) {
       state.loginLost = { key: sentKey, msg };
+      await Store.setMeta('loginLost', { key: sentKey, msg }); // 0.4.91 中4：記在手機裡，背景程式、重新整理後的同步也知道不要再用這把金鑰重傳
       toast('登入已失效：這一筆可以先存在手機裡，回首頁後再重新登入／ဝင်ရောက်မှု သက်တမ်းကုန်၊ ပြန်ဝင်ပါ');
       return 'later';
     }
@@ -2364,11 +2385,11 @@ ${state.cat}：${who}
     showLogin(msg);
     return 'now';
   }
-  /** 0.4.87 中6：離開打卡畫面時，補做先前延後的「登入失效」（金鑰還是同一把才做） */
+  /** 0.4.87 中6：離開打卡畫面時，補做先前延後的「登入失效」（金鑰還是同一把才做）；0.4.91 也讀手機裡記的（重新整理過也接得上） */
   async function loginLostCheck() {
-    const L = state.loginLost;
+    const L = state.loginLost || (await Store.getMeta('loginLost'));
     if (!L) return false;
-    state.loginLost = null;
+    state.loginLost = null; await Store.setMeta('loginLost', null);
     const now = (await Store.getMeta('config')) || {};
     if (!now.deviceKey || now.deviceKey !== L.key) return false;
     await Store.setMeta('config', { gasUrl: now.gasUrl });
@@ -2378,6 +2399,12 @@ ${state.cat}：${who}
   async function syncNow() {
     const cfg = await getConfig();
     if (!cfg || !cfg.deviceKey) return;
+    // 0.4.91 中4：延後登出期間（打卡中登入失效、保留表單）不上傳、不再跳提示，只更新待上傳筆數；不在打卡畫面了（例如重新整理過）就補做登出
+    const lost = state.loginLost || (await Store.getMeta('loginLost'));
+    if (lost && lost.key === cfg.deviceKey) {
+      if (state.view === 'visit') { await renderQueue(); return; }
+      if (await loginLostCheck()) return;
+    }
     if (syncing || !navigator.onLine) { await renderQueue(); return; }
     syncing = true;
     try {
@@ -2391,7 +2418,7 @@ ${state.cat}：${who}
         // 沒有要上傳的，順便抓最新的客戶、選單和首頁數字
         const sentAt = Date.now();
         const data = await post(cfg.gasUrl, { action: 'sync', deviceKey: cfg.deviceKey }).catch(() => null);
-        if (data && data.ok) await rememberServer(data, sentAt);
+        if (data && data.ok) await rememberServer(data, sentAt, cfg.deviceKey); // 0.4.91 高1：帶送出時的金鑰，換了帳號就整份丟掉
         else if (data && data.code === 'BAD_LOGIN') { await onLoginExpired(cfg.deviceKey, data.message); return; } // 0.4.87 高1、中6
       }
       $('syncState').textContent = r && r.error ? r.error : '';
@@ -2432,8 +2459,11 @@ ${state.cat}：${who}
       const tag = v.status === 'uploaded' ? '<span class="pill ok">已上傳 တင်ပြီး</span>'
         : v.status === 'rejected' ? '<span class="pill late">被拒 ပယ်ခံရ</span>' : '<span class="pill wait">等上傳 စောင့်နေ</span>';
       const n = Array.isArray(v.photos) && v.photos.length ? v.photos.length : (v.photoCount || (v.photo ? 1 : 0));
-      const what = [n ? `照片 ${n}` : '', v.audioSec ? `錄音 ${v.audioSec} 秒` : '', v.text ? '打字' : '', v.prices && v.prices.length ? `價格 ${v.prices.length}` : ''].filter(Boolean).join('・');
-      return `<li><span>${esc(v.farmerLabel)}<br><small>${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}${what ? '・' + esc(what) : ''}</small></span>${tag}</li>`;
+      // 0.4.91 低4：照片張數用上傳後記的（扣掉讀不到的）；錄音沒傳成就不寫秒數
+      const what = [n ? `照片 ${n}` : '', v.audioSec && !v.audioLost ? `錄音 ${v.audioSec} 秒` : '', v.text ? '打字' : '', v.prices && v.prices.length ? `價格 ${v.prices.length}` : ''].filter(Boolean).join('・');
+      // 0.4.91 低4：後台說客戶已經不存在（被刪）→ 這筆的結案、試作沒收，標出來
+      const miss = v.missingCustomer ? '<br><small class="err">客戶已不存在，結案／試作沒收，請洽主管／ဖောက်သည် မရှိတော့၊ မန်နေဂျာကို မေးပါ</small>' : '';
+      return `<li><span>${esc(v.farmerLabel)}<br><small>${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}${what ? '・' + esc(what) : ''}</small>${miss}</span>${tag}</li>`;
     }).join('') || '<li class="empty">還沒有紀錄／မှတ်တမ်း မရှိသေး</li>';
   }
 
@@ -2442,7 +2472,26 @@ ${state.cat}：${who}
   function toast(t) { const el = $('toast'); el.textContent = t; el.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 3000); }
 
   /* ───── 啟動 ───── */
+  /* 0.4.91 中1（第11任第三輪清單）：網頁（index.html）和程式（app.js）新舊混用時（背景程式逾時各自拿快取），試作品項只剩空白、開不了試作。
+     兩邊各放一個版本標記（index.html <meta name="app-build">、這裡的 APP_BUILD），開機比對：不一樣就重新整理一次。
+     防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
+  const APP_BUILD = '0491-1'; // 要跟 index.html 的 app-build 一模一樣
+  function buildCheck() {
+    try {
+      const m = document.querySelector && document.querySelector('meta[name="app-build"]');
+      const page = m ? String(m.getAttribute('content') || '') : '';
+      if (page === APP_BUILD) return false;
+      const key = 'farm-build-reload', pair = page + '|' + APP_BUILD;
+      let done = '';
+      try { done = sessionStorage.getItem(key) || ''; } catch (e) { return false; }
+      if (done === pair) return false; // 這一對已經重整過一次了：不再重整，照常開
+      try { sessionStorage.setItem(key, pair); } catch (e) { return false; }
+      location.reload();
+      return true;
+    } catch (e) { return false; }
+  }
   async function init() {
+    if (buildCheck()) return; // 0.4.91 中1：新舊混用 → 重新整理一次
     $('appVer').textContent = 'v' + FARM_CONFIG.appVersion;
     renderMirrors();
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);

@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
+<!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
+<meta name="app-build" content="0491-1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -42,6 +44,7 @@ textarea{min-height:96px;resize:vertical}
 .big.done{border-style:solid;border-color:var(--paddy);background:var(--paddy-soft)}
 .big.rec{border-style:solid;border-color:var(--chili);background:var(--chili-soft)}
 .big.busy{opacity:.6}
+.big.locked,.big:disabled{opacity:.4;pointer-events:none} /* 0.4.91 中3：存檔等定位時錄音、拍照、相簿暫停（拍照、相簿是 label，disabled 沒作用，要靠這個） */
 .big input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
 .cats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .cat{border:0;border-radius:16px;padding:18px 10px;min-height:96px;font-weight:900;font-size:1.15rem;cursor:pointer;background:var(--paddy);color:var(--surface);text-align:center}
@@ -75,6 +78,9 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
 .htabs .tbadge{position:absolute;top:-9px;right:-2px;z-index:1;min-width:18px;height:18px;border-radius:9px;background:var(--chili,#b23a2a);color:#fff;font-size:.72rem;line-height:18px;padding:0 4px}
 @media (max-width:400px){.htabs{gap:1px}.htabs button{font-size:.95rem;padding:6px 0;border-width:1px}.htabs button .my{font-size:.62rem;white-space:nowrap}}
 @media (max-width:400px){#htab-mine .my{white-space:normal;line-height:1.3}} /* 0.4.81 改名「月分工作進度」：緬文比格子寬，375 寬會壓到旁邊的「種植資料」→ 只有這格的緬文在空格處換行 */
+/* 0.4.91 分頁列變矮（董事長截圖、第11任派）：電腦照舊一行；手機（≤480px）中文兩字一行固定兩行（結案一行、上下置中對齊其他格），緬文放下面、字再小、行距收緊；選中樣式不變 */
+.htabs .zh span{display:inline}
+@media (max-width:480px){.htabs{grid-template-columns:1fr 1fr 1.75fr .9fr 1fr}.htabs button{min-height:0;padding:4px 0 5px;font-size:.92rem;line-height:1.12}.htabs .zh{display:flex;flex-direction:column;justify-content:center;min-height:2.24em}.htabs .zh span{display:block}.htabs button .my{font-size:.56rem;line-height:1.1;margin-top:1px;white-space:nowrap}}
 li.assigned{display:block}
 li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px}
 .progress{border:1.5px solid var(--paddy);border-radius:12px;padding:10px 14px;margin:12px 0 6px;background:var(--surface)} /* 0.4.44 小卡：拿掉最小高度 */
@@ -284,15 +290,17 @@ footer{margin-top:18px;text-align:center}
   </div>
   <!-- 0.4.26 董事長 2026-11-12：首頁改成上方分頁標籤，一頁不要放太多東西（田間打卡／執行任務清單／指派任務／我的進度） -->
   <nav class="htabs" role="tablist" aria-label="首頁分頁">
-    <button type="button" role="tab" id="htab-punch" data-htab="punch" aria-selected="true">田間打卡<span class="my">မှတ်တမ်း</span></button>
-    <button type="button" role="tab" id="htab-todo" data-htab="todo" aria-selected="false">執行任務清單<span class="my">လုပ်ရန်</span><b class="tbadge" id="todoBadge" hidden></b></button>
+    <button type="button" role="tab" id="htab-punch" data-htab="punch" aria-selected="true"><span class="zh"><span>田間</span><span>打卡</span></span><span class="my">မှတ်တမ်း</span></button>
+    <button type="button" role="tab" id="htab-todo" data-htab="todo" aria-selected="false"><span class="zh"><span>執行</span><span>任務</span></span><span class="my">လုပ်ရန်</span><b class="tbadge" id="todoBadge" hidden></b></button>
     <!-- 0.4.59 董事長截圖：執行任務清單＋指派任務合併；我的進度往前一格；第四格改「種植資料」 -->
     <!-- 0.4.81 董事長：「我的進度」改名「月分工作進度」（緬文待校對；id、data-htab 不變） -->
-    <button type="button" role="tab" id="htab-mine" data-htab="mine" aria-selected="false">月分工作進度<span class="my">လစဉ် လုပ်ငန်း တိုးတက်မှု</span></button>
+    <!-- 0.4.91 董事長截圖「分頁列太佔空間」（第11任派）：「執行任務清單」→「執行任務」、「月分工作進度」→「工作進度」（緬文沿用，待校對；id、data-htab 不變）；
+         中文分兩段 .zh span：手機（≤480px）兩字一行、兩行，電腦照舊一行 -->
+    <button type="button" role="tab" id="htab-mine" data-htab="mine" aria-selected="false"><span class="zh"><span>工作</span><span>進度</span></span><span class="my">လစဉ် လုပ်ငန်း တိုးတက်မှု</span></button>
     <!-- 0.4.60 董事長截圖：三顆結案按鈕搬到自己的「結案」分頁（我的進度和種植資料中間） -->
     <!-- 0.4.77 董事長截圖：種植資料移到結案前面；0.4.82 董事長：再換回來（結案在前、種植資料最後，等於 0.4.78 之前的順序） -->
-    <button type="button" role="tab" id="htab-close" data-htab="close" aria-selected="false">結案<span class="my">ပိတ်သိမ်း</span></button>
-    <button type="button" role="tab" id="htab-plant" data-htab="plant" aria-selected="false">種植資料<span class="my">စိုက်ပျိုးမှု</span></button>
+    <button type="button" role="tab" id="htab-close" data-htab="close" aria-selected="false"><span class="zh"><span>結案</span></span><span class="my">ပိတ်သိမ်း</span></button>
+    <button type="button" role="tab" id="htab-plant" data-htab="plant" aria-selected="false"><span class="zh"><span>種植</span><span>資料</span></span><span class="my">စိုက်ပျိုးမှု</span></button>
   </nav>
 
   <!-- 分頁 1 田間打卡：照手稿左卡「農民」、右卡「盤商或種子商」，點了直接進打卡畫面（2026-11-12 規劃 D＋優化 1），下面是上傳狀態 -->

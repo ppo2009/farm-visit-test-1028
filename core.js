@@ -165,10 +165,13 @@
    * 已經登出、換了別的帳號（金鑰不同）→ 整份回應丟掉，不寫客戶、首頁、任務、已結案（上一位晚到的回應不能蓋掉新帳號的資料）；回 false
    */
   async function rememberServer(data, sentAt, sentKey) {
-    if (sentKey !== undefined) {
-      const now0 = await Store.getMeta('config');
-      if (!now0 || !now0.deviceKey || now0.deviceKey !== sentKey) return false;
+    // 0.4.91 高1（第11任第三輪清單）：sentKey 改必填——原本省略＝不檢查，syncNow 抓資料那條沒帶，上一位晚到的回應照樣蓋掉新帳號；省略就拒寫並記 console
+    if (sentKey === undefined || sentKey === null || sentKey === '') {
+      try { if (g.console) g.console.warn('rememberServer 沒帶送出時的裝置金鑰，這份回應不寫入（0.4.91 高1）'); } catch (e) { /* 記不了也不影響 */ }
+      return false;
     }
+    const now0 = await Store.getMeta('config');
+    if (!now0 || !now0.deviceKey || now0.deviceKey !== sentKey) return false;
     if (data && data.serverTime && Date.now() - sentAt <= 5000) {
       // 伺服器時間 − 手機時間（扣掉一半來回時間），之後離線打卡都用它校正。
       // 只用來回 5 秒內的回應：上傳大檔花很久時，「一半來回時間」的誤差會到好幾分鐘（第六輪自抓）
@@ -295,6 +298,7 @@
 
   const NEXT_TRY_MAX_MS = 30 * 60000; // 0.4.87 中2：失敗重試最多排 30 分鐘後（下面 Math.min(30, …) 分鐘），超過就是時間被調過
   const READ_FAIL_MAX = 3; // 0.4.87 中1：同一筆讀檔連續失敗幾次後，先把讀得到的送出去
+  const LOGIN_LOST_MSG = '登入已失效，回首頁重新登入後會自動補傳／ပြန်ဝင်ပြီးလျှင် တင်မည်'; // 0.4.91 中4
   const READ_FAIL_MSG = '有拜訪的照片或錄音暫時讀不到（是手機裡的檔案，不是網路問題），稍後自動再試；連續 3 次讀不到會先送文字和其他資料／ဓာတ်ပုံ/အသံ ဖတ်မရသေးပါ၊ အင်တာနက် ပြဿနာ မဟုတ်ပါ';
   let running = false;
   /**
@@ -328,6 +332,9 @@
     try {
       const cfg = await Store.getMeta('config');
       if (!cfg || !cfg.gasUrl || !cfg.deviceKey) return report;
+      // 0.4.91 中4：打卡中登入失效、先保留表單的期間（loginLost 記的就是這把金鑰），不再用失效的金鑰整包重傳拜訪、打勾（網頁和背景程式都看這個）
+      const lost = await Store.getMeta('loginLost');
+      if (lost && lost.key === cfg.deviceKey) { report.error = LOGIN_LOST_MSG; report.code = 'LOGIN_LOST'; return report; }
       const tk = await sendTaskTicks(cfg);
       report.tickLeft = tk.left; // 還沒送出的任務打勾（R6-04：背景同步看這個決定要不要再試）
       if (tk.error) report.error = tk.error;
@@ -400,7 +407,11 @@
         if (data && data.ok) {
           await Store.updateVisit(v.id, cur => {
             const x = Object.assign({}, cur || v, { status: 'uploaded', uploadedAt: Date.now(), photo: null, audio: null }); // 傳完就把大檔清掉，只留紀錄
-            if (Array.isArray(x.photos)) { x.photoCount = x.photos.length; x.photos = []; }
+            // 0.4.91 低4：清單上的照片張數扣掉讀不到、沒傳的；錄音沒傳就記下來（清單不再寫錄音秒數）
+            if (Array.isArray(x.photos)) { x.photoCount = Math.max(0, x.photos.length - (media.lost || 0)); x.photos = []; }
+            if (media.audioLost) x.audioLost = true;
+            // 0.4.91 低4：後台回 missingCustomer（客戶被刪，結案、試作沒收）→ 記下來，清單那一筆標出來
+            if (data.missingCustomer) x.missingCustomer = true;
             delete x.nextTry;
             return x;
           });
