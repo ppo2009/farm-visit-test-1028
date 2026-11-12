@@ -336,8 +336,11 @@
   const catPill = v => v.closing && v.closeRejected ? '<span class="pill">結案（已退回）</span> ' : `<span class="pill p-grn">${esc(v.closing ? '結案' : (v.cat || '試作'))}</span> `;
   /** 沒有摘要時要說清楚原因：處理中、處理失敗、沒送翻譯（原本處理失敗也寫「沒有需要翻譯的內容」；2026-11-11 抓到） */
   function noSummaryText(v) {
-    if (v.status === '待處理') return '翻譯處理中，約 10 分鐘內完成';
-    if (v.status === '處理異常' || v.status === '翻譯異常') return '⚠ 處理失敗' + (v.error ? '：' + v.error.slice(0, 80) : '') + '（請到試算表看錯誤，修好後把狀態改回「待處理」會重新處理）';
+    // 後台BUG(2號)中5：待處理但有錯誤訊息＝翻譯延遲（額度不足、Gemini 暫時無法使用、上次失敗等重試），不要再寫「約 10 分鐘內完成」
+    // 額度不足／連不上（後台寫的「翻譯額度不足…」「翻譯服務暫時連不上…」，或舊資料的 429／402／503）→「翻譯額度不足，稍後自動補」（第8任定的字樣）
+    if (v.status === '待處理' && v.error && /額度不足|暫時連不上|\b(429|402|503)\b/.test(v.error)) return '⏳ 翻譯額度不足，稍後自動補';
+    if (v.status === '待處理') return v.error ? '⏳ 翻譯延遲（上次失敗，稍後重試）：' + v.error.slice(0, 100) : '翻譯處理中，約 10 分鐘內完成';
+    if (v.status === '處理異常' || v.status === '翻譯異常') return '⚠ 處理失敗' + (v.error ? '：' + v.error.slice(0, 80) : '') + '（原因排除後，到試算表選單「農業CRM → 重新處理「處理異常」的拜訪」，或把狀態改回「待處理」、重試次數改 0）';
     const hasStuff = v.audio || (v.photos && v.photos.length) || v.text;
     return hasStuff ? '（沒有翻譯：翻譯功能關閉中，或這筆沒有送翻譯）' : '（沒有需要翻譯的內容）';
   }

@@ -66,12 +66,12 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
 @media (max-width:400px){.catswitch{gap:4px}.catswitch button{font-size:1rem;padding:6px 2px}.farmermenu{gap:6px;padding:8px}.farmermenu button{font-size:.95rem;padding:6px 2px}}
 /* 首頁分頁標籤（0.4.26，董事長給的範例：一排文字分頁，選到的那個加框） */
 /* 寬度照中文字數分（4、6、4、4 字）：緬文小字比較長，用內容寬度分會把中文擠成兩行（0.4.29 字體 16px 後實測） */
-.htabs{display:grid;grid-template-columns:4fr 6fr 4fr 2.2fr 4fr;gap:1px;border-bottom:1px solid var(--line);margin:4px 0 14px;overflow:visible}
+.htabs{display:grid;grid-template-columns:4fr 5.8fr 4fr 2.4fr 4fr;gap:1px; /* 1號清單低#8（第8任）：「結案」緬文在 375 寬斷 2 行（量到格子 35px、要 41px）→ 從「執行任務清單」挪一點寬度，窄螢幕緬文再小一點 */border-bottom:1px solid var(--line);margin:4px 0 14px;overflow:visible}
 .htabs button{flex:1 1 auto;min-width:0;min-height:52px;border:1.5px solid transparent;border-bottom:0;border-radius:10px 10px 0 0;background:none;color:var(--muted);font-weight:700;font-size:1rem;cursor:pointer;padding:6px 2px;word-break:keep-all;overflow-wrap:anywhere;line-height:1.25;position:relative;margin-bottom:-1px}
 .htabs button .my{display:block;font-weight:400;font-size:.7rem}
 .htabs button[aria-selected="true"]{border-color:var(--paddy);color:var(--paddy);background:var(--surface)}
 .htabs .tbadge{position:absolute;top:-9px;right:-2px;z-index:1;min-width:18px;height:18px;border-radius:9px;background:var(--chili,#b23a2a);color:#fff;font-size:.72rem;line-height:18px;padding:0 4px}
-@media (max-width:400px){.htabs{gap:1px}.htabs button{font-size:.95rem;padding:6px 0;border-width:1px}}
+@media (max-width:400px){.htabs{gap:1px}.htabs button{font-size:.95rem;padding:6px 0;border-width:1px}.htabs button .my{font-size:.62rem;white-space:nowrap}}
 li.assigned{display:block}
 li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px}
 .progress{border:1.5px solid var(--paddy);border-radius:12px;padding:10px 14px;margin:12px 0 6px;background:var(--surface)} /* 0.4.44 小卡：拿掉最小高度 */
@@ -86,7 +86,8 @@ li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px
 .progress h3 .who{display:inline-flex;flex-wrap:wrap;gap:4px 14px;margin-left:14px;font-weight:400;color:var(--ink,#222);font-size:.95rem} /* 0.4.49 姓名、電話、地址 */
 .progress h3 .who a{color:var(--paddy)}
 .progress ul{margin:6px 0 0;padding-left:1.1em}
-.progress li{margin:4px 0}
+.progress li{margin:4px 0;display:list-item;padding:0;border-bottom:0} /* 1號清單低#9、#10（第8任實測）：全站 li 是 flex＋兩端對齊（上傳清單用），進度卡、種植卡片被套到 →「試作進行中」擠成 40px 三行直排、「未填」被推到最右；卡片裡的清單改回一般清單 */
+.progress .nw{white-space:nowrap} /* 低#9：日期（2026-11-17）不在「-」斷行 */
 #cropBox{margin:8px 0}
 #cropBox.croprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end}
 #cropBox.croprow[hidden]{display:none}
@@ -161,6 +162,38 @@ li.plan>span:first-child{flex:1;min-width:0}
 .bar i{display:block;height:100%;background:var(--paddy)}
 .stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 .stat b{display:block;font-size:1.5rem;font-variant-numeric:tabular-nums}
+/* 0.4.69「我的進度」介面優化（1號）：電腦寬度最多 760 置中；一排重點數字；農民清單點了就地展開進度；試作報告摺起來 */
+.mine{max-width:760px;margin:0 auto}
+.mstats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:4px 0 6px}
+.mstat{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 4px;min-height:64px;cursor:pointer;text-align:center;color:inherit;font:inherit}
+.mstat b{display:block;font-size:1.4rem;line-height:1.2;font-variant-numeric:tabular-nums;color:var(--paddy)}
+.mstat>span{display:block;font-size:.85rem;line-height:1.25;word-break:keep-all;overflow-wrap:anywhere}
+.mstat .my{display:block;font-size:.72rem;color:var(--muted)}
+.msec{margin-top:6px}
+.msec h2{margin-top:14px}
+.msub{font-size:.95rem;margin:12px 0 6px}
+.flist li{display:block;padding:0}
+.flist .fhead{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;cursor:pointer}
+.flist .fhead small{color:var(--muted)}
+.flist .fhead .chev{color:var(--muted);flex:none;transition:transform .15s}
+.flist li.open .fhead{background:var(--paddy-soft)}
+.flist li.open .chev{transform:rotate(90deg)}
+.flist li .progress{margin:0 10px 10px}
+details.mrep{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:0 12px;margin-top:16px}
+details.mrep>summary{cursor:pointer;font-weight:700;padding:12px 0}
+details.mrep>summary .sub{display:block;font-weight:400}
+details.mrep[open]{padding-bottom:12px}
+details.mrep ul{margin-top:8px}
+/* 0.4.69 首頁右上角「分享我的報告」「觀看其他業務報告」：電腦寬度放右上角；手機放標題下面一排兩顆小按鈕（不左右滑） */
+header.homehdr{position:relative}
+.rptbtns{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%;max-width:420px}
+.rptbtn{border:1px solid var(--paddy);background:var(--surface);color:var(--paddy);border-radius:10px;padding:5px 6px;min-height:40px;font:inherit;font-size:.9rem;font-weight:700;cursor:pointer;line-height:1.2}
+.rptbtn .my{display:block;font-size:.68rem;font-weight:400;line-height:1.7;margin-top:1px} /* 緬文字高，行高拉開才不會壓到中文 */
+@media (min-width:900px){.rptbtns{position:absolute;top:0;right:0;width:auto;max-width:none;display:flex}.rptbtn{padding:5px 12px}}
+.rptscope{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:4px 0 6px}
+.rptscope button{border:1px solid var(--line);background:var(--surface);border-radius:99px;min-height:40px;font:inherit;font-size:.9rem;cursor:pointer;padding:4px}
+.rptscope button[aria-pressed="true"]{background:var(--paddy);color:var(--surface);border-color:var(--paddy)}
+.rptnow{font-weight:700;color:var(--paddy);margin:2px 0}
 .tip{background:var(--turmeric-soft);color:var(--fg);border-radius:12px;padding:10px 12px;font-size:1rem;margin-bottom:12px}
 #syncState{min-height:1.2em;font-size:1rem;color:var(--muted);margin:6px 0 0}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,env(safe-area-inset-bottom));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:1rem;max-width:90%;z-index:9}
@@ -193,7 +226,9 @@ footer{margin-top:18px;text-align:center}
 
 <!-- 首頁 -->
 <section id="home" hidden>
-  <header><h1>田間打卡<span class="my">လယ်ကွင်း မှတ်တမ်း</span></h1><span class="hdr"><button type="button" class="syncbadge" id="syncBadge" hidden></button><span class="sub" id="who"></span></span></header>
+  <header class="homehdr"><h1>田間打卡<span class="my">လယ်ကွင်း မှတ်တမ်း</span></h1><span class="hdr"><button type="button" class="syncbadge" id="syncBadge" hidden></button><span class="sub" id="who"></span></span>
+    <!-- 0.4.69 董事長截圖：首頁右上角兩顆入口（每個分頁都看得到）。報告＝試作報告，看的範圍不變，只是分「我的／其他業務」 -->
+    <span class="rptbtns"><button type="button" class="rptbtn" id="rptMineBtn">分享我的報告<span class="my">ကျွန်ုပ်၏ အစီရင်ခံစာ</span></button><button type="button" class="rptbtn" id="rptOthersBtn">觀看其他業務報告<span class="my">အခြားသူများ၏ အစီရင်ခံစာ</span></button></span></header>
   <!-- 0.4.26 董事長 2026-11-12：首頁改成上方分頁標籤，一頁不要放太多東西（田間打卡／執行任務清單／指派任務／我的進度） -->
   <nav class="htabs" role="tablist" aria-label="首頁分頁">
     <button type="button" role="tab" id="htab-punch" data-htab="punch" aria-selected="true">田間打卡<span class="my">မှတ်တမ်း</span></button>
@@ -249,35 +284,58 @@ footer{margin-top:18px;text-align:center}
 
   <!-- 分頁 4 我的進度：我的試作、月計劃、工作進度 -->
   <div class="hpanel" id="hp-mine" role="tabpanel" aria-labelledby="htab-mine" hidden>
-  <!-- 0.4.57 董事長：裡面要有找到哪幾個農民、農民的進度是什麼；點一位＝下面選單選他、列出完整進度（0.4.60 結案按鈕搬去「結案」分頁） -->
-  <h2>我找到的農民<span class="my">ကျွန်ုပ်ရှာတွေ့သော လယ်သမား</span><span class="sub">點一位或用選單選，下面列出進度／နှိပ်ပြီး တိုးတက်မှု ကြည့်ပါ</span></h2>
-  <p class="sub" id="closeFarmerCount">我找到的農民／ကျွန်ုပ်ရှာတွေ့သော လယ်သမား</p>
-  <ul id="closeFarmerList"></ul>
-  <div><label class="lab" for="closeFarmer">選擇農民（看進度）<span class="my">လယ်သမား ရွေးပါ (တိုးတက်မှု ကြည့်ရန်)</span></label>
-    <select id="closeFarmer"><option value="">— 請選擇 ရွေးပါ —</option></select></div>
-  <div class="progress" id="closeProgress" hidden aria-live="polite"></div>
-
-  <h2>我的試作<span class="my">ကျွန်ုပ်၏ စမ်းသပ်ကွက်များ</span><span class="sub">進行中的試作、推廣，點一下去拜訪／လုပ်ဆောင်ဆဲ စမ်းသပ်ကွက်၊ နှိပ်ပြီး သွားရောက်ပါ</span></h2>
-  <ul id="trialList"></ul>
-
-  <!-- 0.4.61 董事長：農民試作成功、失敗都要產生一份報表檔，所有人都看得到 → 全部已結束試作、推廣的報告，按一下下載 Word（要有網路） -->
-  <h2>試作報告（成功／失敗）<span class="my">စမ်းသပ်မှု အစီရင်ခံစာ (အောင်မြင်／မအောင်မြင်)</span><span class="sub">所有已結束的試作、推廣，大家都看得到；要有網路／ပြီးဆုံးသော စမ်းသပ်မှုအားလုံး၊ အင်တာနက် လိုသည်</span></h2>
-  <button type="button" class="btn2" id="reportLoadBtn">看試作報告／အစီရင်ခံစာ ကြည့်ရန်</button>
-  <p class="sub" id="reportHint" aria-live="polite"></p>
-  <ul id="reportList"></ul>
-
-  <h2>月計劃<span class="my">လစဉ် ပစ်မှတ်</span><span class="sub">主管訂的目標，系統自動算／မန်နေဂျာ သတ်မှတ်သော ပစ်မှတ်၊ စနစ်က အလိုအလျောက် တွက်သည်</span></h2>
-  <ul id="planList"></ul>
-
-  <h2>工作進度<span class="my">လုပ်ငန်း တိုးတက်မှု</span><span class="sub" id="homeSynced"></span></h2>
-  <div class="months" id="monthChips"></div>
-  <div class="stats">
-    <div class="stat"><b id="statVisits">—</b><span class="sub">拜訪次數／သွားရောက်သည့် အကြိမ်</span></div>
-    <div class="stat"><b id="statNew">—</b><span class="sub">新增客戶／ဖောက်သည်အသစ်</span></div>
-    <div class="stat"><b id="statCust">—</b><span class="sub">拜訪過的客戶／သွားခဲ့သော ဖောက်သည်</span></div>
-    <div class="stat"><b id="statTrials">—</b><span class="sub">試作 開始／完成<br>စမ်းသပ် စတင်／ပြီးဆုံး</span></div>
+  <!-- 0.4.69 董事長「我的進度裡面很亂，介面優化一下」（1號）：最上面一排重點數字；我負責的農民只留清單、點一位就在那張卡下面展開進度；
+       月計劃＋工作進度合成「本月成績」；試作報告摺到最下面；電腦寬度最多 760 置中。資料、後台都沒改 -->
+  <div class="mine">
+  <div class="mstats" id="mineStats">
+    <button type="button" class="mstat" data-jump="mineFarmers"><b id="msFarmers">—</b><span>我的農民<span class="my">လယ်သမား</span></span></button>
+    <button type="button" class="mstat" data-jump="mineTrials"><b id="msTrials">—</b><span>進行中試作<span class="my">စမ်းသပ်ဆဲ</span></span></button>
+    <button type="button" class="mstat" data-jump="mineMonth"><b id="msVisits">—</b><span>本月拜訪<span class="my">ဤလ သွားရောက်မှု</span></span></button>
+    <button type="button" class="mstat" data-jump="mineReports"><b>📄</b><span>試作報告<span class="my">အစီရင်ခံစာ</span></span></button>
   </div>
-  <p class="sub" id="statByCat"></p>
+
+  <section class="msec" id="mineFarmers">
+    <h2>我負責的農民<span class="my">ကျွန်ုပ် တာဝန်ယူသော လယ်သမား</span><span class="sub" id="closeFarmerCount">點一位看他的進度／နှိပ်ပြီး တိုးတက်မှု ကြည့်ပါ</span></h2>
+    <ul class="flist" id="closeFarmerList"></ul>
+    <!-- 舊程式還會讀這個選單（看進度選了誰）：留著但藏起來，不再顯示重複的下拉 -->
+    <select id="closeFarmer" hidden aria-hidden="true" tabindex="-1"><option value="">—</option></select>
+    <div class="progress" id="closeProgress" hidden aria-live="polite"></div>
+  </section>
+
+  <section class="msec" id="mineTrials">
+    <h2>我的試作<span class="my">ကျွန်ုပ်၏ စမ်းသပ်ကွက်များ</span><span class="sub">進行中的試作、推廣，點一下去拜訪／နှိပ်ပြီး သွားရောက်ပါ</span></h2>
+    <ul id="trialList"></ul>
+  </section>
+
+  <section class="msec" id="mineMonth">
+    <h2>本月成績<span class="my">ဤလ ရလဒ်</span><span class="sub" id="homeSynced"></span></h2>
+    <div class="months" id="monthChips"></div>
+    <div class="stats">
+      <div class="stat"><b id="statVisits">—</b><span class="sub">拜訪次數／သွားရောက်သည့် အကြိမ်</span></div>
+      <div class="stat"><b id="statNew">—</b><span class="sub">新增客戶／ဖောက်သည်အသစ်</span></div>
+      <div class="stat"><b id="statCust">—</b><span class="sub">拜訪過的客戶／သွားခဲ့သော ဖောက်သည်</span></div>
+      <div class="stat"><b id="statTrials">—</b><span class="sub">試作 開始／完成<br>စမ်းသပ် စတင်／ပြီးဆုံး</span></div>
+    </div>
+    <p class="sub" id="statByCat"></p>
+    <h3 class="msub">主管訂的目標<span class="my">လစဉ် ပစ်မှတ်</span></h3>
+    <ul id="planList"></ul>
+  </section>
+
+  <!-- 0.4.61 董事長：試作成功、失敗都要有報表，所有人都看得到；0.4.69 平常摺起來，點開才看（要有網路） -->
+  <details class="msec mrep" id="mineReports">
+    <summary>試作報告（成功／失敗）<span class="my">စမ်းသပ်မှု အစီရင်ခံစာ</span><span class="sub">所有已結束的試作、推廣，大家都看得到；要有網路</span></summary>
+    <!-- 0.4.69 看哪一種：全部／我的報告（負責業務＝我）／其他業務的；首頁右上角兩顆按鈕直接切到「我的」或「其他業務」 -->
+    <div class="rptscope" id="reportScope" role="group" aria-label="看哪一種報告">
+      <button type="button" data-scope="all" aria-pressed="true">全部<span class="my">အားလုံး</span></button>
+      <button type="button" data-scope="mine" aria-pressed="false">我的報告<span class="my">ကျွန်ုပ်၏</span></button>
+      <button type="button" data-scope="others" aria-pressed="false">其他業務<span class="my">အခြားသူများ</span></button>
+    </div>
+    <p class="rptnow" id="reportNow" aria-live="polite">現在看：全部的試作報告／အားလုံး</p>
+    <button type="button" class="btn2" id="reportLoadBtn">看試作報告／အစီရင်ခံစာ ကြည့်ရန်</button>
+    <p class="sub" id="reportHint" aria-live="polite"></p>
+    <ul id="reportList"></ul>
+  </details>
+  </div>
   </div>
 
   <!-- 分頁 4 結案（0.4.60 董事長截圖：三顆結案按鈕獨立一個分頁）：選一種進結案畫面，送主管審核 -->
@@ -404,7 +462,7 @@ footer{margin-top:18px;text-align:center}
         <select id="dcOutcome"><option value="">— 請選擇 ရွေးပါ —</option><option value="成功">成功（談成合作）／အောင်မြင်</option><option value="失敗">失敗（沒談成）／မအောင်မြင်</option></select></div>
       <div><label class="lab" for="dcNote">說明（必填）<span class="my">မှတ်ချက် (မဖြစ်မနေ)</span></label>
         <textarea id="dcNote" maxlength="500" placeholder="例：談成，下個月開始進 A 品牌種子／沒談成，老闆只賣自己的品牌&#10;ဥပမာ - သဘောတူပြီ / မအောင်မြင်"></textarea></div>
-      <p class="sub">送出後要等主管確認才算結案；主管退回就照常往來。<br><span class="my">မန်နေဂျာ အတည်ပြုမှ ပိတ်သိမ်းမည်။</span></p>
+      <p class="sub" id="dcHint">送出後要等主管確認才算結案；主管退回就照常往來。<br><span class="my">မန်နေဂျာ အတည်ပြုမှ ပိတ်သိမ်းမည်။</span></p><!-- 第8任：字跟著後台「結案要主管確認」設定換（app.js 跟 closeHint 同一處） -->
     </div>
 
     <!-- 0.4.44 第 3 步：按「有見到」之後才出現拍照、打字、試作、價格（還沒選就不顯示，畫面比較單純） -->
