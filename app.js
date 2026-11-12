@@ -409,15 +409,15 @@
     $('saveBtn').innerHTML = cat === '結案' || state.dealerClose ? '結案送主管審核（自動上傳）<span class="my">မန်နေဂျာ စစ်ဆေးရန် ပို့မည်</span>' : '儲存（自動上傳）<span class="my">သိမ်းမည်</span>';
     $('catSwitch').innerHTML = CAT_GROUPS[groupOf(cat)].filter(c => c !== '結案').map(c => `<button type="button" data-setcat="${esc(c)}" aria-pressed="${c === cat}">${esc(SWITCH_LABEL[c] || CAT_LABEL(c))}<span class="my">${esc(CAT_MY[c] || '')}</span></button>`).join('');
     $('catSwitch').querySelectorAll('[data-setcat]').forEach(b => {
-      const locked = !!state.catLocked && b.dataset.setcat !== '農戶'; // 0.4.47 一般拜訪鎖死試作、推廣
-      if (locked) { b.disabled = true; b.classList.add('locked'); b.title = '一般拜訪中，不能切換'; }
+      const locked = !!state.catLocked && b.dataset.setcat !== state.entryCat; // 0.4.51 只能用首頁選的那一種
+      if (locked) { b.disabled = true; b.classList.add('locked'); b.title = '從首頁選的類別，不能切換'; }
       b.addEventListener('click', () => { if (locked) return; state.catManual = true; setCat(b.dataset.setcat); });
     });
   }
   /** 換類別：同一組農民（一般／試作／推廣）客戶清單一樣，只重算試作區；盤商↔種子商客戶清單不同，要重讀 */
   async function setCat(cat) {
     if (!CAT_TYPES[cat] || cat === state.cat) return;
-    if (state.catLocked && (cat === '試作' || cat === '推廣')) return; // 0.4.47 鎖死：任何路徑都不能切到試作、推廣
+    if (state.catLocked && ['農戶', '試作', '推廣'].indexOf(cat) >= 0 && cat !== state.entryCat) return; // 0.4.51 鎖死：任何路徑都不能切到另外兩種（結案、回到原類別照常）
     const sameTypes = CAT_TYPES[cat][0] === CAT_TYPES[state.cat][0];
     const closingSwitch = (cat === '結案') !== (state.cat === '結案'); // 0.4.33：切進／切出結案，農民名單不一樣（結案只列自己的）
     state.cat = cat;
@@ -447,7 +447,7 @@
   async function openVisit(cat, customerId) {
     state.cat = cat; state.entryCat = cat; state.catManual = false; state.dealerClose = false;
     // 0.4.47 董事長「一般拜訪農民的時候，試作農民跟推廣農民要鎖死」：只鎖從首頁選一般拜訪進來的；任務、客戶清單進來的照舊（有進行中的試作會自動切過去）
-    state.catLocked = !!state.lockNext && cat === '農戶'; state.lockNext = false;
+    state.catLocked = !!state.lockNext && ['農戶', '試作', '推廣'].indexOf(cat) >= 0; state.lockNext = false;
     if (state.catLocked) state.catManual = true; // 鎖死就不自動切到試作
     applyCatLabels();
     resetForm();
@@ -1286,7 +1286,7 @@ ${state.cat}：${who}
     document.querySelectorAll('[data-farmercat]').forEach(b => b.addEventListener('click', async () => {
       $('farmerMenu').hidden = true; $('farmerBtn').setAttribute('aria-expanded', 'false');
       const cat = b.dataset.farmercat;
-      if (cat === '農戶') state.lockNext = true; // 0.4.47 董事長：從首頁選「一般拜訪農民」→ 試作、推廣鎖死（openVisit 會讀這個）
+      state.lockNext = true; // 0.4.47 一般拜訪鎖死試作、推廣；0.4.51 董事長：試作、推廣進來也一樣，另外兩種都鎖死（openVisit 會讀這個）
       await openVisit(cat);
       if (cat !== '農戶') state.catManual = true; // 明確選了試作／推廣：選農民後不要自動跳回別的類別
     }));
