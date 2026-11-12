@@ -72,6 +72,7 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
 .htabs button[aria-selected="true"]{border-color:var(--paddy);color:var(--paddy);background:var(--surface)}
 .htabs .tbadge{position:absolute;top:-9px;right:-2px;z-index:1;min-width:18px;height:18px;border-radius:9px;background:var(--chili,#b23a2a);color:#fff;font-size:.72rem;line-height:18px;padding:0 4px}
 @media (max-width:400px){.htabs{gap:1px}.htabs button{font-size:.95rem;padding:6px 0;border-width:1px}.htabs button .my{font-size:.62rem;white-space:nowrap}}
+@media (max-width:400px){#htab-mine .my{white-space:normal;line-height:1.3}} /* 0.4.81 改名「月分工作進度」：緬文比格子寬，375 寬會壓到旁邊的「種植資料」→ 只有這格的緬文在空格處換行 */
 li.assigned{display:block}
 li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px}
 .progress{border:1.5px solid var(--paddy);border-radius:12px;padding:10px 14px;margin:12px 0 6px;background:var(--surface)} /* 0.4.44 小卡：拿掉最小高度 */
@@ -255,7 +256,8 @@ footer{margin-top:18px;text-align:center}
     <button type="button" role="tab" id="htab-punch" data-htab="punch" aria-selected="true">田間打卡<span class="my">မှတ်တမ်း</span></button>
     <button type="button" role="tab" id="htab-todo" data-htab="todo" aria-selected="false">執行任務清單<span class="my">လုပ်ရန်</span><b class="tbadge" id="todoBadge" hidden></b></button>
     <!-- 0.4.59 董事長截圖：執行任務清單＋指派任務合併；我的進度往前一格；第四格改「種植資料」 -->
-    <button type="button" role="tab" id="htab-mine" data-htab="mine" aria-selected="false">我的進度<span class="my">တိုးတက်မှု</span></button>
+    <!-- 0.4.81 董事長：「我的進度」改名「月分工作進度」（緬文待校對；id、data-htab 不變） -->
+    <button type="button" role="tab" id="htab-mine" data-htab="mine" aria-selected="false">月分工作進度<span class="my">လစဉ် လုပ်ငန်း တိုးတက်မှု</span></button>
     <!-- 0.4.60 董事長截圖：三顆結案按鈕搬到自己的「結案」分頁（我的進度和種植資料中間） -->
     <!-- 0.4.77 董事長截圖：種植資料移到結案前面 -->
     <button type="button" role="tab" id="htab-plant" data-htab="plant" aria-selected="false">種植資料<span class="my">စိုက်ပျိုးမှု</span></button>

@@ -528,13 +528,15 @@
   /** 生長過程時間軸：每個階段列那個階段的拜訪（日期＋文字摘要＋照片，照片按了才下載）；沒標階段的用種植日期推算並標「（推算）」 */
   function growthTimelineHtml(visits, plantDate) {
     const by = {}; STAGES.forEach(s => { by[s] = []; });
-    let noPd = 0, early = 0; // 0.4.80 低3：沒有種植日期、拜訪早於種植日期，分開數
+    let noPd = 0, early = 0, badDay = 0; // 0.4.80 低3：沒有種植日期、拜訪早於種植日期，分開數
+    // 0.4.81（0.4.80 巡檢低1）：拜訪日期也要有效，才算「早於種植日期」；壞掉的另外算「日期不明」
+    const ymdValid = x => { const s = String(x || '').slice(0, 10); return /^\d{4}-\d\d-\d\d$/.test(s) && isFinite(Date.parse(s)); };
     (visits || []).slice().reverse().forEach(v => { // 後台新到舊 → 這裡由舊到新
       if (v.noMeet && !(v.photos || []).length) return; // 沒見到、沒照片的不算生長紀錄
       if (!v.text && !(v.photos || []).length && !v.closing) return;
       let st = STAGES.indexOf(v.stage) >= 0 ? v.stage : v.closing ? '採收' : '', guessed = false;
       if (!st) { st = stageGuess(plantDate, v.time); guessed = !!st; }
-      if (!st) { if (/^\d{4}-\d\d-\d\d$/.test(String(plantDate || '').slice(0, 10))) early++; else noPd++; return; }
+      if (!st) { const pdOk = ymdValid(plantDate), vOk = ymdValid(v.time); if (pdOk && vOk) early++; else if (!pdOk) noPd++; else badDay++; return; }
       by[st].push({ v, guessed });
     });
     const short = t => { const s = String(t || ''); return s.length > 80 ? s.slice(0, 80) + '…' : s; };
@@ -543,7 +545,7 @@
         + (es.length ? es.map(({ v, guessed }) => `<div class="gent"><b>${esc(String(v.time || '').slice(0, 10))}</b>${guessed ? '<small>（推算 ခန့်မှန်း）</small>' : ''}${v.text ? '　' + esc(short(v.text)) : v.closing ? '　' + esc(short(v.closing)) : ''}`
           + `${(v.photos || []).length ? `<div class="pgrid">${v.photos.map((id, i) => `<button type="button" class="btn2 small" data-hph="${esc(id)}">📷 照片 ${i + 1}</button>`).join('')}</div>` : ''}</div>`).join('')
           : '<div class="gent"><small>還沒有照片／ဓာတ်ပုံ မရှိသေး</small></div>') + '</li>'; }).join('');
-    return `<h3>生長過程／ကြီးထွားမှု အဆင့်ဆင့်</h3>${noPd ? `<p class="sub">有 ${noPd} 筆拜訪沒標階段、也沒有種植日期，無法推算／အဆင့် မသိနိုင်</p>` : ''}${early ? `<p class="sub">有 ${early} 筆拜訪早於種植日期，無法推算階段／စိုက်ရက်မတိုင်မီ</p>` : ''}<ol class="growtl">${li}</ol>`;
+    return `<h3>生長過程／ကြီးထွားမှု အဆင့်ဆင့်</h3>${noPd ? `<p class="sub">有 ${noPd} 筆拜訪沒標階段、也沒有種植日期，無法推算／အဆင့် မသိနိုင်</p>` : ''}${early ? `<p class="sub">有 ${early} 筆拜訪早於種植日期，無法推算階段／စိုက်ရက်မတိုင်မီ</p>` : ''}${badDay ? `<p class="sub">有 ${badDay} 筆拜訪日期不明，無法推算階段／ရက်စွဲ မသိ</p>` : ''}<ol class="growtl">${li}</ol>`;
   }
   /* 0.4.77 董事長「種植資料要詳細列出結案的照片、文字、重量、之前田間報告」＋範例紙卡：結案區塊（照片排格子、量測卡一行一項） */
   const MEASURE_ROWS = [['variety', '品種', 'မျိုး'], ['sample', '樣本', 'နမူနာ'], ['weight', '總重量', 'အလေးချိန်'], ['length', '長度', 'အရှည်'], ['rows', '穗行數', 'အစေ့တန်း'],
@@ -558,6 +560,8 @@
     const li = MEASURE_ROWS.filter(([k]) => has(val[k])).map(([k, zh, my]) => `<li>${zh} <span class="my">${my}</span>：<b>${esc(String(val[k]).trim())}</b></li>`).join('');
     return li ? `<ul class="mcard">${li}</ul>` : '';
   }
+  /** 0.4.81 董事長「結案通過主管審核過，才能在種植資料顯示」：結案那筆的審核狀態（closingDetail.state；舊後台沒有就看 closeRejected／closePending；空白＝不用審核） */
+  const closeStateOf = v => { const d = v && v.closingDetail && typeof v.closingDetail === 'object' ? v.closingDetail : null; return (d && d.state) || (v && v.closeRejected ? '已退回' : v && v.closePending ? '待確認' : ''); };
   /** 最近一筆結案：狀態、文字、價格、產量（重量）、收購客戶…、照片格子、量測卡。後台還沒給 closingDetail 時退回顯示結案那串文字 */
   function closeBlockHtml(v) {
     const d = v.closingDetail && typeof v.closingDetail === 'object' ? v.closingDetail : null;
@@ -579,17 +583,25 @@
     const trials = tl.map(t => `<li><span class="pill ${TRIAL_PILL[t.status] || 'wait'}">${esc(t.status || '—')}</span> <b>${esc(catBi(t.cat || '試作'))}</b>：${esc(t.item || '（未填品項）')}${t.crop ? '（' + esc(t.crop) + '）' : ''}`
       + `<br><small>${esc(t.start || '?')}～${esc(t.end || (t.status === '進行中' ? '進行中' : '?'))}${t.yield !== '' ? `・產量 အထွက် ${esc(t.yield)} ${esc(t.yieldUnit)}` : ''}${t.comment ? '・農民評價 သုံးသပ်ချက်：' + esc(t.comment) : ''}</small>`
       + `${t.reason ? `<br><small>失敗原因 အကြောင်းရင်း：${esc(t.reason)}</small>` : ''}${t.conclusion ? `<br><small>結論 နိဂုံး：${esc(t.conclusion)}</small>` : ''}</li>`).join('');
-    const all = r.visits || [], cv = o.closeFirst ? all.find(v => v.closing) : null; // 0.4.77 種植資料頁：後台新到舊，第一筆有結案的就是最近一筆結案
+    const raw = r.visits || [];
+    // 0.4.81 董事長「結案通過主管審核過，才能在種植資料顯示」（只有種植資料頁 closeFirst）：待確認、已退回那筆的結案內容先藏起來，拜訪本身照列
+    const hid = o.closeFirst ? raw.filter(v => v.closing && /^(待確認|已退回)$/.test(closeStateOf(v))) : [];
+    const all = hid.length ? raw.map(v => hid.indexOf(v) < 0 ? v : Object.assign({}, v, { closing: '', closingDetail: null, closeHidden: closeStateOf(v) })) : raw;
+    const lastClose = o.closeFirst ? raw.find(v => v.closing && closeStateOf(v) !== '已退回') : null; // 退回的當作沒結案，往前找
+    const pendTop = !!lastClose && closeStateOf(lastClose) === '待確認'; // 最近一筆還在等主管：區塊只說等審核
+    const cv = o.closeFirst && !pendTop ? all.find(v => v.closing) : null; // 0.4.77 種植資料頁：後台新到舊，第一筆有結案的就是最近一筆結案
     const rest = cv ? all.filter(v => v !== cv) : all;
     const vl = o.oldFirst ? rest.slice().reverse() : rest;
     const visits = vl.map(v => `<li><b>${esc(v.time)}</b>｜${esc(histCatBi(v.cat))}${v.staff ? '｜' + esc(v.staff) : ''}`
       // 1號第2任讀碼中2（第8任）：text 是中文摘要，業務自己打的（常是緬文）看不到 → 摘要跟打字原文不一樣時，原文另外列一行
       + `${v.text ? `<br>${esc(v.text)}` : ''}${v.typed && v.typed !== v.text ? `<br><small>打字原文 မူရင်း：${esc(v.typed)}</small>` : ''}${v.noMeet ? `<br><span class="pill wait">沒見到</span> ${esc(v.noMeet)}` : ''}${v.prices ? `<br><small>價格：${esc(v.prices)}</small>` : ''}`
-      + `${v.plantFail ? `<br><span class="pill late">種植失敗</span> ${esc(v.plantFail)}` : ''}${v.closing ? `<br><small>結案 ပိတ်သိမ်း：${esc(v.closing)}</small>` : ''}`
-      + `${(v.photos || []).length || v.audio ? '<br>' : ''}${(v.photos || []).map((id, i) => `<button type="button" class="btn2 small" data-hph="${esc(id)}">📷 照片 ${i + 1}</button>`).join(' ')}`
-      + `${v.audio ? ` <button type="button" class="btn2 small" data-hau="${esc(v.audio)}">🔊 錄音</button>` : ''}</li>`).join('');
-    const closeTop = o.closeFirst ? `<h3>結案／ပိတ်သိမ်း</h3>${cv ? closeBlockHtml(cv) : '<p class="sub">還沒結案／မပိတ်သိမ်းရသေး</p>'}` : '';
-    const tlTop = o.timeline ? growthTimelineHtml(all, o.plantDate) : ''; // 0.4.78 生長過程時間軸（種植資料、田間打卡、結案共用）
+      + `${v.plantFail ? `<br><span class="pill late">種植失敗</span> ${esc(v.plantFail)}` : ''}${v.closing ? `<br><small>結案 ပိတ်သိမ်း：${esc(v.closing)}</small>` : ''}${v.closeHidden === '待確認' ? '<br><small>結案等主管審核／စစ်ဆေးဆဲ</small>' : ''}`
+      // 0.4.81（第10任）：待確認那筆的照片、錄音也不列（跟後台 Word 一致：待確認不放照片）
+      + (v.closeHidden === '待確認' ? '' : `${(v.photos || []).length || v.audio ? '<br>' : ''}${(v.photos || []).map((id, i) => `<button type="button" class="btn2 small" data-hph="${esc(id)}">📷 照片 ${i + 1}</button>`).join(' ')}`
+        + `${v.audio ? ` <button type="button" class="btn2 small" data-hau="${esc(v.audio)}">🔊 錄音</button>` : ''}`) + '</li>').join('');
+    const closeTop = o.closeFirst ? `<h3>結案／ပိတ်သိမ်း</h3>${pendTop ? '<p class="sub">結案等主管審核，通過後才顯示內容／ပိတ်သိမ်းမှု မန်နေဂျာ အတည်ပြုပြီးမှ ပြမည်</p>' : cv ? closeBlockHtml(cv) : '<p class="sub">還沒結案／မပိတ်သိမ်းရသေး</p>'}` : '';
+    // 0.4.81（2號後台對齊）：待確認那筆的照片不在生長過程露出（結案文字已藏，也不會被當成「採收」）
+    const tlTop = o.timeline ? growthTimelineHtml(hid.length ? all.map(v => v.closeHidden === '待確認' ? Object.assign({}, v, { photos: [] }) : v) : all, o.plantDate) : ''; // 0.4.78 生長過程時間軸（種植資料、田間打卡、結案共用）
     return `${tlTop}${closeTop}<h3>${o.closeFirst ? '之前的田間報告／ယခင် ကွင်းဆင်း အစီရင်ခံစာ' : '過往紀錄／ယခင် မှတ်တမ်း'}</h3>${head}`
       + (trials ? `<p class="sub">試作／推廣（成功、失敗）／စမ်းသပ်မှု ရလဒ်：</p><ul>${trials}</ul>` : (o.showTrials ? '<p class="sub">沒有試作、推廣紀錄／စမ်းသပ်မှု မရှိ</p>' : ''))
       + `<p class="sub">拜訪紀錄 共 ${r.total || 0} 筆${r.more ? '（只列最近 50 筆）' : ''}${o.oldFirst ? '，由舊到新' : ''}；照片、錄音按了才下載／ဓာတ်ပုံ၊ အသံ နှိပ်မှ ဒေါင်းမည်：</p>`
@@ -2052,6 +2064,8 @@ ${state.cat}：${who}
         else if (data && data.code === 'BAD_LOGIN') { await Store.setMeta('config', { gasUrl: cfg.gasUrl }); showLogin(data.message); return; }
       }
       $('syncState').textContent = r && r.error ? r.error : '';
+      // 0.4.81（0.4.80 巡檢中1）：上傳、同步完成 → 種植資料的紀錄切回來要重讀（這裡不馬上重讀，省流量）
+      if (r && !r.error) { const ph = document.getElementById('plHistory'); if (ph) ph._doneCid = null; }
       await pruneLocalCustomers();
       if (state.view === 'home') await renderHome();
       // 正在填拜訪而且已經選了客戶，就不重整選單（暫時客戶上傳後會換成正式編號，重整會把選好的清掉；R1-02）
