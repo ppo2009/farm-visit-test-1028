@@ -171,6 +171,8 @@ li.go{cursor:pointer}
 .months{display:flex;gap:6px;margin-bottom:8px}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 14px;cursor:pointer;font-size:1rem}
 .months .chip{min-height:44px}            /* 田裡用手指按：月份切換至少 44 點高（2026-11-12 逐頁檢查） */
+.measure{margin:8px 0;border:1px solid var(--line);border-radius:10px;padding:6px 10px} .measure summary{cursor:pointer;font-weight:700;min-height:40px;display:flex;flex-wrap:wrap;align-items:center;gap:0 6px} /* 0.4.77 採收量測 */
+.vclose{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0} .vclose .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;margin:6px 0} .vclose .pgrid .btn2.small,.vclose .pgrid img{width:100%;margin:0} .mcard{list-style:none;padding:8px 10px;margin:6px 0;border:1px dashed var(--line);border-radius:8px;font-variant-numeric:tabular-nums} .mcard li{display:block;border:0;padding:1px 0;overflow-wrap:anywhere} /* 0.4.77 種植資料：結案照片格子＋量測卡 */
 .plbtns{display:flex;gap:8px;align-items:stretch;margin:6px 0} .plbtns #plWordBtn{flex:1;min-width:0;min-height:48px} .plbtns #plEditBtn{flex:0 0 auto;min-height:48px;padding:4px 12px} /* 0.4.77 種植資料：大按鈕 Word、小按鈕修改 */
 #logoutBtn{min-height:44px;padding:4px 12px;border:1px solid var(--line);border-radius:99px;background:var(--surface);color:inherit;font:inherit;font-size:.9rem;font-weight:700;line-height:1.15;cursor:pointer;white-space:nowrap} #logoutBtn .my{display:block;font-size:.7rem;font-weight:400;color:inherit} /* 0.4.75 右上角看得清楚的登出鈕（按的範圍 44px） */
 .chip[aria-pressed="true"]{background:var(--paddy);color:var(--surface);border-color:var(--paddy)}
@@ -254,8 +256,9 @@ footer{margin-top:18px;text-align:center}
     <!-- 0.4.59 董事長截圖：執行任務清單＋指派任務合併；我的進度往前一格；第四格改「種植資料」 -->
     <button type="button" role="tab" id="htab-mine" data-htab="mine" aria-selected="false">我的進度<span class="my">တိုးတက်မှု</span></button>
     <!-- 0.4.60 董事長截圖：三顆結案按鈕搬到自己的「結案」分頁（我的進度和種植資料中間） -->
-    <button type="button" role="tab" id="htab-close" data-htab="close" aria-selected="false">結案<span class="my">ပိတ်သိမ်း</span></button>
+    <!-- 0.4.77 董事長截圖：種植資料移到結案前面 -->
     <button type="button" role="tab" id="htab-plant" data-htab="plant" aria-selected="false">種植資料<span class="my">စိုက်ပျိုးမှု</span></button>
+    <button type="button" role="tab" id="htab-close" data-htab="close" aria-selected="false">結案<span class="my">ပိတ်သိမ်း</span></button>
   </nav>
 
   <!-- 分頁 1 田間打卡：照手稿左卡「農民」、右卡「盤商或種子商」，點了直接進打卡畫面（2026-11-12 規劃 D＋優化 1），下面是上傳狀態 -->
@@ -502,6 +505,23 @@ footer{margin-top:18px;text-align:center}
       <div><label class="lab" for="cReason">6. 原因<span class="my">အကြောင်းရင်း</span></label><input type="text" id="cReason" maxlength="300" placeholder="例：收成完、全部賣掉／ရိတ်ပြီး ရောင်းပြီး"></div>
       <div><label class="lab" for="cProgress">7. 進度<span class="my">တိုးတက်မှု</span></label><input type="text" id="cProgress" maxlength="300" placeholder="例：已收成 8 成，剩下下週賣／၈၀% ရိတ်ပြီး"></div>
       </div>
+      <!-- 0.4.77 董事長範例（玉米照片＋手寫紙卡：品種、Total Row、Total length、Total weight (5 corns) no shells、Sowing／Harvesting date、Duration）：採收量測，全部選填 -->
+      <details class="measure" id="measureBox">
+        <summary>採收量測（選填）<span class="my">ရိတ်သိမ်းမှု တိုင်းတာချက် (မဖြည့်လည်းရ)</span></summary>
+        <div class="closerow">
+          <div><label class="lab" for="mVariety">品種<span class="my">မျိုး</span></label><input type="text" id="mVariety" maxlength="80"></div>
+          <div><label class="lab" for="mCount">樣本數<span class="my">နမူနာ အရေအတွက်</span></label><input type="number" id="mCount" min="0" step="1" inputmode="numeric" placeholder="例 5"></div>
+          <div><label class="lab" for="mCountUnit">樣本單位<span class="my">ယူနစ်</span></label><select id="mCountUnit"><option value="穗">穗／အနှံ</option><option value="顆">顆／လုံး</option><option value="株">株／ပင်</option></select></div>
+          <div><label class="lab" for="mWeight">總重量（kg）<span class="my">စုစုပေါင်း အလေးချိန် (kg)</span></label><input type="number" id="mWeight" min="0" step="any" inputmode="decimal" placeholder="例 1.5"></div>
+          <div><label class="lab" for="mHusk">帶殼／去殼<span class="my">အခွံပါ／အခွံမပါ</span></label><select id="mHusk"><option value="">—</option><option value="帶殼">帶殼／အခွံပါ</option><option value="去殼">去殼／အခွံမပါ</option></select></div>
+          <div><label class="lab" for="mLength">長度<span class="my">အရှည်</span></label><input type="number" id="mLength" min="0" step="any" inputmode="decimal" placeholder="例 8"></div>
+          <div><label class="lab" for="mLenUnit">長度單位<span class="my">အရှည် ယူနစ်</span></label><select id="mLenUnit"><option value="英寸">英寸／လက်မ</option><option value="公分">公分／စင်တီမီတာ</option></select></div>
+          <div id="mRowsBox"><label class="lab" for="mRows">穗行數（玉米）<span class="my">အစေ့တန်း အရေအတွက် (ပြောင်း)</span></label><input type="number" id="mRows" min="0" step="1" inputmode="numeric" placeholder="例 14"></div>
+          <div><label class="lab" for="mSow">播種日<span class="my">မျိုးစေ့ချသည့်ရက်</span></label><input type="date" id="mSow"></div>
+          <div><label class="lab" for="mHarvest">採收日<span class="my">ရိတ်သိမ်းသည့်ရက်</span></label><input type="date" id="mHarvest"></div>
+          <div><label class="lab" for="mDays">生長天數<span class="my">စိုက်ပျိုးရက်</span></label><input type="text" id="mDays" readonly placeholder="自動算／အလိုအလျောက်"></div>
+        </div>
+      </details>
       <!-- 0.4.74 董事長「要，先填結果」：這位農民有進行中的試作或推廣，結案前要先填結果（成功／失敗；失敗要填失敗紀錄） -->
       <div id="closeTrialBox" class="fields" hidden>
         <label class="lab" for="cTrialOutcome" id="closeTrialLab">試作結果（必填）<span class="my">ရလဒ် (မဖြစ်မနေ)</span></label>
