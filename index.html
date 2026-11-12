@@ -50,6 +50,11 @@ textarea{min-height:96px;resize:vertical}
 button .my{color:inherit;opacity:.85} /* 按鈕裡的緬文跟按鈕字同色（選取後底色變綠，灰字會看不見；2026-11-12 實測） */
 h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文／緬文）用一般粗細，不要跟標題一樣粗 */
 .catswitch{display:flex;gap:6px}
+.farmermenu{display:grid;gap:8px;margin-top:10px;padding:10px;border:2px solid var(--paddy);border-radius:16px;background:var(--surface)}
+.farmermenu button{min-height:56px;border:1.5px solid var(--paddy);background:var(--paddy-soft);color:var(--paddy);border-radius:12px;font-weight:700;font-size:1.05rem;cursor:pointer}
+/* 0.4.32 農民那組按鈕寬度照字數分（一般拜訪農民 6 字、試作農民 4、推廣農民 4、結案 2），長的不會被擠成兩行 */
+.catswitch[data-group="farmer"]{display:grid;grid-template-columns:6.6fr 4.6fr 4.6fr 2.6fr}
+.catswitch[data-group="farmer"] button{padding-left:2px;padding-right:2px}
 .catswitch button{flex:1;min-height:48px;border:1.5px solid var(--paddy);background:none;color:var(--paddy);border-radius:12px;font-weight:700;cursor:pointer;padding:6px 4px;word-break:keep-all;overflow-wrap:anywhere;min-width:0}
 /* 0.4.24（2026-11-12 業務面線上檢查）：375 點寬手機「一般拜訪」被拆成「一般拜／訪」兩行 → 中文詞不從中間斷（真的放不下才斷），窄手機字縮小一點 */
 @media (max-width:400px){.catswitch{gap:4px}.catswitch button{font-size:1rem;padding:6px 2px}}
@@ -169,8 +174,14 @@ footer{margin-top:18px;text-align:center}
   <!-- 分頁 1 田間打卡：照手稿左卡「農民」、右卡「盤商或種子商」，點了直接進打卡畫面（2026-11-12 規劃 D＋優化 1），下面是上傳狀態 -->
   <div class="hpanel" id="hp-punch" role="tabpanel" aria-labelledby="htab-punch">
   <div class="cats">
-    <button type="button" class="cat hub" id="farmerBtn">農民<span class="my">လယ်သမား</span><small class="hint">選擇農民 → 打卡・拍照・打字・語音<br>လယ်သမား ရွေး → မှတ်တမ်း・ဓာတ်ပုံ・စာ・အသံ</small></button>
+    <button type="button" class="cat hub" id="farmerBtn" aria-expanded="false" aria-controls="farmerMenu">農民 ▾<span class="my">လယ်သမား</span><small class="hint">點開選：一般拜訪／試作／推廣<br>လယ်သမား ရွေး → မှတ်တမ်း・ဓာတ်ပုံ・စာ・အသံ</small></button>
     <button type="button" class="cat c3 hub" id="dealerBtn">盤商或種子商<span class="my">ကုန်သည် / မျိုးစေ့ဆိုင်</span><small class="hint">選擇 → 拜訪內容・農作物價格<br>ရွေး → သွားရောက်မှု・သီးနှံဈေးနှုန်း</small></button>
+  </div>
+  <!-- 0.4.32 董事長 2026-11-12：「農民」改成下拉選單：一般拜訪農民／試作農民／推廣農民，選了直接進那一種打卡（結案在打卡畫面上方切換） -->
+  <div class="farmermenu" id="farmerMenu" role="menu" hidden>
+    <button type="button" role="menuitem" data-farmercat="農戶">一般拜訪農民<span class="my">ပုံမှန်သွားရောက်</span></button>
+    <button type="button" role="menuitem" data-farmercat="試作">試作農民<span class="my">စမ်းသပ်စိုက်ပျိုး</span></button>
+    <button type="button" role="menuitem" data-farmercat="推廣">推廣農民<span class="my">မြှင့်တင်ရောင်းချ</span></button>
   </div>
   <div class="queue">
     <p class="count" id="pendingCount"></p>

@@ -363,7 +363,10 @@
     $('closeBox').hidden = cat !== '結案';
     $('recBtn').hidden = cat === '結案'; // 結案手稿只有拍照、圖片上傳
     $('pNameLab').innerHTML = isDealerCat() ? `${cat}名字（公司）<span class="my">${CAT_MY[cat]} အမည် (ကုမ္ပဏီ)</span>` : '農民名字<span class="my">လယ်သမား အမည်</span>';
-    $('catSwitch').innerHTML = CAT_GROUPS[groupOf(cat)].map(c => `<button type="button" data-setcat="${esc(c)}" aria-pressed="${c === cat}">${esc(CAT_LABEL(c))}<span class="my">${esc(CAT_MY[c] || '')}</span></button>`).join('');
+    // 0.4.32 董事長 2026-11-12：打卡畫面上方按鈕寫「一般拜訪農民／試作農民／推廣農民」（只改這裡，統計、紀錄照舊叫一般拜訪、試作、推廣）
+    const SWITCH_LABEL = { 農戶: '一般拜訪農民', 試作: '試作農民', 推廣: '推廣農民' };
+    $('catSwitch').dataset.group = groupOf(cat);
+    $('catSwitch').innerHTML = CAT_GROUPS[groupOf(cat)].map(c => `<button type="button" data-setcat="${esc(c)}" aria-pressed="${c === cat}">${esc(SWITCH_LABEL[c] || CAT_LABEL(c))}<span class="my">${esc(CAT_MY[c] || '')}</span></button>`).join('');
     $('catSwitch').querySelectorAll('[data-setcat]').forEach(b => b.addEventListener('click', () => { state.catManual = true; setCat(b.dataset.setcat); }));
   }
   /** 換類別：同一組農民（一般／試作／推廣）客戶清單一樣，只重算試作區；盤商↔種子商客戶清單不同，要重讀 */
@@ -1028,7 +1031,17 @@
     $('logoutBtn').addEventListener('click', logout);
     document.querySelectorAll('.cat[data-cat]').forEach(b => b.addEventListener('click', () => openVisit(b.dataset.cat)));
     // 首頁兩張大卡直接進打卡畫面；一般／試作／推廣、盤商／種子商在打卡畫面上方切換（優化 1）
-    $('farmerBtn').addEventListener('click', () => openVisit('農戶'));
+    // 0.4.32 董事長：「農民」改成下拉選單（一般拜訪農民／試作農民／推廣農民），選了直接進那一種
+    $('farmerBtn').addEventListener('click', () => {
+      const open = $('farmerMenu').hidden;
+      $('farmerMenu').hidden = !open; $('farmerBtn').setAttribute('aria-expanded', String(open));
+    });
+    document.querySelectorAll('[data-farmercat]').forEach(b => b.addEventListener('click', async () => {
+      $('farmerMenu').hidden = true; $('farmerBtn').setAttribute('aria-expanded', 'false');
+      const cat = b.dataset.farmercat;
+      await openVisit(cat);
+      if (cat !== '農戶') state.catManual = true; // 明確選了試作／推廣：選農民後不要自動跳回別的類別；一般拜訪照舊（有進行中的試作會自動切過去）
+    }));
     $('dealerBtn').addEventListener('click', () => openVisit('盤商'));
     initHomeTabs();
     $('syncBadge').addEventListener('click', () => { setHomeTab('punch'); const q = document.querySelector('.queue'); if (q && q.scrollIntoView) q.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
