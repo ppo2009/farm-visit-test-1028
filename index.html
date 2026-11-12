@@ -106,8 +106,16 @@ li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px
 .ncchip[disabled]{opacity:.55;cursor:default}
 .nclist{margin-top:8px}
 /* 0.4.82 執行任務清單兩欄：每一類一小區塊（標題帶人數），長名字可換行，375 寬不撐寬 */
-.todocol{min-width:0} .tcgrp{margin:0 0 10px} .tcgrp h3{font-size:1rem;margin:8px 0 4px} .tcgrp h3 .my{font-size:.75rem;font-weight:400;color:var(--muted);margin-left:4px}
+.todocol{min-width:0} .tcgrp{margin:0 0 10px} .tcgrp h3{font-size:1rem;margin:8px 0 4px} .tcgrp h3 .my{display:inline;font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px}
 .tcgrp li{overflow-wrap:anywhere} .tcgrp li.go{cursor:pointer} .tcgrp li small{color:var(--muted)} .tcgrp .none{margin:0 0 4px;color:var(--muted)}
+/* 0.4.87 董事長「兩欄太亂」：標題緬文放同一行後面、字小；說明縮成一行小灰字；0 筆的分類合成一行灰字；卡片邊框只留一層、間距一致 */
+.todoboard h2{margin:0 0 6px} .todoboard h2 .my{display:inline;font-size:.72rem;margin-left:6px}
+.todoboard h2 .sub{font-size:.78rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.todoboard .tasksum{border:0;background:none;padding:0;margin:0 0 6px}
+.todoboard #taskList,.todoboard .tcgrps{margin:0 0 18px}
+.tcgrp h3{margin:10px 0 4px} .tcgrp:first-child h3{margin-top:0}
+.tczero{margin:4px 0 0;font-size:.8rem;color:var(--muted)}
+.tcgrp li small{margin-left:6px;white-space:nowrap}
 .nclist li small{color:var(--muted)}
 .todoboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start} /* 0.4.63 主管任務｜我的進度 兩欄 */
 .tasksum{border:1.5px solid var(--paddy);border-radius:12px;padding:10px 12px;margin:6px 0 10px;background:var(--surface)}
@@ -313,18 +321,20 @@ footer{margin-top:18px;text-align:center}
   <!-- 0.4.63 董事長：指派任務＝主管派下來的任務；這頁要一邊看主管派的任務、一邊看自己的進度 → 左右兩欄（手機上下排） -->
   <!-- 0.4.82 董事長截圖：改左右兩大欄（電腦左右、375 寬上下）。左＝五類自己負責的客戶名單（點一位去田間打卡）；
        右＝主管已派發的任務（原「執行中任務」搬過來改名，功能不變）＋已開發的客戶（本月新增照五類直接列出，取代點了才看的 chips） -->
+  <!-- 0.4.87 董事長截圖「兩欄太亂」：左右交換（左＝主管已派發的任務＋已開發的客戶，右＝我負責的客戶；窄螢幕上下排時任務在上）；
+       標題緬文同一行小字、說明一行小灰字，0 筆的分類合成一行，卡片邊框只留一層（樣式見 .todoboard） -->
   <div class="todoboard">
   <div class="todocol" id="todoLeft">
-  <h2>我負責的客戶<span class="my">ကျွန်ုပ် တာဝန်ယူသော ဖောက်သည်</span><span class="sub">點一位去田間打卡／နှိပ်ပြီး ကွင်းဆင်းမှတ်တမ်း ရေးပါ</span></h2>
-  <div class="tcgrps" id="todoCust"></div>
-  </div>
-  <div class="todocol" id="todoRight">
   <h2>主管已派發的任務<span class="my">မန်နေဂျာ ပေးထားသော အလုပ်များ</span><span class="sub">誰派、什麼時候派、做完沒；做完打勾／ပြီးလျှင် အမှန်ခြစ်ပါ</span></h2>
   <div class="tasksum" id="taskSummary"></div>
   <ul id="taskList"></ul>
   <!-- 0.4.72 董事長：本月新增幾個一般農民、試作農民、推廣農民、盤商、種子商，詳細的要列出來（1號）；0.4.82 改名「已開發的客戶」、五類直接列名字＋編號 -->
   <h2>已開發的客戶<span class="my">ဖော်ထုတ်ပြီး ဖောက်သည်</span><span class="sub" id="newCustSum">本月新增的客戶／ဤလ ဖောက်သည်အသစ်</span></h2>
   <div class="tcgrps" id="newCustList"></div>
+  </div>
+  <div class="todocol" id="todoRight">
+  <h2>我負責的客戶<span class="my">ကျွန်ုပ် တာဝန်ယူသော ဖောက်သည်</span><span class="sub">點一位去田間打卡／နှိပ်ပြီး ကွင်းဆင်းမှတ်တမ်း ရေးပါ</span></h2>
+  <div class="tcgrps" id="todoCust"></div>
   </div>
   <!-- 0.4.75 董事長截圖：右欄打叉拿掉——每月目標跟「我的進度」的「主管訂的目標」同一份，合成一份（todoPlan 拿掉，app.js 沒有這格就略過）；日程清單搬到「我的進度」 -->
   </div>

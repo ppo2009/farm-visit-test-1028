@@ -123,6 +123,9 @@
   }
 
   async function logout() {
+    // 0.4.87 中6：比照返回鍵——打卡畫面還沒儲存要先確認；錄音中先停掉、表單清掉（不讓錄音器開著跑到登入頁）
+    if (state.view === 'visit' && formDirty() && !confirm('還沒儲存，確定要登出嗎？剛剛填的資料（照片、錄音、打字等）會不見。\nမသိမ်းရသေးပါ။ ထွက်လျှင် ပျောက်မည်။')) return;
+    if (state.view === 'visit' || state.rec) resetForm();
     const pending = (await Store.allVisits()).filter(v => v.status === 'pending').length;
     // 任務打勾也要先送出（GPT-6.1 R4-07）；只算自己帳號的：別人的（舊版換人留下的）在這支手機用自己帳號永遠送不掉，不能因此擋住登出（自行審查 S1）
     const ticks = (await mineTicks()).length;
@@ -137,6 +140,7 @@
 
   /* ───── 首頁 ───── */
   async function showHome() {
+    if (await loginLostCheck()) return; // 0.4.87 中6：打卡時登入失效、先保留表單 → 回首頁這時才跳登入
     show('home');
     state.closeGroup = ''; // 0.4.73 回首頁就不再是「某一種農民結案」
     const cfg = await getConfig();
@@ -696,6 +700,13 @@
   /** 一類一小區塊：標題帶人數，沒有就寫「沒有」 */
   const tcGroupHtml = (g, my, items) => `<section class="tcgrp"><h3>${esc(TODO_LABEL(g))}（${items.length}）<span class="my">${esc(my)}</span></h3>`
     + (items.length ? `<ul>${items.join('')}</ul>` : '<p class="sub none">沒有／မရှိ</p>') + '</section>';
+  /** 0.4.87 董事長「兩欄太亂」：有人的分類照舊標題＋名單；0 筆的分類不再各佔一個標題＋「沒有」，合成一行灰色小字（例：試作農民 0・推廣農民 0・盤商 0） */
+  function tcGroupsHtml(groups, itemsOf) {
+    const rows = groups.map(([g, my]) => ({ g, my, items: itemsOf(g) }));
+    const zero = rows.filter(r => !r.items.length);
+    return rows.filter(r => r.items.length).map(r => tcGroupHtml(r.g, r.my, r.items)).join('')
+      + (zero.length ? `<p class="tczero">${zero.map(r => `${esc(TODO_LABEL(r.g))} 0`).join('・')}</p>` : '');
+  }
   /** 0.4.82 右欄「已開發的客戶」：本月新增照五類直接列出名字＋客戶編號（取代 0.4.72 點了才看的 chips） */
   function renderNewCust(h) {
     const box = document.getElementById('newCustList');
@@ -708,8 +719,9 @@
       return;
     }
     if (sum) sum.textContent = `本月新增共 ${list.length} 位／ဤလ ဖောက်သည်အသစ် ${list.length} ဦး`;
-    box.innerHTML = NEW_GROUPS.map(([g, my]) => tcGroupHtml(g, my, list.filter(c => c.group === g).map(c => { const place = placeOf(c);
-      return `<li><span><b>${esc(c.name || '（未命名）')}</b>｜${esc(c.id || '')}${place ? '｜' + esc(place) : ''}<br><small>${esc(String(c.date || '').slice(5).replace('-', '/'))} 新增 အသစ်</small></span></li>`; }))).join('');
+    // 0.4.87：每人一行（名字｜編號｜鎮・村・地區，「11/12 新增」放同一行最後的小灰字）；0 筆的分類合成一行
+    box.innerHTML = tcGroupsHtml(NEW_GROUPS, g => list.filter(c => c.group === g).map(c => { const place = placeOf(c);
+      return `<li><span><b>${esc(c.name || '（未命名）')}</b>｜${esc(c.id || '')}${place ? '｜' + esc(place) : ''}<small>${esc(String(c.date || '').slice(5).replace('-', '/'))} 新增 အသစ်</small></span></li>`; }));
   }
   /** 0.4.82 左欄「我負責的客戶」：五類（分類同月分工作進度 mineGroupOf），列「名字｜客戶編號｜鎮・村」，點一位開那位的田間打卡（openFromList 鎖類別） */
   const TODO_GROUPS = [['一般農民', 'ပုံမှန် လယ်သမား'], ['試作農民', 'စမ်းသပ် လယ်သမား'], ['推廣農民', 'မြှင့်တင် လယ်သမား'], ['盤商', 'ကုန်သည်'], ['種子商', 'မျိုးစေ့ဆိုင်']];
@@ -717,8 +729,8 @@
     const box = document.getElementById('todoCust');
     if (!box) return; // 舊頁面沒有這一塊
     const all = state.mineAll || [], gOf = state.mineGroupOf || {};
-    box.innerHTML = TODO_GROUPS.map(([g, my]) => tcGroupHtml(g, my, all.filter(f => gOf[f.id] === g).map(f => { const tv = [f.town, f.village].filter(Boolean).join('・');
-      return `<li class="go" data-id="${esc(f.id)}" data-type="${esc(f.type || '農民')}" role="button" tabindex="0"><span><b>${esc(f.name || '（未命名）')}</b>｜${f.pending ? '（新，未上傳 မတင်ရသေး）' : esc(f.id)}${tv ? '｜' + esc(tv) : ''}</span></li>`; }))).join('');
+    box.innerHTML = tcGroupsHtml(TODO_GROUPS, g => all.filter(f => gOf[f.id] === g).map(f => { const tv = [f.town, f.village].filter(Boolean).join('・'); // 0.4.87：0 筆的分類合成一行
+      return `<li class="go" data-id="${esc(f.id)}" data-type="${esc(f.type || '農民')}" role="button" tabindex="0"><span><b>${esc(f.name || '（未命名）')}</b>｜${f.pending ? '（新，未上傳 မတင်ရသေး）' : esc(f.id)}${tv ? '｜' + esc(tv) : ''}</span></li>`; }));
     box.querySelectorAll('li.go').forEach(li => {
       li.onclick = () => openFromList(li.dataset.id, li.dataset.type);
       li.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFromList(li.dataset.id, li.dataset.type); } };
@@ -779,12 +791,19 @@
     const ids = seen.ids || [];
     return list.some(x => ids.indexOf(String(x.cid)) < 0);
   }
+  /** 0.4.87 中3：剩幾天用預計採收日跟手機的今天（緬甸日期）重算——同步當下的 daysLeft 離線幾天後會過期；採收日壞掉才退回 daysLeft；都沒有就回 null（不寫 NaN） */
+  function harvestDaysLeft(x) {
+    const hd = String(x.harvestDate || '').slice(0, 10), t = mmDay(0);
+    if (/^\d{4}-\d\d-\d\d$/.test(hd) && isFinite(Date.parse(hd))) return Math.round((Date.parse(hd) - Date.parse(t)) / 86400000);
+    const n = x.daysLeft === '' || x.daysLeft == null ? NaN : Number(x.daysLeft);
+    return isFinite(n) ? n : null;
+  }
   function harvestItemHtml(x) {
-    const left = Number(x.daysLeft);
+    const left = harvestDaysLeft(x);
     const lv = latestVisitDay(x.lastVisit, x.cid, state.myVisitList); // 0.4.84 低1：剛拜訪完、後台還沒更新也算
-    const when = x.overdue || left < 0 ? `<b class="vage r">已過採收日 ${Math.abs(left)} 天</b>` : left === 0 ? '<b class="vage r">今天採收</b>' : `<b class="vage ${left <= 3 ? 'r' : 'y'}">剩 ${left} 天</b>`;
+    const when = left === null ? '' : left < 0 ? `<b class="vage r">已過採收日 ${Math.abs(left)} 天</b>` : left === 0 ? '<b class="vage r">今天採收</b>' : `<b class="vage ${left <= 3 ? 'r' : 'y'}">剩 ${left} 天</b>`;
     return `<li data-cid="${esc(x.cid)}"><b>${esc(x.name || '（未命名）')}</b>${x.crop ? '｜' + esc(x.crop) : ''}<br>`
-      + `<small>預計採收 ရိတ်သိမ်းမည့်ရက် ${esc(String(x.harvestDate || '').slice(5).replace('-', '/'))}</small>・${when}<br>`
+      + `<small>預計採收 ရိတ်သိမ်းမည့်ရက် ${esc(String(x.harvestDate || '').slice(5).replace('-', '/'))}</small>${when ? '・' + when : ''}<br>`
       + `<small>最後拜訪 ${lv ? esc(lv.slice(5).replace('-', '/')) : '還沒拜訪'}</small></li>`;
   }
   /* 0.4.82 董事長「快採收紅色提醒條能讓手機發出響聲嗎」：提醒條出現（有新的、今天沒收起）時嗶一聲（Web Audio 產生約 0.5 秒，不用外部音檔）＋震動 [200,100,200]（有才呼叫，iPhone 沒有就略過）。
@@ -852,8 +871,8 @@
   async function renderHome() {
     const h = (await Store.getMeta('home')) || null;
     state.myVisitList = await myVisits(); // 0.4.84 低1：這支手機自己帳號的拜訪，算最後拜訪日用（下拉、快採收、日程、量測週都用 latestVisitDay）
+    const today = await phoneToday(h); // 0.4.87 低3：先校正手機時間（phoneToday 會設 state.clockOff），再畫快採收（剩幾天、今天響過沒都用 mmDay）
     await renderHarvest(h); // 0.4.82 快採收提醒條
-    const today = await phoneToday(h);
     const list = (h ? h.schedule : []).map(s => Object.assign({}, s, { late: s.due < today })); // 逾期用手機的今天重算
     const lastOf = {}; ((await Store.getMeta('farmers')) || []).forEach(f => { lastOf[f.id] = latestVisitDay(f.lastVisit, f.id, state.myVisitList); }); // 0.4.82 日程那列加「距上次拜訪 N 天」；0.4.84 低1 合併這支手機的拜訪
     const soon = {}; ((h && Array.isArray(h.harvestSoon)) ? h.harvestSoon : []).forEach(x => { soon[x.cid] = true; }); // 0.4.82 日程裡快採收的人加標籤
@@ -1261,7 +1280,7 @@
 
   // 業務BUG#1（2號小助手 2026-11-12）：換農民時上一位的打字、照片、錄音、種植失敗會留著，存檔就記到新農民身上
   const FAIL_IDS = ['fWeather', 'fTemp', 'fFert', 'fWater', 'fPest', 'fPestNote', 'fReason'];
-  const visitDirty = () => !!(state.photos.length || state.busyPhotos || state.audio || state.rec || $('note').value.trim() || $('plantFail').checked);
+  const visitDirty = () => !!(state.photos.length || state.busyPhotos || state.audio || state.rec || state.recBusy || $('note').value.trim() || $('plantFail').checked); // 0.4.87 高2：錄音處理中也算
   /** 業務BUG#5：返回首頁前要確認的「填了東西」——除了照片錄音打字，還有沒見到匯報、新客戶資料、結案欄位、盤商結案說明、價格、試作表單 */
   const filled = id => { const e = $n(id); return e.type === 'checkbox' ? !!e.checked : !!String((e.value) || '').trim(); }; // 0.4.75 勾選框看有沒有勾（value 永遠是 on）
   // 結案七欄＋盤商結案說明（formDirty、換客戶共用）；2號 0.4.70 低3（第8任）：漏了結案地區 cRegion、洽談結果 dcOutcome（兩個下拉，預設空白、不會自動帶值）
@@ -1932,7 +1951,7 @@
     const list = [...(files || [])];
     if (!list.length) return;
     const gen = state.formGen;
-    const room = MAX_PHOTOS - state.photos.length;
+    const room = MAX_PHOTOS - state.photos.length - state.busyPhotos; // 0.4.87 中4：還在處理的也要扣（兩批同時處理會超過 6 張，後台只收前 6 張）
     if (room <= 0) { toast(`一次拜訪最多 ${MAX_PHOTOS} 張照片／ဓာတ်ပုံ အများဆုံး ${MAX_PHOTOS} ပုံ`); return; }
     if (list.length > room) toast(`最多 ${MAX_PHOTOS} 張，只取前 ${room} 張／ပထမ ${room} ပုံသာ ယူမည်`);
     btn.classList.add('busy');
@@ -2012,13 +2031,20 @@
   async function toggleRec() {
     const btn = $('recBtn');
     if (state.rec) { state.rec.stop(); return; }
+    // 0.4.87 中5（第11任 0.4.86 清單）：麥克風權限還沒回來時連按兩下會開兩個錄音器，第一個停不掉 → 一進來就設「啟動中」；處理錄音中也不能再開新的
+    if (state.recStarting || state.recBusy) return;
     if (!navigator.mediaDevices || !window.MediaRecorder) { toast('這支手機的瀏覽器不支援錄音／ဤဖုန်း အသံသွင်း မရ'); return; }
-    let stream;
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-    catch (e) { toast('沒有麥克風權限，請到瀏覽器設定允許麥克風／မိုက်ခရိုဖုန်း ခွင့်ပြုချက် ပေးပါ'); return; }
-    const chunks = [];
+    state.recStarting = true;
+    let stream, rec;
     const gen = state.formGen;
-    const rec = new MediaRecorder(stream);
+    try {
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+      catch (e) { toast('沒有麥克風權限，請到瀏覽器設定允許麥克風／မိုက်ခရိုဖုန်း ခွင့်ပြုချက် ပေးပါ'); return; }
+      if (gen !== state.formGen) { stream.getTracks().forEach(t => t.stop()); return; } // 等權限的途中已經換客戶、回首頁：不開
+      try { rec = new MediaRecorder(stream); }
+      catch (e) { stream.getTracks().forEach(t => t.stop()); toast('這支手機錄不了音，請改用打字／အသံသွင်း မရ၊ စာရိုက်ပါ'); return; } // 0.4.87：建錄音器失敗要關麥克風
+    } finally { state.recStarting = false; }
+    const chunks = [];
     state.rec = rec; state.audioSec = 0; state.audio = null;
     rec.ondataavailable = ev => { if (ev.data.size) chunks.push(ev.data); };
     rec.onstop = async () => {
@@ -2026,17 +2052,20 @@
       stream.getTracks().forEach(t => t.stop());
       if (state.rec === rec) state.rec = null;
       if (gen !== state.formGen) return; // 錄到一半回首頁：這段錄音作廢，不能掉進下一筆拜訪（2026-11-11 抓到）
-      btn.classList.remove('rec');
-      btn.querySelector('.label').textContent = '處理錄音中… အသံ ပြင်ဆင်နေ';
-      const raw = new Blob(chunks, { type: rec.mimeType || 'audio/mp4' });
-      let audio;
-      try { audio = await toWav16k(raw); }
-      catch (e) { audio = raw; } // 轉不了就送原檔，後台再判斷
-      if (gen !== state.formGen) return;
-      state.audio = audio;
-      btn.classList.add('done');
-      btn.querySelector('.label').innerHTML = `✓ 已錄 ${state.audioSec} 秒<br>${state.audioSec} စက္ကန့် သွင်းပြီး`;
-      refreshSave();
+      // 0.4.87 高2：按停到轉檔完成的空窗也算「有填東西」（visitDirty、存檔鈕、返回確認都看 recBusy），換客戶會問、會換世代，錄音不會掉到下一位
+      state.recBusy = rec; refreshSave();
+      try {
+        btn.classList.remove('rec');
+        btn.querySelector('.label').textContent = '處理錄音中… အသံ ပြင်ဆင်နေ';
+        const raw = new Blob(chunks, { type: rec.mimeType || 'audio/mp4' });
+        let audio;
+        try { audio = await toWav16k(raw); }
+        catch (e) { audio = raw; } // 轉不了就送原檔，後台再判斷
+        if (gen !== state.formGen) return;
+        state.audio = audio;
+        btn.classList.add('done');
+        btn.querySelector('.label').innerHTML = `✓ 已錄 ${state.audioSec} 秒<br>${state.audioSec} စက္ကန့် သွင်းပြီး`;
+      } finally { if (state.recBusy === rec) state.recBusy = null; refreshSave(); }
     };
     rec.start(1000);
     btn.classList.add('rec'); btn.classList.remove('done');
@@ -2105,10 +2134,10 @@
     $('note').placeholder = noteExample().join('\n'); // 範例跟著農民進度換
     const tp = noMeetProblem() || trialProblem() || closeProblem() || priceProblem() || profileProblem();
     const signNeed = !!state.signOnly && !dealerSignOn(); // 0.4.82 結案分頁的盤商、種子商結案：一定要走「已簽約」才能送（沒見到、還沒按有見到都不能存）
-    const ok = sel && nameOk && !state.rec && !state.busyPhotos && !tp && (isNew || hasContent) && !signNeed && !state.saving; // 業務BUG#4：存檔途中（等定位最多 15 秒）不能再按
+    const ok = sel && nameOk && !state.rec && !state.recBusy && !state.busyPhotos && !tp && (isNew || hasContent) && !signNeed && !state.saving; // 業務BUG#4：存檔途中（等定位最多 15 秒）不能再按
     $('saveBtn').disabled = !ok;
     // 2號 0.4.69 低7（第8任）：存檔中按鈕停用時，提示原本落到「至少做一樣」→ 先說存檔中
-    $('saveHint').textContent = !sel ? '' : state.saving ? '存檔中，請稍等…／သိမ်းနေသည်' : !nameOk ? '請先填名字／အမည် အရင်ဖြည့်ပါ' : state.rec ? '錄音中，先按一下結束錄音／အသံသွင်းနေသည်၊ အရင် ရပ်ပါ' : state.busyPhotos ? `照片處理中（還有 ${state.busyPhotos} 張）… ဓာတ်ပုံ ပြင်ဆင်နေ` : tp ? tp : signNeed ? '盤商、種子商結案：先按「有見到」，再寫簽約內容／ တွေ့ပြီး ကိုနှိပ်ပြီး စာချုပ် အကြောင်းအရာ ရေးပါ' : !ok ? `拍照、上傳照片、錄音、打字${state.cat === '盤商' ? '、記價格' : ''}${$('farmer').value === '__new' || SHOW_PROFILE_ON_VISIT ? '（或改客戶資料）' : ''}至少做一樣／ဓာတ်ပုံ၊ အသံ၊ စာ တစ်ခုခု လုပ်ပါ` : '';
+    $('saveHint').textContent = !sel ? '' : state.saving ? '存檔中，請稍等…／သိမ်းနေသည်' : !nameOk ? '請先填名字／အမည် အရင်ဖြည့်ပါ' : state.recBusy ? '錄音處理中，請稍等…／အသံ ပြင်ဆင်နေ' : state.rec ? '錄音中，先按一下結束錄音／အသံသွင်းနေသည်၊ အရင် ရပ်ပါ' : state.busyPhotos ? `照片處理中（還有 ${state.busyPhotos} 張）… ဓာတ်ပုံ ပြင်ဆင်နေ` : tp ? tp : signNeed ? '盤商、種子商結案：先按「有見到」，再寫簽約內容／ တွေ့ပြီး ကိုနှိပ်ပြီး စာချုပ် အကြောင်းအရာ ရေးပါ' : !ok ? `拍照、上傳照片、錄音、打字${state.cat === '盤商' ? '、記價格' : ''}${$('farmer').value === '__new' || SHOW_PROFILE_ON_VISIT ? '（或改客戶資料）' : ''}至少做一樣／ဓာတ်ပုံ၊ အသံ၊ စာ တစ်ခုခု လုပ်ပါ` : '';
   }
 
   /**
@@ -2278,6 +2307,35 @@ ${state.cat}：${who}
   }
 
   let syncing = false;
+  /**
+   * 0.4.87 高1（app.js 那半）＋中6：同步回「登入失效」時——
+   * ① 先重讀 config：裝置金鑰已經不是送出時那把（上一位登出、換人登入了），這是上一位晚到的回應，什麼都不動（不能把新帳號踢回登入）
+   * ② 正在打卡畫面而且有填東西：先提示、保留表單；等離開打卡畫面（回首頁）才清登入、跳登入頁
+   * ③ 其他：照舊清掉裝置金鑰、跳登入頁（沒上傳的資料留在手機）
+   */
+  async function onLoginExpired(sentKey, msg) {
+    const now = (await Store.getMeta('config')) || {};
+    if (!now.deviceKey || now.deviceKey !== sentKey) return 'stale';
+    if (state.view === 'visit' && formDirty()) {
+      state.loginLost = { key: sentKey, msg };
+      toast('登入已失效：這一筆可以先存在手機裡，回首頁後再重新登入／ဝင်ရောက်မှု သက်တမ်းကုန်၊ ပြန်ဝင်ပါ');
+      return 'later';
+    }
+    await Store.setMeta('config', { gasUrl: now.gasUrl });
+    showLogin(msg);
+    return 'now';
+  }
+  /** 0.4.87 中6：離開打卡畫面時，補做先前延後的「登入失效」（金鑰還是同一把才做） */
+  async function loginLostCheck() {
+    const L = state.loginLost;
+    if (!L) return false;
+    state.loginLost = null;
+    const now = (await Store.getMeta('config')) || {};
+    if (!now.deviceKey || now.deviceKey !== L.key) return false;
+    await Store.setMeta('config', { gasUrl: now.gasUrl });
+    showLogin(L.msg);
+    return true;
+  }
   async function syncNow() {
     const cfg = await getConfig();
     if (!cfg || !cfg.deviceKey) return;
@@ -2286,9 +2344,8 @@ ${state.cat}：${who}
     try {
       let r = await runSync(p => { $('syncState').textContent = `上傳中 တင်နေသည် ${p.index} / ${p.total}…`; });
       if (r && r.code === 'BAD_LOGIN') {
-        // 帳號被停用或重設密碼：手機裡沒傳的資料保留，重新登入後接著傳
-        await Store.setMeta('config', { gasUrl: cfg.gasUrl });
-        showLogin((r.error || '登入已失效') + '。沒上傳的資料還在手機裡，重新登入後會自動補傳。／ပြန်ဝင်ပြီးလျှင် ကျန်သော မှတ်တမ်း တင်မည်။');
+        // 帳號被停用或重設密碼：手機裡沒傳的資料保留，重新登入後接著傳（0.4.87 高1、中6：交給 onLoginExpired）
+        await onLoginExpired(cfg.deviceKey, (r.error || '登入已失效') + '。沒上傳的資料還在手機裡，重新登入後會自動補傳。／ပြန်ဝင်ပြီးလျှင် ကျန်သော မှတ်တမ်း တင်မည်။');
         return;
       }
       if (r && !r.error && !r.sent) {
@@ -2296,7 +2353,7 @@ ${state.cat}：${who}
         const sentAt = Date.now();
         const data = await post(cfg.gasUrl, { action: 'sync', deviceKey: cfg.deviceKey }).catch(() => null);
         if (data && data.ok) await rememberServer(data, sentAt);
-        else if (data && data.code === 'BAD_LOGIN') { await Store.setMeta('config', { gasUrl: cfg.gasUrl }); showLogin(data.message); return; }
+        else if (data && data.code === 'BAD_LOGIN') { await onLoginExpired(cfg.deviceKey, data.message); return; } // 0.4.87 高1、中6
       }
       $('syncState').textContent = r && r.error ? r.error : '';
       // 0.4.81（0.4.80 巡檢中1）：上傳、同步完成 → 種植資料的紀錄切回來要重讀（這裡不馬上重讀，省流量）
