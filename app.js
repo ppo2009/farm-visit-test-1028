@@ -462,7 +462,8 @@
     Object.values(PROFILE_INPUTS).forEach(id => { $(id).value = ''; });
     $('pVarCo').value = ''; // 0.4.31：換客戶就重選公司，不帶上一位的
     state.original = null;
-    resetNoMeet(); // 0.4.38 換客戶就回到「有見到農民」
+    state.cropOpen = false; // 0.4.44 換客戶：作物四格先收起來（沒填才自動展開）
+    resetNoMeet(); // 0.4.38 換客戶就回到「有見到農民」；0.4.44 起改成回到「還沒選有沒有見到」
     if (!val) { box.hidden = true; $('progressBox').hidden = true; refreshTrialBox(); refreshSave(); return; } // 0.4.35 沒選人：進度、作物品種都收起來
     box.hidden = false;
     $('dealerTypeBox').hidden = true; // 盤商、種子商分開進來，種類就是入口，不用再選
@@ -522,12 +523,15 @@
       return;
     }
     const wk = s => { const d = Date.parse(String(s || '').slice(0, 10)); return isFinite(d) ? Math.max(1, Math.ceil((Date.now() - d) / 604800000)) : null; };
-    const head = [c.lastVisit ? `最後拜訪 ${esc(c.lastVisit)}` : '', c.nextDue ? `下次回訪 ${esc(c.nextDue)}` : '', c.crop ? `作物 ${esc(c.crop)}` : '', c.variety ? `品種 ${esc(c.variety)}` : '', c.varCode ? `代碼 ${esc(c.varCode)}` : '']
-      .filter(Boolean).join('｜');
+    // 0.4.44 進度小卡：作物品種代碼搬到卡片下面一行（renderCropSum），卡片只留最後拜訪、下次回訪
+    const head = [c.lastVisit ? `最後拜訪 ${esc(c.lastVisit)}` : '', c.nextDue ? `下次回訪 ${esc(c.nextDue)}` : ''].filter(Boolean).join('｜');
     const tr = trials.map(t => `<li><b>${esc(t.cat)}進行中</b>：${esc(t.item || '（未填品項）')}${t.start ? `，${esc(t.start)} 開始${wk(t.start) ? `（第 ${wk(t.start)} 週）` : ''}` : ''}</li>`).join('');
     const vs = recent.map(v => `<li>${esc(v.time)}｜${esc(v.staff)}｜${esc(CAT_LABEL(v.cat))}${v.closing ? '' : ''}${v.text ? `：${esc(v.text)}` : ''}${v.plantFail ? `<br><span class="pill late">種植失敗</span> ${esc(v.plantFail)}` : ''}${v.closing ? `<br>${esc(v.closing)}` : ''}</li>`).join('');
+    // 0.4.44 只露最近一次拜訪，其他收進「看更早的」
+    const vItems = vs ? vs.split('</li>').filter(Boolean).map(x => x + '</li>') : [];
+    const more = vItems.length > 1 ? `<details><summary>看更早的 ${vItems.length - 1} 筆／ယခင်များ</summary><ul>${vItems.slice(1).join('')}</ul></details>` : '';
     box.innerHTML = `<h3>之前的進度／ယခင် တိုးတက်မှု</h3>${head ? `<p class="sub">${head}</p>` : ''}${tr ? `<ul>${tr}</ul>` : ''}` +
-      (vs ? `<p class="sub">最近的拜訪${remote ? '' : '（沒網路，只有這支手機記的）'}：</p><ul>${vs}</ul>` : '');
+      (vItems.length ? `<p class="sub">上次拜訪${remote ? '' : '（沒網路，只有這支手機記的）'}：</p><ul>${vItems[0]}</ul>${more}` : '');
   }
 
   /* ───── 試作（2B）：開始一件試作、填結果結束（失敗要填失敗紀錄） ───── */
@@ -539,12 +543,24 @@
       .concat(local.filter(l => !l.ended && l.cid === cid && l.cat === cat));
     return list[list.length - 1] || null;
   }
+  /** 0.4.44 進度卡下面一行：作物｜品種｜代碼 ✎修改。資料沒填的話直接展開讓業務補 */
+  function renderCropSum() {
+    const sel = $('farmer').value, show = !!sel && !isDealerCat();
+    const crop = $('pCrop').value, vari = $('pVariety').value, code = $('pVarCode').value.trim();
+    if (show && (sel === '__new' || !crop)) state.cropOpen = true; // 要補資料：打開後就保持開著（選完作物不會突然收起來）
+    const open = show && !!state.cropOpen;
+    $('cropBox').hidden = !open;
+    const sum = $n('cropSum');
+    sum.hidden = !show || open;
+    const t = $n('cropSumText');
+    t.textContent = [crop ? `作物 ${cropText(crop)}` : '', vari ? `品種 ${vari}` : '', code ? `代碼 ${code}` : ''].filter(Boolean).join('｜');
+  }
   async function refreshTrialBox() {
     const sel = $('farmer').value;
     const show = (state.cat === '試作' || state.cat === '推廣') && !!sel;
     $('trialBox').hidden = !show;
     refreshPlantFail(); // 0.4.33 一般拜訪的種植失敗勾選：換類別、換客戶時跟著顯示／收起
-    $('cropBox').hidden = !(sel && !isDealerCat()); // 0.4.35 作物、種子公司、品種：選了農民就看得到
+    renderCropSum(); // 0.4.44 作物、品種、代碼縮成一行；新農民、沒填或按「修改」才展開四格（0.4.35 起選了農民就看得到）
     refreshNoMeet(); // 0.4.38 沒拜訪：換類別、換客戶時跟著顯示／收起
     if (noMeetOn()) { $('trialBox').hidden = true; if (state.trialMode) setTrialMode(null); return; }
     if (!show) { if (state.trialMode) setTrialMode(null); return; }
@@ -608,7 +624,10 @@
     $('noMeetBox').hidden = !shown;
     if (!shown) state.noMeet = false;
     const on = noMeetOn();
-    $('meetYes').setAttribute('aria-pressed', String(!on)); $('meetNo').setAttribute('aria-pressed', String(on));
+    // 0.4.44 董事長「資訊太多」→ 第 3 步只問「有見到嗎」：還沒選，兩顆都不亮、下面拍照打字試作都先不出現
+    const chosen = !shown || on || !!state.meetChosen;
+    $('meetYes').setAttribute('aria-pressed', String(shown && chosen && !on)); $('meetNo').setAttribute('aria-pressed', String(on));
+    const mb = $('meetBody'); if (mb) mb.hidden = !chosen;
     $('noMeetForm').hidden = !on;
     // 沒見到人：不填拜訪內容、試作、種植失敗（照片仍可拍，當作有去過的證明）
     ['noteBox', 'trialBox', 'plantFailBox'].forEach(id => { if (on) $(id).hidden = true; });
@@ -616,16 +635,17 @@
     if (on && !$('nmNext').value) { const d = new Date(Date.now() + 7 * 86400000); $('nmNext').value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
   }
   function setNoMeet(on) {
-    state.noMeet = !!on;
+    state.noMeet = !!on; state.meetChosen = true; // 0.4.44 按過其中一顆才展開
     if (on) { setTrialMode(null); $('plantFail').checked = false; refreshPlantFail(); }
     else { $('noteBox').hidden = false; }
     refreshNoMeet();
     if (!on) refreshTrialBox();
     refreshSave();
   }
-  function resetNoMeet() { state.noMeet = false; $('nmReason').selectedIndex = 0; $('nmNote').value = ''; $('nmNext').value = ''; $('noteBox').hidden = false; refreshNoMeet(); }
+  function resetNoMeet() { state.noMeet = false; state.meetChosen = false; $('nmReason').selectedIndex = 0; $('nmNote').value = ''; $('nmNext').value = ''; $('noteBox').hidden = false; refreshNoMeet(); }
   /** 沒拜訪時要的日期：必須是明天到一年內 */
   function noMeetProblem() {
+    if (noMeetShown() && !state.noMeet && !state.meetChosen) return '請先選：有見到嗎？／တွေ့ခဲ့သလား အရင်ရွေးပါ'; // 0.4.44
     if (!noMeetOn()) return '';
     const v = $('nmNext').value, d = new Date(), today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     const max = new Date(Date.now() + 365 * 86400000), maxS = `${max.getFullYear()}-${pad(max.getMonth() + 1)}-${pad(max.getDate())}`;
@@ -1270,6 +1290,7 @@ ${state.cat}：${who}
       $('visit').scrollIntoView({ block: 'start' });
     });
     $('relocateBtn').addEventListener('click', locate);
+    $n('cropEditBtn').addEventListener('click', () => { state.cropOpen = true; renderCropSum(); }); // 0.4.44
     $('addPriceBtn').addEventListener('click', () => addPriceRow());
     $('trialStartBtn').addEventListener('click', () => setTrialMode(state.trialMode === 'start' ? null : 'start'));
     $('trialEndBtn').addEventListener('click', () => setTrialMode(state.trialMode === 'end' ? null : 'end'));

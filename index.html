@@ -70,7 +70,14 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
 @media (max-width:400px){.htabs{gap:2px}.htabs button{font-size:1rem;padding:6px 2px}}
 li.assigned{display:block}
 li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px}
-.progress{border:1.5px solid var(--paddy);border-radius:12px;padding:12px 14px;margin:14px 0 18px;background:var(--surface);min-height:120px}
+.progress{border:1.5px solid var(--paddy);border-radius:12px;padding:10px 14px;margin:12px 0 6px;background:var(--surface)} /* 0.4.44 小卡：拿掉最小高度 */
+.progress details summary{cursor:pointer;color:var(--muted);font-size:.9rem}
+.cropsum{font-size:.95rem;color:var(--muted);margin:0 0 12px;padding:0 4px}
+.cropsum[hidden]{display:none}
+.media2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.big.recsmall{min-height:44px;flex-direction:row;gap:8px;margin-top:8px;width:100%}
+.big.recsmall svg{width:20px;height:20px}
+.meetswitch .btn2[aria-pressed="false"]{background:none}
 .progress h3{margin:0 0 6px;font-size:1rem;color:var(--paddy)}
 .progress ul{margin:6px 0 0;padding-left:1.1em}
 .progress li{margin:4px 0}
@@ -248,6 +255,11 @@ footer{margin-top:18px;text-align:center}
       <label class="lab" for="farmer" id="farmerLab">1. 選擇農民<span class="my">လယ်သမား ရွေးပါ</span></label>
       <select id="farmer"></select>
     </div>
+    <!-- 0.4.35 董事長：選擇農民後跳出這位農民之前的進度（農民進度表）；沒有進度就跳出新增（補齊）農民資料。
+         0.4.44 董事長：照四步驟（選農民→進度小卡→有見到嗎→存檔）移到選農民正下方 -->
+    <div class="progress" id="progressBox" hidden aria-live="polite"></div>
+    <!-- 0.4.44 作物、品種、代碼縮成進度卡下面一行；按「修改」或資料沒填才展開四格 -->
+    <div class="cropsum" id="cropSum" hidden><span id="cropSumText"></span> <button type="button" class="link" id="cropEditBtn">✎ 修改／ပြင်</button></div>
     <!-- 0.4.35 董事長：「試作農民、一般農民怎麼沒有品種、編號選項」→ 作物、種子公司、品種（代碼）從收起來的客戶資料搬出來，選了農民就看得到 -->
     <div class="fields croprow" id="cropBox" hidden>
       <div><label class="lab" for="pCrop">作物<span class="my">သီးနှံ</span></label><select id="pCrop"></select></div>
@@ -277,24 +289,21 @@ footer{margin-top:18px;text-align:center}
       </div>
     </details>
 
-    <!-- 客戶資料緊接在選擇農民下面（董事長 2026-11-12 手稿：新農民名字、電話、作物選單、品種＝公司名＋代碼選單、面積、種植日期可編輯）；接著拍照、打字 -->
-    <div class="three" id="mediaRow">
-      <label class="big" id="photoBtn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
-        <span class="label">拍照</span><span class="my">ဓာတ်ပုံ ရိုက်</span>
-        <input type="file" id="photoInput" accept="image/*" capture="environment" aria-label="拍照">
-      </label>
-      <label class="big" id="albumBtn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/></svg>
-        <span class="label">照片上傳</span><span class="my">ဓာတ်ပုံ တင်</span>
-        <input type="file" id="albumInput" accept="image/*" multiple aria-label="從相簿選照片">
-      </label>
-      <button type="button" class="big" id="recBtn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
-        <span class="label">錄音</span><span class="my">အသံ သွင်း</span>
-      </button>
+    <!-- 0.4.38 董事長流程「農民進度 → 拜訪 → NO（沒見到、農民拒絕）→ 下次再訪」 -->
+    <div class="trial" id="noMeetBox" hidden>
+      <div class="meetswitch">
+        <button type="button" class="btn2" id="meetYes" aria-pressed="true">有見到農民，開始拜訪<span class="my">တွေ့ပြီ၊ စတင်မည်</span></button>
+        <button type="button" class="btn2" id="meetNo" aria-pressed="false">沒見到／農民拒絕 → 下次再訪<span class="my">မတွေ့ / ငြင်း → နောက်မှ</span></button>
+      </div>
+      <div class="fields" id="noMeetForm" hidden>
+        <div class="row2">
+          <div><label class="lab" for="nmReason">原因<span class="my">အကြောင်းရင်း</span></label>
+            <select id="nmReason"><option value="沒見到農民">沒見到農民／မတွေ့</option><option value="農民拒絕">農民拒絕／ငြင်းဆို</option><option value="其他">其他／အခြား</option></select></div>
+          <div><label class="lab" for="nmNext">下次再訪日期<span class="my">နောက်တစ်ကြိမ် သွားမည့်ရက်</span></label><input type="date" id="nmNext"></div>
+        </div>
+        <div><label class="lab" for="nmNote">說明（可不填）<span class="my">မှတ်ချက်</span></label><input type="text" id="nmNote" maxlength="300" placeholder="例：農民去外地，下週回來／ခရီးထွက်၊ နောက်အပတ် ပြန်လာမည်"></div>
+      </div>
     </div>
-    <div class="thumbs" id="thumbs"></div>
 
     <!-- 結案：農民收成賣掉後（董事長 2026-11-12 手稿：選擇農民、拍照、圖片上傳、賣給 1 地區 2 價格 3 產量 4 收購客戶 5 電話） -->
     <div id="closeBox" class="trial" hidden>
@@ -319,24 +328,26 @@ footer{margin-top:18px;text-align:center}
       <p class="sub">送出後要等主管確認才算結案；主管退回就照常往來。<br><span class="my">မန်နေဂျာ အတည်ပြုမှ ပိတ်သိမ်းမည်။</span></p>
     </div>
 
-    <!-- 0.4.35 董事長：選擇農民後跳出這位農民之前的進度（農民進度表）；沒有進度就跳出新增（補齊）農民資料。
-         位置照董事長截圖：拍照／照片上傳／錄音下面、打字上面，空一大格 -->
-    <div class="progress" id="progressBox" hidden aria-live="polite"></div>
-    <!-- 0.4.38 董事長流程「農民進度 → 拜訪 → NO（沒見到、農民拒絕）→ 下次再訪」 -->
-    <div class="trial" id="noMeetBox" hidden>
-      <div class="meetswitch">
-        <button type="button" class="btn2" id="meetYes" aria-pressed="true">有見到農民，開始拜訪<span class="my">တွေ့ပြီ၊ စတင်မည်</span></button>
-        <button type="button" class="btn2" id="meetNo" aria-pressed="false">沒見到／農民拒絕 → 下次再訪<span class="my">မတွေ့ / ငြင်း → နောက်မှ</span></button>
-      </div>
-      <div class="fields" id="noMeetForm" hidden>
-        <div class="row2">
-          <div><label class="lab" for="nmReason">原因<span class="my">အကြောင်းရင်း</span></label>
-            <select id="nmReason"><option value="沒見到農民">沒見到農民／မတွေ့</option><option value="農民拒絕">農民拒絕／ငြင်းဆို</option><option value="其他">其他／အခြား</option></select></div>
-          <div><label class="lab" for="nmNext">下次再訪日期<span class="my">နောက်တစ်ကြိမ် သွားမည့်ရက်</span></label><input type="date" id="nmNext"></div>
-        </div>
-        <div><label class="lab" for="nmNote">說明（可不填）<span class="my">မှတ်ချက်</span></label><input type="text" id="nmNote" maxlength="300" placeholder="例：農民去外地，下週回來／ခရီးထွက်၊ နောက်အပတ် ပြန်လာမည်"></div>
-      </div>
+    <!-- 0.4.44 第 3 步：按「有見到」之後才出現拍照、打字、試作、價格（還沒選就不顯示，畫面比較單純） -->
+    <div id="meetBody">
+    <div class="two media2" id="mediaRow">
+      <label class="big" id="photoBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        <span class="label">拍照</span><span class="my">ဓာတ်ပုံ ရိုက်</span>
+        <input type="file" id="photoInput" accept="image/*" capture="environment" aria-label="拍照">
+      </label>
+      <label class="big" id="albumBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/></svg>
+        <span class="label">照片上傳</span><span class="my">ဓာတ်ပုံ တင်</span>
+        <input type="file" id="albumInput" accept="image/*" multiple aria-label="從相簿選照片">
+      </label>
     </div>
+    <div class="thumbs" id="thumbs"></div>
+    <!-- 0.4.44 董事長：資訊太多 → 錄音不常用，改成照片下面一顆小按鈕 -->
+    <button type="button" class="big recsmall" id="recBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        <span class="label">錄音</span><span class="my">အသံ သွင်း</span>
+      </button>
 
     <div id="noteBox">
       <label class="lab" for="note" id="noteLab">打字<span class="my">စာရိုက်</span></label>
@@ -420,6 +431,8 @@ footer{margin-top:18px;text-align:center}
       <button type="button" class="btn2" id="addPriceBtn" style="margin-top:10px">＋ 加一筆價格／ဈေးနှုန်း ထပ်ထည့်</button>
     </div>
 
+
+    </div>
 
     <div class="gps"><span id="gps">📍 定位中… တည်နေရာ ရှာနေသည်</span> <button type="button" class="link" id="relocateBtn">重新定位／ပြန်ရှာ</button></div>
 
