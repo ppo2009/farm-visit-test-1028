@@ -7,6 +7,8 @@
      新元件一律用 $n：找不到就給一個不顯示的假元件，舊頁面照樣能用（重新整理後就是新版） */
   const NO_EL = () => ({ hidden: true, value: '', innerHTML: '', textContent: '', dataset: {}, selectedIndex: 0, options: [], addEventListener() {}, scrollIntoView() {}, setAttribute() {} });
   const $n = id => document.getElementById(id) || NO_EL();
+  /* 0.4.48 董事長：「客戶資料在這邊應該不用顯示，建檔的時候就要有了」→ 拜訪舊客戶時先不顯示作物／品種／代碼與客戶資料（暫時拿掉，改回 true 就恢復）；新增客戶照常填 */
+  const SHOW_PROFILE_ON_VISIT = false;
   const pad = n => String(n).padStart(2, '0');
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const MAX_REC_SEC = 90;
@@ -473,7 +475,7 @@
     state.cropOpen = false; // 0.4.44 換客戶：作物四格先收起來（沒填才自動展開）
     resetNoMeet(); // 0.4.38 換客戶就回到「有見到農民」；0.4.44 起改成回到「還沒選有沒有見到」
     if (!val) { box.hidden = true; $('progressBox').hidden = true; refreshTrialBox(); refreshSave(); return; } // 0.4.35 沒選人：進度、作物品種都收起來
-    box.hidden = false;
+    box.hidden = val !== '__new' && !SHOW_PROFILE_ON_VISIT; // 0.4.48 舊客戶不顯示客戶資料（資料照樣讀進來，開始試作時的品種代碼仍用得到）
     $('dealerTypeBox').hidden = true; // 盤商、種子商分開進來，種類就是入口，不用再選
     if (val === '__new') {
       box.open = true;
@@ -525,7 +527,8 @@
     const recent = remote ? remote : local.map(v => ({ time: new Date(v.deviceTime || 0).toISOString().slice(0, 10), staff: '我', cat: CAT_LABEL(v.category || ''), text: v.text || '', plantFail: '', closing: '' }));
     if (!c.lastVisit && !trials.length && !recent.length) {
       // 沒有任何進度：跳出新增（補齊）農民資料
-      box.innerHTML = '<h3>之前的進度／ယခင် တိုးတက်မှု</h3><p>這位農民還沒有拜訪紀錄，請先把下面的農民資料填完整（跟新增農民一樣）。<br><span class="my">မှတ်တမ်း မရှိသေး၊ လယ်သမား အချက်အလက် ဖြည့်ပါ</span></p>';
+      box.innerHTML = SHOW_PROFILE_ON_VISIT ? '<h3>之前的進度／ယခင် တိုးတက်မှု</h3><p>這位農民還沒有拜訪紀錄，請先把下面的農民資料填完整（跟新增農民一樣）。<br><span class="my">မှတ်တမ်း မရှိသေး၊ လယ်သမား အချက်အလက် ဖြည့်ပါ</span></p>'
+        : '<h3>之前的進度／ယခင် တိုးတက်မှု</h3><p>這是第一次拜訪這位客戶。<br><span class="my">ပထမဆုံး သွားရောက်မှု</span></p>'; // 0.4.48
       $('profileBox').open = true;
       $('profileTitle').textContent = '補齊農民資料（還沒有拜訪紀錄）／လယ်သမား အချက်အလက် ဖြည့်ရန်';
       return;
@@ -553,7 +556,7 @@
   }
   /** 0.4.44 進度卡下面一行：作物｜品種｜代碼 ✎修改。資料沒填的話直接展開讓業務補 */
   function renderCropSum() {
-    const sel = $('farmer').value, show = !!sel && !isDealerCat();
+    const sel = $('farmer').value, show = !!sel && !isDealerCat() && (sel === '__new' || SHOW_PROFILE_ON_VISIT); // 0.4.48 舊客戶不顯示
     const crop = $('pCrop').value, vari = $('pVariety').value, code = $('pVarCode').value.trim();
     if (show && (sel === '__new' || !crop)) state.cropOpen = true; // 要補資料：打開後就保持開著（選完作物不會突然收起來）
     const open = show && !!state.cropOpen;
