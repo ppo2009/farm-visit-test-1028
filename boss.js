@@ -226,6 +226,18 @@
       // 點業務卡片：到客戶頁，只看這位業務要注意的客戶
       state.cf = { q: '', staff: el.dataset.staff, area: '', type: '', show: 'attn' }; state.trial = null; state.tab = 'trial'; render();
     }));
+    // 0.4.33 主管確認／退回結案
+    $('panel').querySelectorAll('[data-closedecide]').forEach(b => b.addEventListener('click', async () => {
+      const ok = b.dataset.closedecide === 'confirm';
+      if (!confirm(ok ? '確認這位農民結案？確認後不再提醒回訪，進行中的試作也會結束。' : '退回這筆結案？客戶照常追蹤，當作沒結案。')) return;
+      $('panel').querySelectorAll('[data-closedecide]').forEach(x => { x.disabled = true; });
+      let r;
+      try { r = await api({ action: 'closeDecide', visitId: b.dataset.vid, decision: b.dataset.closedecide }); } catch (e) { r = { ok: false, message: '連不上伺服器' }; }
+      if (r.closings) state.data.closings = r.closings;
+      state.closeMsg = r.ok ? (ok ? '已確認結案' : '已退回') : '⚠ ' + (r.message || '處理失敗');
+      if (r.ok && ok) { load(); return; } // 確認結案會改客戶狀態、試作：整份重讀
+      render();
+    }));
     $('panel').querySelectorAll('[data-play]').forEach(el => el.addEventListener('click', () => playAudio(el)));
     $('panel').querySelectorAll('[data-speak]').forEach(el => el.addEventListener('click', () => speak(el)));
     $('panel').querySelectorAll('[data-report]').forEach(el => el.addEventListener('click', () => downloadReport(el)));
@@ -318,6 +330,7 @@
     return `<li>${catPill(v)}<b><a href="javascript:void 0" data-go="${esc(v.cid)}">${esc(v.name)}</a></b>｜${esc(v.staff)}｜${esc(v.time)}${flag}${st}<br>
       ${v.summary ? esc(v.summary) + `<br><span class="sub">問題：${esc(v.issue || '—')}　下一步：${esc(v.next || '—')}</span>` : `<span class="sub">${esc(pending)}</span>`}
       ${v.closing ? `<br><span class="sub">${esc(v.closing)}</span>` : ''}${v.prices ? `<br><span class="sub pre">價格：${esc(v.prices)}</span>` : ''}
+      ${v.plantFail ? `<br><span class="pill p-red">種植失敗</span> <span class="sub">${esc(v.plantFail)}</span>` : ''}
       ${v.nav ? `<br><a href="${esc(v.nav)}" target="_blank" rel="noopener">導航 ↗</a>` : ''}${soundBtns(v)}</li>`;
   }
 
@@ -373,7 +386,18 @@
   }
 
   function renderToday() {
-    return staffCards() + renderTodayLists();
+    return renderClosings() + staffCards() + renderTodayLists();
+  }
+  /** 待確認結案（0.4.33 董事長：怕業務結案按錯 → 主管確認才算）：有才顯示，放總覽最上面 */
+  function renderClosings() {
+    const list = state.data.closings || [];
+    if (!list.length) return '';
+    return `<section class="closings"><h3><span class="pill p-red">待確認結案 ${list.length} 筆</span> <span class="sub">業務按了結案，確認後才真的結案；按錯就退回</span></h3>
+      <ul class="list">${list.map(c => `<li><b><a href="javascript:void 0" data-go="${esc(c.cid)}">${esc(c.name)}</a></b>｜${esc(c.staff)}｜${esc(c.date)}<br>
+        <span class="sub">賣給 ${esc(c.buyer || '—')}（${esc(c.region || '地區未填')}）｜價格 ${esc(c.price)} ${esc(c.priceUnit || '')}｜產量 ${esc(c.yield)} ${esc(c.yieldUnit || '')}${c.phone ? '｜電話 ' + esc(c.phone) : ''}</span><br>
+        <button class="btn primary" type="button" data-closedecide="confirm" data-vid="${esc(c.visitId)}">確認結案</button>
+        <button class="btn" type="button" data-closedecide="reject" data-vid="${esc(c.visitId)}">退回（不結案）</button></li>`).join('')}</ul>
+      <p class="sub" id="closeMsg" aria-live="polite">${esc(state.closeMsg || '')}</p></section>`;
   }
   function renderTodayLists() {
     const cs = active();
@@ -498,7 +522,7 @@
         <div class="box"><div class="photos">${v.photos.length ? v.photos.map(id => `<div class="photo" data-photo="${esc(id)}">載入中…</div>`).join('') : '<div class="photo">沒有照片</div>'}</div>
         <dl class="kv"><dt>${dealer ? '行情' : '作物'}</dt><dd>${esc(v.crop || '—')}</dd><dt>反應</dt><dd>${esc(v.feedback || '—')}</dd><dt>問題</dt><dd>${esc(v.issue || '—')}</dd><dt>下一步</dt><dd>${esc(v.next || '—')}</dd>
         <dt>摘要</dt><dd>${esc(v.summary || noSummaryText(v))}</dd>
-        ${v.closing ? `<dt>結案</dt><dd>${esc(v.closing)}</dd>` : ''}${v.text ? `<dt>打字</dt><dd class="pre">${esc(v.text)}</dd>` : ''}${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') || '<p class="empty">這位客戶還沒有拜訪紀錄。</p>'}</div>`;
+        ${v.closing ? `<dt>結案</dt><dd>${esc(v.closing)}</dd>` : ''}${v.plantFail ? `<dt>種植失敗</dt><dd>${esc(v.plantFail)}</dd>` : ''}${v.text ? `<dt>打字</dt><dd class="pre">${esc(v.text)}</dd>` : ''}${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') || '<p class="empty">這位客戶還沒有拜訪紀錄。</p>'}</div>`;
   }
 
   /** 一張照片只下載一次（下載中的也共用同一個請求）；換了畫面，舊畫面的迴圈就停，不再下載別的客戶的照片（2026-11-11 抓到） */

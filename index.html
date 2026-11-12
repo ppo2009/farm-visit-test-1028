@@ -290,7 +290,7 @@ footer{margin-top:18px;text-align:center}
       </div>
       <div><label class="lab" for="cBuyer">4. 收購客戶（必填）<span class="my">ဝယ်သူ (မဖြစ်မနေ)</span></label><input type="text" id="cBuyer" maxlength="80" placeholder="例：Golden 糧行／U Aung"></div>
       <div><label class="lab" for="cPhone">5. 電話<span class="my">ဖုန်း</span></label><input type="tel" id="cPhone" maxlength="30" inputmode="tel" placeholder="例：09 123 456 789"></div>
-      <p class="sub">存檔後這位農民就結案（不再提醒回訪）；下一季要再追蹤，請主管在試算表把狀態改回「試作中」。<br>သိမ်းပြီးလျှင် ဤလယ်သမား ပိတ်သိမ်းမည်။</p>
+      <p class="sub" id="closeHint">只能選自己負責的農民。存檔後這位農民就結案（不再提醒回訪）。<br>ကိုယ်တာဝန်ယူထားသော လယ်သမားသာ ရွေးနိုင်သည်။</p>
     </div>
 
     <div id="noteBox">
@@ -349,6 +349,12 @@ footer{margin-top:18px;text-align:center}
           <div><label class="lab" for="fReason">失敗原因<span class="my">မအောင်မြင်ရသည့် အကြောင်းရင်း</span></label><textarea id="fReason" maxlength="1000" placeholder="例：開花期連續 10 天沒下雨，田裡缺水，穗粒很少&#10;ပန်းပွင့်ချိန် ရက် ၁၀ မိုးမရွာ၍ ရေမလုံ၊ အစေ့နည်း"></textarea></div>
         </div>
       </div>
+    </div>
+
+    <!-- 0.4.33 董事長：一般拜訪的農民也會種植失敗，要寫原因 → 勾了就用試作那一組失敗欄位（全部必填） -->
+    <div id="plantFailBox" class="trial" hidden>
+      <label class="chk"><input type="checkbox" id="plantFail"> 這次發現<b>種植失敗</b>（要寫原因）<span class="my">စိုက်ပျိုးမှု မအောင်မြင် (အကြောင်းရင်း ဖြည့်ရန်)</span></label>
+      <div id="plantFailSlot"></div>
     </div>
 
     <div id="priceBox" hidden>

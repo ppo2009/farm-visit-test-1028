@@ -312,6 +312,10 @@
     $('cRegion').value = keepR;
     fillCrops($('pCrop').value);
     fillVarieties();
+    // 0.4.33：後台開了「結案要主管確認」時，結案提示改寫
+    $('closeHint').innerHTML = o.closeConfirm
+      ? '只能選自己負責的農民。送出後要等<b>主管確認</b>才算結案（確認後不再提醒回訪）；主管退回就當沒結案。<br>ကိုယ်တာဝန်ယူထားသော လယ်သမားသာ ရွေးနိုင်သည်။ မန်နေဂျာ အတည်ပြုမှ ပိတ်သိမ်းမည်။'
+      : '只能選自己負責的農民。存檔後這位農民就結案（不再提醒回訪）。<br>ကိုယ်တာဝန်ယူထားသော လယ်သမားသာ ရွေးနိုင်သည်။';
   }
   /**
    * 作物、品種改成下拉選單（董事長 2026-11-12 手稿：作物有選單可選；品種＝公司名＋代碼，有選單）。
@@ -373,9 +377,17 @@
   async function setCat(cat) {
     if (!CAT_TYPES[cat] || cat === state.cat) return;
     const sameTypes = CAT_TYPES[cat][0] === CAT_TYPES[state.cat][0];
+    const closingSwitch = (cat === '結案') !== (state.cat === '結案'); // 0.4.33：切進／切出結案，農民名單不一樣（結案只列自己的）
     state.cat = cat;
     applyCatLabels();
-    if (sameTypes) { resetTrialForm(); refreshTrialBox(); refreshSave(); return; }
+    if (sameTypes && !closingSwitch) { resetTrialForm(); refreshTrialBox(); refreshSave(); return; }
+    if (sameTypes) {
+      const before0 = $('farmer').value;
+      await loadFarmers();
+      if ($('farmer').value === before0) { resetTrialForm(); refreshTrialBox(); refreshSave(); return; } // 選的人還在名單：資料照留
+      if (before0 && before0 !== '__new') toast('結案只能選自己負責的農民／ကိုယ်တာဝန်ယူထားသော လယ်သမားသာ');
+      onFarmerChange(); return;
+    }
     const before = $('farmer').value;
     await loadFarmers();
     if (before === '__new' && $('farmer').value === '__new') { $('profileTitle').textContent = `新${state.cat}資料／${CAT_MY[state.cat]} အသစ်`; refreshSave(); return; } // 正在填的新客戶資料不清掉
@@ -412,7 +424,9 @@
     const types = CAT_TYPES[state.cat];
     const sel = $('farmer');
     const keep = sel.value;
-    const mine = all.filter(f => types.indexOf(f.type || '農民') >= 0);
+    let mine = all.filter(f => types.indexOf(f.type || '農民') >= 0);
+    // 0.4.33 董事長：怕業務結案按錯 →「結案」只列自己負責的農民（手機剛新增還沒上傳的也算自己的）；其他類別照舊全部列
+    if (state.cat === '結案') { const me = String(((await getConfig()) || {}).name || ''); mine = mine.filter(f => f.pending || String(f.staff || '') === me); }
     sel.innerHTML = '<option value="">— 請選擇 ရွေးပါ —</option>' +
       mine.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}${f.crop ? '｜' + esc(f.crop) : ''}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`).join('') +
       `<option value="__new">${isDealerCat() ? `＋ 新增${state.cat}（${CAT_MY[state.cat]} အသစ်）` : '＋ 新增農民（ လယ်သမား အသစ် ）'}</option>`;
@@ -468,6 +482,7 @@
     const sel = $('farmer').value;
     const show = (state.cat === '試作' || state.cat === '推廣') && !!sel;
     $('trialBox').hidden = !show;
+    refreshPlantFail(); // 0.4.33 一般拜訪的種植失敗勾選：換類別、換客戶時跟著顯示／收起
     if (!show) { if (state.trialMode) setTrialMode(null); return; }
     $('trialLab').innerHTML = `${esc(state.cat)}<span class="my">${CAT_MY[state.cat] || ''}</span>`;
     $('trialStartBtn').innerHTML = `＋ 開始新的${state.cat}<span class="my">${CAT_MY[state.cat]} အသစ် စတင်</span>`;
@@ -486,18 +501,41 @@
     $('trialStartBtn').setAttribute('aria-pressed', String(m === 'start')); $('trialEndBtn').setAttribute('aria-pressed', String(m === 'end'));
     if (m === 'start' && !$('tStart').value) { const d = new Date(); $('tStart').value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
     if (m === 'end' && !$('tYieldUnit').value) $('tYieldUnit').value = (state.options && state.options.yieldUnit) || '籃';
-    $('failBox').hidden = !(m === 'end' && $('tOutcome').value === '失敗');
+    $('failBox').hidden = !((m === 'end' && $('tOutcome').value === '失敗') || plantFailOn());
     refreshSave();
   }
+  /* 一般拜訪的種植失敗（0.4.33）：同一組失敗欄位（failBox）搬到一般拜訪下面用；切回試作結束時再搬回去 */
+  const plantFailOn = () => state.cat === '農戶' && !!$('farmer').value && $('plantFail').checked;
+  function refreshPlantFail() {
+    const show = state.cat === '農戶' && !!$('farmer').value;
+    $('plantFailBox').hidden = !show;
+    if (!show) $('plantFail').checked = false;
+    const box = $('failBox');
+    if (plantFailOn()) { if (box.parentElement !== $('plantFailSlot')) $('plantFailSlot').appendChild(box); box.hidden = false; }
+    else {
+      if (box.parentElement === $('plantFailSlot')) $('trialEndForm').appendChild(box);
+      box.hidden = !(state.trialMode === 'end' && $('tOutcome').value === '失敗');
+    }
+    refreshSave();
+  }
+  /** 失敗紀錄全部必填（董事長 2026-11-12）；病蟲害選「有」時說明也要填。回傳缺哪些 */
+  function failMissing() {
+    const miss = [['fWeather', '天氣'], ['fTemp', '溫度'], ['fFert', '施肥情況'], ['fWater', '水分'], ['fPest', '病蟲害'], ['fReason', '失敗原因']]
+      .filter(([id]) => !String($(id).value).trim()).map(([, n]) => n);
+    if ($('fPest').value === '有' && !$('fPestNote').value.trim()) miss.push('病蟲害說明');
+    return miss;
+  }
+  const collectFailure = () => ({ weather: $('fWeather').value, temp: $('fTemp').value, fert: $('fFert').value.trim(), water: $('fWater').value, pest: $('fPest').value, pestNote: $('fPestNote').value.trim(), reason: $('fReason').value.trim() });
   function trialProblem() {
     if (state.trialMode === 'end' && !state.activeTrial) return `找不到進行中的${state.cat}，請重新選一次客戶／${CAT_MY[state.cat]} ရှာမတွေ့၊ ဖောက်သည် ပြန်ရွေးပါ`; // T9
     if (state.trialMode === 'start' && !$('tItem').value.trim()) return `請填${state.cat}品項／ပစ္စည်းအမည် ဖြည့်ပါ`;
     if (state.trialMode === 'end' && $('tOutcome').value === '失敗') {
-      // 失敗紀錄全部必填，沒填就存不了（董事長 2026-11-12）；病蟲害選「有」時說明也要填
-      const miss = [['fWeather', '天氣'], ['fTemp', '溫度'], ['fFert', '施肥情況'], ['fWater', '水分'], ['fPest', '病蟲害'], ['fReason', '失敗原因']]
-        .filter(([id]) => !String($(id).value).trim()).map(([, n]) => n);
-      if ($('fPest').value === '有' && !$('fPestNote').value.trim()) miss.push('病蟲害說明');
+      const miss = failMissing();
       if (miss.length) return `${state.cat}失敗要填：${miss.join('、')}／မအောင်မြင်မှု မှတ်တမ်း မပြည့်စုံသေး`;
+    }
+    if (plantFailOn()) {
+      const miss = failMissing();
+      if (miss.length) return `種植失敗要填：${miss.join('、')}／မအောင်မြင်မှု မှတ်တမ်း မပြည့်စုံသေး`;
     }
     return '';
   }
@@ -536,7 +574,7 @@
     const t = state.activeTrial;
     const o = { op: 'end', id: t.id, outcome: $('tOutcome').value, height: $('tHeight').value, grains: $('tGrains').value, yield: $('tYield').value,
       yieldUnit: $('tYieldUnit').value.trim(), score: $('tScore').value, comment: $('tComment').value.trim(), other: $('tOther').value.trim() };
-    if (o.outcome === '失敗') o.failure = { weather: $('fWeather').value, temp: $('fTemp').value, fert: $('fFert').value.trim(), water: $('fWater').value, pest: $('fPest').value, pestNote: $('fPestNote').value.trim(), reason: $('fReason').value.trim() };
+    if (o.outcome === '失敗') o.failure = collectFailure();
     // 開始那筆還沒上傳：結束也帶著開始的資料，萬一順序顛倒後台照樣建得出來
     if (t.pending) o.startInfo = { item: t.item, dosage: t.dosage, start: t.start };
     return o;
@@ -544,8 +582,10 @@
   function resetTrialForm() {
     ['tItem', 'tDosage', 'tStart', 'tHeight', 'tGrains', 'tYield', 'tYieldUnit', 'tComment', 'tOther', 'fTemp', 'fFert', 'fPestNote', 'fReason', 'tScore', 'fWeather', 'fWater', 'fPest'].forEach(id => { $(id).value = ''; });
     $('tOutcome').value = '成功';
+    $('plantFail').checked = false; // 0.4.33
     state.activeTrial = null;
     setTrialMode(null);
+    refreshPlantFail();
     $('trialBox').hidden = true;
   }
 
@@ -567,6 +607,13 @@
   function locate() {
     const box = $('gps');
     state.gps = null;
+    // 0.4.33 董事長：測試期間定位先「假打開」（在電腦上測開始新的試作）。config.js 有 testFakeGps 才生效，正式上線前拿掉
+    const fake = typeof FARM_CONFIG !== 'undefined' && FARM_CONFIG.testFakeGps;
+    if (fake && isFinite(fake.lat) && isFinite(fake.lng)) {
+      state.gps = { lat: Number(fake.lat), lng: Number(fake.lng), acc: 0 };
+      box.innerHTML = `📍 <b>測試用假定位</b> ${state.gps.lat}, ${state.gps.lng}（正式上線前會關掉）／စမ်းသပ်ရန် တည်နေရာ`;
+      return Promise.resolve();
+    }
     if (!('geolocation' in navigator)) { box.textContent = '📍 這支手機不支援定位，會標記「無定位」／ဤဖုန်း တည်နေရာ မရ'; return Promise.resolve(); }
     box.textContent = '📍 定位中…（最多 30 秒）တည်နေရာ ရှာနေသည်';
     return new Promise(done => navigator.geolocation.getCurrentPosition(p => {
@@ -831,6 +878,12 @@
     if (!state.gps) { toast('再抓一次位置… တည်နေရာ ပြန်ရှာနေ'); await Promise.race([locate(), new Promise(r => setTimeout(r, 15000))]); }
     if (gen0 !== state.formGen || $('farmer').value !== sel0) { toast('等定位時換了畫面或客戶，這次沒有存，請再按一次儲存／မသိမ်းရသေး၊ ထပ်နှိပ်ပါ'); refreshSave(); return; }
     if (!sel0) { toast('請先選客戶／ဖောက်သည် ရွေးပါ'); refreshSave(); return; }
+    // 0.4.33 董事長：怕業務結案按錯 → 送出前再確認一次（寫出農民、價格、產量、收購客戶）
+    if (state.cat === '結案') {
+      const who = ($('farmer').selectedOptions && $('farmer').selectedOptions[0] ? $('farmer').selectedOptions[0].text : '') || $('pName').value;
+      const msg = `確定要把這位農民結案嗎？\nလယ်သမား ပိတ်သိမ်းမှာ သေချာပါသလား\n\n農民：${who}\n價格：${$('cPrice').value}\n產量：${$('cYield').value}\n收購客戶：${$('cBuyer').value}\n\n${state.options && state.options.closeConfirm ? '送出後要等主管確認才算結案。' : '存檔後這位農民就結案，不再提醒回訪。'}`;
+      if (!confirm(msg)) { refreshSave(); return; }
+    }
     const sel = $('farmer').value;
     const isNew = sel === '__new';
     const now = Date.now(), d = new Date(now);
@@ -858,6 +911,7 @@
       account: cfg.account || '',
       category: state.cat === '結案' ? '農戶' : state.cat, // 結案記成農民拜訪（統計照舊），另外帶 closing
       closing: collectClosing(),
+      plantFailure: plantFailOn() ? collectFailure() : null, // 0.4.33 一般拜訪的種植失敗
       farmerId,
       tempName,
       farmerLabel: `【${state.cat}】${name}${isNew ? '（新）' : ''}`,
@@ -1056,6 +1110,7 @@
     $('pArea').addEventListener('change', refreshSave);
     $('pCrop').addEventListener('change', () => fillVarieties('')); // 換作物就重選品種
     $('pVarCo').addEventListener('change', () => { fillVarieties(''); refreshSave(); }); // 0.4.31 換種子公司就重選品種
+    $('plantFail').addEventListener('change', refreshPlantFail); // 0.4.33 一般拜訪勾「種植失敗」
     $('note').addEventListener('input', refreshSave);
     ['cRegion', 'cPrice', 'cYield', 'cBuyer', 'cPhone'].forEach(id => { $(id).addEventListener('input', refreshSave); $(id).addEventListener('change', refreshSave); });
     $('photoInput').addEventListener('change', e => addPhotos(e.target.files, '相機', $('photoBtn')).finally(() => { e.target.value = ''; }));
