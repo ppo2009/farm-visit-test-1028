@@ -267,11 +267,10 @@ footer{margin-top:18px;text-align:center}
     <div class="cropsum" id="cropSum" hidden><span id="cropSumText"></span> <button type="button" class="link" id="cropEditBtn">✎ 修改／ပြင်</button></div>
     <!-- 0.4.35 董事長：「試作農民、一般農民怎麼沒有品種、編號選項」→ 作物、種子公司、品種（代碼）從收起來的客戶資料搬出來，選了農民就看得到 -->
     <div class="fields croprow" id="cropBox" hidden>
-      <div><label class="lab" for="pCrop">作物<span class="my">သီးနှံ</span></label><select id="pCrop"></select></div>
-      <!-- 0.4.31 董事長 2026-11-12 手稿「品種＝Company name＋代碼，有選單」：先選種子公司，再選品種（品種含代碼） -->
+      <!-- 0.4.50 董事長截圖：種子公司放第一格、作物第二格，品種拿掉（暫時藏起來；存檔時品種欄記選的種子公司），代碼照留 -->
       <div><label class="lab" for="pVarCo">種子公司<span class="my">မျိုးစေ့ ကုမ္ပဏီ</span></label><select id="pVarCo"></select></div>
-      <div><label class="lab" for="pVariety">品種<span class="my">မျိုး</span></label><select id="pVariety"></select></div>
-      <!-- 0.4.38 董事長：品種跟代碼是分開的 → 代碼另外手動輸入；四格排一列，不會太長 -->
+      <div><label class="lab" for="pCrop">作物<span class="my">သီးနှံ</span></label><select id="pCrop"></select></div>
+      <div id="pVarietyBox" hidden><label class="lab" for="pVariety">品種<span class="my">မျိုး</span></label><select id="pVariety"></select></div>
       <div><label class="lab" for="pVarCode">代碼<span class="my">ကုဒ်</span></label><input type="text" id="pVarCode" maxlength="30" placeholder="手動輸入／ရိုက်ထည့်ပါ"></div>
     </div>
     <details class="profile" id="profileBox" hidden>

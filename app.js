@@ -9,6 +9,14 @@
   const $n = id => document.getElementById(id) || NO_EL();
   /* 0.4.48 董事長：「客戶資料在這邊應該不用顯示，建檔的時候就要有了」→ 拜訪舊客戶時先不顯示作物／品種／代碼與客戶資料（暫時拿掉，改回 true 就恢復）；新增客戶照常填 */
   const SHOW_PROFILE_ON_VISIT = false;
+  /* 0.4.50 董事長：品種拿掉（暫時藏起來，改回 true 就恢復）。藏起來時「品種」欄存選的種子公司；舊客戶原本的完整品種不會被蓋掉 */
+  const SHOW_VARIETY = false;
+  /** 要存的品種：品種選單藏起來時，沒換公司就保留原本的（品種開頭是公司名），換了公司就記公司名 */
+  const varietyValue = () => {
+    const v = $('pVariety').value.trim(), co = $('pVarCo').value.trim();
+    if (SHOW_VARIETY || !co) return v;
+    return v && (v === co || v.indexOf(co + ' ') === 0) ? v : co;
+  };
   const pad = n => String(n).padStart(2, '0');
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const MAX_REC_SEC = 90;
@@ -351,8 +359,18 @@
     const cos = (state.options && state.options.seedCompanies) || [];
     const value = keep === undefined ? $('pVariety').value : keep;
     // 0.4.31：先選種子公司。帶進舊資料（keep）時從品種名稱推回公司；選單沒有公司時這一欄藏起來，照舊只選品種
-    const co = keep !== undefined && value ? coOf(value, cos) : $('pVarCo').value;
-    setSelect($('pVarCo'), cos.map(c => ({ value: c, text: c })), cos.indexOf(co) >= 0 ? co : '', '— 全部公司 ကုမ္ပဏီအားလုံး —');
+    let co = keep !== undefined && value ? coOf(value, cos) : $('pVarCo').value;
+    // 0.4.50 董事長：「一般農民用其他公司的種子，試作、推廣用農友的種子」→ 公司選單跟著類別：一般拜訪不列農友，試作／推廣只列農友（只有一間就直接選好）
+    const isKY = c => /known-?you|農友/i.test(String(c));
+    const own = state.cat === '試作' || state.cat === '推廣';
+    const shown = own ? cos.filter(isKY) : state.cat === '農戶' ? cos.filter(c => !isKY(c)) : cos;
+    const list0 = shown.length ? shown : cos; // 選單沒有農友時照舊全列，不會變成空的
+    // 自動帶公司只對「新增客戶」：舊客戶存好的公司不能被偷改（不然存檔會被當成改了資料）
+    if (keep === undefined && $('farmer').value === '__new') {
+      if (own && list0.length === 1 && !isKY(co)) co = list0[0];
+      else if (state.cat === '農戶' && isKY(co)) co = '';
+    } else if (own && !co && list0.length === 1 && $('farmer').value === '__new') co = list0[0];
+    setSelect($('pVarCo'), list0.map(c => ({ value: c, text: c })), cos.indexOf(co) >= 0 ? co : '', '— 全部公司 ကုမ္ပဏီအားလုံး —');
     $('pVarCo').parentElement.hidden = !cos.length;
     const cur = $('pVarCo').value;
     // 選了作物就只列那個作物的品種；作物是「其他」或沒選，就全部列。選了公司就只列那間公司的，選單上省略公司名
@@ -487,6 +505,7 @@
       if (!isDealerCat()) { fillCrops(c.crop == null ? '' : String(c.crop)); fillVarieties(c.variety == null ? '' : String(c.variety)); } // 下拉選單：選單裡沒有的舊值也要放回去
       state.original = {};
       activeKeys().forEach(k => { state.original[k] = $(PROFILE_INPUTS[k]).value; });
+      if ('variety' in state.original) state.original.variety = varietyValue(); // 0.4.50 跟 collectProfile 用同一算法，沒改就不會誤判成有改
       box.open = false;
       $('profileTitle').textContent = '客戶資料（點開可修改）／ဖောက်သည် အချက်အလက် (နှိပ်ပြီး ပြင်နိုင်)';
     }
@@ -561,7 +580,7 @@
   /** 0.4.44 進度卡下面一行：作物｜品種｜代碼 ✎修改。資料沒填的話直接展開讓業務補 */
   function renderCropSum() {
     const sel = $('farmer').value, show = !!sel && !isDealerCat() && (sel === '__new' || SHOW_PROFILE_ON_VISIT); // 0.4.48 舊客戶不顯示
-    const crop = $('pCrop').value, vari = $('pVariety').value, code = $('pVarCode').value.trim();
+    const crop = $('pCrop').value, vari = varietyValue(), code = $('pVarCode').value.trim(); // 0.4.50 品種藏起來時顯示公司
     if (show && (sel === '__new' || !crop)) state.cropOpen = true; // 要補資料：打開後就保持開著（選完作物不會突然收起來）
     const open = show && !!state.cropOpen;
     $('cropBox').hidden = !open;
@@ -575,6 +594,7 @@
     const show = (state.cat === '試作' || state.cat === '推廣') && !!sel;
     $('trialBox').hidden = !show;
     refreshPlantFail(); // 0.4.33 一般拜訪的種植失敗勾選：換類別、換客戶時跟著顯示／收起
+    if (sel && !isDealerCat()) fillVarieties(); // 0.4.50 換類別時種子公司選單跟著換（一般＝其他公司、試作推廣＝農友）
     renderCropSum(); // 0.4.44 作物、品種、代碼縮成一行；新農民、沒填或按「修改」才展開四格（0.4.35 起選了農民就看得到）
     refreshNoMeet(); // 0.4.38 沒拜訪：換類別、換客戶時跟著顯示／收起
     if (noMeetOn()) { $('trialBox').hidden = true; if (state.trialMode) setTrialMode(null); return; }
@@ -754,6 +774,7 @@
     const val = $('farmer').value;
     const p = {};
     activeKeys().forEach(k => { p[k] = $(PROFILE_INPUTS[k]).value.trim(); });
+    if ('variety' in p) p.variety = varietyValue(); // 0.4.50
     if (val === '__new') {
       p.type = isDealerCat() ? state.cat : '農民';
       return p;
