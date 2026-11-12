@@ -66,12 +66,12 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
 @media (max-width:400px){.catswitch{gap:4px}.catswitch button{font-size:1rem;padding:6px 2px}.farmermenu{gap:6px;padding:8px}.farmermenu button{font-size:.95rem;padding:6px 2px}}
 /* 首頁分頁標籤（0.4.26，董事長給的範例：一排文字分頁，選到的那個加框） */
 /* 寬度照中文字數分（4、6、4、4 字）：緬文小字比較長，用內容寬度分會把中文擠成兩行（0.4.29 字體 16px 後實測） */
-.htabs{display:grid;grid-template-columns:4fr 6fr 4fr 2.5fr 4fr;gap:1px;border-bottom:1px solid var(--line);margin:4px 0 14px;overflow:visible}
+.htabs{display:grid;grid-template-columns:4fr 6fr 4fr 2.2fr 4fr;gap:1px;border-bottom:1px solid var(--line);margin:4px 0 14px;overflow:visible}
 .htabs button{flex:1 1 auto;min-width:0;min-height:52px;border:1.5px solid transparent;border-bottom:0;border-radius:10px 10px 0 0;background:none;color:var(--muted);font-weight:700;font-size:1rem;cursor:pointer;padding:6px 2px;word-break:keep-all;overflow-wrap:anywhere;line-height:1.25;position:relative;margin-bottom:-1px}
 .htabs button .my{display:block;font-weight:400;font-size:.7rem}
 .htabs button[aria-selected="true"]{border-color:var(--paddy);color:var(--paddy);background:var(--surface)}
 .htabs .tbadge{position:absolute;top:-9px;right:-2px;z-index:1;min-width:18px;height:18px;border-radius:9px;background:var(--chili,#b23a2a);color:#fff;font-size:.72rem;line-height:18px;padding:0 4px}
-@media (max-width:400px){.htabs{gap:1px}.htabs button{font-size:1rem;padding:6px 0}}
+@media (max-width:400px){.htabs{gap:1px}.htabs button{font-size:.95rem;padding:6px 0;border-width:1px}}
 li.assigned{display:block}
 li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px}
 .progress{border:1.5px solid var(--paddy);border-radius:12px;padding:10px 14px;margin:12px 0 6px;background:var(--surface)} /* 0.4.44 小卡：拿掉最小高度 */
@@ -251,6 +251,12 @@ footer{margin-top:18px;text-align:center}
   <h2>我的試作<span class="my">ကျွန်ုပ်၏ စမ်းသပ်ကွက်များ</span><span class="sub">進行中的試作、推廣，點一下去拜訪／လုပ်ဆောင်ဆဲ စမ်းသပ်ကွက်၊ နှိပ်ပြီး သွားရောက်ပါ</span></h2>
   <ul id="trialList"></ul>
 
+  <!-- 0.4.61 董事長：農民試作成功、失敗都要產生一份報表檔，所有人都看得到 → 全部已結束試作、推廣的報告，按一下下載 Word（要有網路） -->
+  <h2>試作報告（成功／失敗）<span class="my">စမ်းသပ်မှု အစီရင်ခံစာ (အောင်မြင်／မအောင်မြင်)</span><span class="sub">所有已結束的試作、推廣，大家都看得到；要有網路／ပြီးဆုံးသော စမ်းသပ်မှုအားလုံး၊ အင်တာနက် လိုသည်</span></h2>
+  <button type="button" class="btn2" id="reportLoadBtn">看試作報告／အစီရင်ခံစာ ကြည့်ရန်</button>
+  <p class="sub" id="reportHint" aria-live="polite"></p>
+  <ul id="reportList"></ul>
+
   <h2>月計劃<span class="my">လစဉ် ပစ်မှတ်</span><span class="sub">主管訂的目標，系統自動算／မန်နေဂျာ သတ်မှတ်သော ပစ်မှတ်၊ စနစ်က အလိုအလျောက် တွက်သည်</span></h2>
   <ul id="planList"></ul>
 
@@ -282,6 +288,9 @@ footer{margin-top:18px;text-align:center}
   <div class="fields">
     <div><label class="lab" for="plFarmer">選擇農民<span class="my">လယ်သမား ရွေးပါ</span></label>
       <select id="plFarmer"><option value="">— 請選擇 ရွေးပါ —</option></select></div>
+    <!-- 0.4.61 董事長：選擇農民後下面的資料應該自動載入，不是要填寫的 → 先顯示目前資料（唯讀），按「修改」才變表單 -->
+    <div class="progress" id="plCard" hidden aria-live="polite"></div>
+    <button type="button" class="btn2" id="plEditBtn" hidden>✎ 修改種植資料<span class="my">ပြင်ရန်</span></button>
     <div id="plForm" hidden>
       <div class="row2">
         <div><label class="lab" for="plCo">種子公司<span class="my">မျိုးစေ့ ကုမ္ပဏီ</span></label><select id="plCo"></select></div>
@@ -297,8 +306,9 @@ footer{margin-top:18px;text-align:center}
       </div>
       <div><label class="lab" for="plFert">使用肥料<span class="my">သုံးသော မြေသြဇာ</span></label><input type="text" id="plFert" list="dlFerts" maxlength="120"></div>
       <button type="button" class="save" id="plSave">存檔（上傳）<span class="my">သိမ်းမည်</span></button>
-      <p class="sub" id="plHint"></p>
+      <button type="button" class="link" id="plCancel">取消修改／မပြင်တော့</button>
     </div>
+    <p class="sub" id="plHint"></p>
   </div>
   </div>
 </section>

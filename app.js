@@ -214,13 +214,29 @@
     const keep = sel.value;
     sel.innerHTML = '<option value="">— 請選擇 ရွေးပါ —</option>' + list.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).split(/[ （(]/)[0]) : ''}</option>`).join('');
     sel.value = keep && list.some(f => f.id === keep) ? keep : '';
-    if (!sel.value) $n('plForm').hidden = true;
+    if (!sel.value) { $n('plForm').hidden = true; $n('plCard').hidden = true; $n('plEditBtn').hidden = true; }
   }
-  /** 選了農民：把他現在的種植資料填進表單 */
+  /** 0.4.61 董事長「選擇農民後下面的資料應該是自動載入，不是要填寫的」：唯讀卡片（沒填的寫「未填」） */
+  function plantCardHtml(f, o) {
+    const v = String(f.variety || ''), cos = o.seedCompanies || [];
+    const co = cos.find(c => v === c || v.indexOf(c + ' ') === 0) || v;
+    const u = o.areaUnit || '英畝', blank = '<span class="sub">未填 မဖြည့်ရသေး</span>';
+    const val = x => (x === '' || x == null ? blank : esc(String(x)));
+    const rows = [['種子公司', co], ['作物', f.crop ? cropText(f.crop) : ''], ['代碼', f.varCode], ['種植日期', f.plantDate],
+      ['目前種植面積', f.areaNow === '' || f.areaNow == null ? '' : `${f.areaNow} ${u}`], ['可種植面積', f.areaMax === '' || f.areaMax == null ? '' : `${f.areaMax} ${u}`], ['使用肥料', f.fertilizer]];
+    return `<h3>目前種植資料／လက်ရှိ အချက်အလက်<span class="who"><b>${esc(f.name)}</b></span></h3><ul>${rows.map(([k, x]) => `<li>${k}：${val(x)}</li>`).join('')}</ul>`;
+  }
+  function setPlantEditing(on) {
+    $n('plForm').hidden = !on; $n('plCard').hidden = on; $n('plEditBtn').hidden = on;
+  }
+  /** 選了農民：先顯示目前種植資料（唯讀），表單也先填好，按「修改」才打開 */
   async function onPlantFarmer() {
     const cid = $n('plFarmer').value, f = (state.closeList || []).find(x => x.id === cid);
-    $n('plForm').hidden = !f; $n('plHint').textContent = '';
-    if (!f) return;
+    $n('plHint').textContent = '';
+    if (!f) { $n('plForm').hidden = true; $n('plCard').hidden = true; $n('plEditBtn').hidden = true; return; }
+    const o0 = (await Store.getMeta('options')) || {};
+    $n('plCard').innerHTML = plantCardHtml(f, o0);
+    setPlantEditing(false);
     const o = (await Store.getMeta('options')) || {};
     document.querySelectorAll('.unit').forEach(el => { el.textContent = `（${o.areaUnit || '英畝'}）`; });
     const crops = (o.crops || []).map(c => ({ value: c, text: cropText(c) })); crops.push({ value: '其他', text: '其他／အခြား' });
@@ -256,6 +272,52 @@
       await fillCloseFarmers(); await onPlantFarmer(); $n('plHint').textContent = '已存好，主管看得到／သိမ်းပြီး';
     } catch (e) { $n('plHint').textContent = '網路不穩，沒存成功，請再按一次／ထပ်နှိပ်ပါ'; } finally { btn.disabled = false; }
   }
+  /* ───── 0.4.61 董事長：農民試作成功、失敗都要產生一份報表檔，所有人都看得到 ─────
+     「我的進度」按「看試作報告」才向後台拿清單（要有網路；不在每次畫首頁時自動拿，省流量）；有 Word 的按一下下載 */
+  async function gasCall(payload) {
+    const cfg = await getConfig();
+    if (!cfg || !cfg.deviceKey || (typeof navigator !== 'undefined' && navigator.onLine === false)) return { ok: false, offline: true };
+    const res = await fetch(FARM_CONFIG.gasUrl, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({ deviceKey: cfg.deviceKey }, payload)) });
+    return res.json();
+  }
+  async function loadReports() {
+    const btn = $n('reportLoadBtn'); btn.disabled = true; $n('reportHint').textContent = '讀取中…／ဖတ်နေသည်';
+    try {
+      const r = await gasCall({ action: 'trialReports' });
+      if (r && r.offline) { $n('reportHint').textContent = '要有網路才能看試作報告，請連上網路再按一次／အင်တာနက် လိုသည်'; return; }
+      if (!r || !r.ok || !Array.isArray(r.reports)) { $n('reportHint').textContent = (r && r.message) || '讀取失敗，請再按一次／ထပ်နှိပ်ပါ'; return; }
+      state.reports = r.reports;
+      renderReports();
+    } catch (e) { $n('reportHint').textContent = '網路不穩，請再按一次／ထပ်နှိပ်ပါ'; } finally { btn.disabled = false; }
+  }
+  const REPORT_PILL = { 成功: 'ok', 失敗: 'late', 結束: 'wait' };
+  function renderReports() {
+    const ul = document.getElementById('reportList'); // 舊頁面沒有這一塊：不畫
+    if (!ul || !Array.isArray(state.reports)) return;
+    const list = state.reports, count = s => list.filter(t => t.status === s).length;
+    $n('reportHint').textContent = list.length ? `共 ${list.length} 件：成功 ${count('成功')}、失敗 ${count('失敗')}、結束 ${count('結束')}／စုစုပေါင်း ${list.length}` : '';
+    ul.innerHTML = list.map(t => `<li><span>${esc(t.name || '—')}${t.area ? '・' + esc(t.area) : ''}<br><small>${esc(catBi(t.cat || '試作'))}・${esc(t.item || '—')}・${esc(t.start || '?')}～${esc(t.end || '?')}${t.staff ? '・' + esc(t.staff) : ''}${t.reason ? '<br>失敗原因 အကြောင်းရင်း：' + esc(t.reason) : ''}</small><br>`
+      + (t.hasReport ? `<button type="button" class="btn2 small" data-rep="${esc(t.id)}">⬇ 下載報告（Word）／ဒေါင်းလုဒ်</button>`
+        : `<small>${t.report === '產生失敗' ? '報告產生失敗，請告訴主管／မအောင်မြင်' : '報告製作中，晚點再看／ပြင်ဆင်နေဆဲ'}</small>`)
+      + `</span><span class="pill ${REPORT_PILL[t.status] || 'wait'}">${esc(t.status)}</span></li>`).join('')
+      || '<li class="empty">還沒有結束的試作／ပြီးဆုံးသော စမ်းသပ်မှု မရှိသေး</li>';
+    ul.querySelectorAll('[data-rep]').forEach(b => b.addEventListener('click', () => downloadTrialReport(b)));
+  }
+  async function downloadTrialReport(btn) {
+    const label = btn.textContent;
+    btn.textContent = '下載中…／ဒေါင်းနေသည်'; btn.disabled = true;
+    try {
+      const r = await gasCall({ action: 'trialReportFile', trialId: btn.dataset.rep });
+      if (!r || !r.ok || !r.data) { btn.textContent = (r && r.offline) ? '要有網路／အင်တာနက် လိုသည်' : (r && r.message) || '下載失敗，請再試／မအောင်မြင်'; return; }
+      const bytes = Uint8Array.from(atob(r.data), ch => ch.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: r.mime }));
+      const a = document.createElement('a'); a.href = url; a.download = r.name || (btn.dataset.rep + '.docx'); document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      btn.textContent = label;
+    } catch (e) { btn.textContent = '下載失敗，請再試／မအောင်မြင်'; } finally { btn.disabled = false; }
+  }
+
   function showCloseProgress() {
     const sel = document.getElementById('closeFarmer'), cid = sel ? sel.value : '';
     renderProgress(cid, { box: $n('closeProgress'), current: () => !!sel && sel.value === cid, list: state.closeList || [], home: true });
@@ -274,6 +336,7 @@
     await renderMyTrials(h);
     await fillCloseFarmers();
     fillPlantFarmers(); // 0.4.59 種植資料分頁共用同一份「自己負責的農民」
+    renderReports(); // 0.4.61 試作報告：按過「看試作報告」才有清單，首頁重畫時照舊顯示
     // 月計劃（2C）
     const plan = (h && h.plan) || [];
     $('planList').innerHTML = plan.map(p => `<li class="plan"><span>${esc(p.label)}<br><small>${esc(p.period)}　${p.done}／${p.target}</small>
@@ -1446,6 +1509,9 @@ ${state.cat}：${who}
     $n('closeFarmer').addEventListener('change', showCloseProgress); // 0.4.57 結案選單挑農民 → 列出進度
     $n('plFarmer').addEventListener('change', onPlantFarmer); // 0.4.59 種植資料
     $n('plSave').addEventListener('click', savePlant);
+    $n('plEditBtn').addEventListener('click', () => { $n('plHint').textContent = ''; setPlantEditing(true); }); // 0.4.61 按修改才變表單
+    $n('plCancel').addEventListener('click', () => onPlantFarmer()); // 取消：表單換回原本的值、回到唯讀卡片
+    $n('reportLoadBtn').addEventListener('click', loadReports); // 0.4.61 試作報告（成功／失敗）
     // 打卡畫面最下面「取消結案」：跟左上返回一樣，回首頁（還沒存的要先確認）
     $n('closeModeBtn').addEventListener('click', () => $('backBtn').click());
     $('relocateBtn').addEventListener('click', locate);
