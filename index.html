@@ -66,12 +66,12 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
 @media (max-width:400px){.catswitch{gap:4px}.catswitch button{font-size:1rem;padding:6px 2px}.farmermenu{gap:6px;padding:8px}.farmermenu button{font-size:.95rem;padding:6px 2px}}
 /* 首頁分頁標籤（0.4.26，董事長給的範例：一排文字分頁，選到的那個加框） */
 /* 寬度照中文字數分（4、6、4、4 字）：緬文小字比較長，用內容寬度分會把中文擠成兩行（0.4.29 字體 16px 後實測） */
-.htabs{display:grid;grid-template-columns:4fr 6fr 4fr 3fr 4fr;gap:2px;border-bottom:1px solid var(--line);margin:4px 0 14px;overflow:visible}
+.htabs{display:grid;grid-template-columns:4fr 6fr 4fr 2.5fr 4fr;gap:1px;border-bottom:1px solid var(--line);margin:4px 0 14px;overflow:visible}
 .htabs button{flex:1 1 auto;min-width:0;min-height:52px;border:1.5px solid transparent;border-bottom:0;border-radius:10px 10px 0 0;background:none;color:var(--muted);font-weight:700;font-size:1rem;cursor:pointer;padding:6px 2px;word-break:keep-all;overflow-wrap:anywhere;line-height:1.25;position:relative;margin-bottom:-1px}
 .htabs button .my{display:block;font-weight:400;font-size:.7rem}
 .htabs button[aria-selected="true"]{border-color:var(--paddy);color:var(--paddy);background:var(--surface)}
 .htabs .tbadge{position:absolute;top:-9px;right:-2px;z-index:1;min-width:18px;height:18px;border-radius:9px;background:var(--chili,#b23a2a);color:#fff;font-size:.72rem;line-height:18px;padding:0 4px}
-@media (max-width:400px){.htabs{gap:2px}.htabs button{font-size:1rem;padding:6px 2px}}
+@media (max-width:400px){.htabs{gap:1px}.htabs button{font-size:1rem;padding:6px 0}}
 li.assigned{display:block}
 li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px}
 .progress{border:1.5px solid var(--paddy);border-radius:12px;padding:10px 14px;margin:12px 0 6px;background:var(--surface)} /* 0.4.44 小卡：拿掉最小高度 */
