@@ -329,12 +329,22 @@
     crops.push({ value: '其他', text: '其他／အခြား' });
     setSelect($('pCrop'), crops, keep, '— 選擇作物 သီးနှံရွေးပါ —');
   }
+  /** 品種屬於哪間種子公司：品種的值寫成「公司名 品種名（代碼）」，看開頭是不是公司名 */
+  const coOf = (name, cos) => cos.find(c => name === c || String(name).indexOf(c + ' ') === 0) || '';
   function fillVarieties(keep) {
     const crop = $('pCrop').value.trim();
     const all = state.options ? state.options.varieties : [];
-    // 選了作物就只列那個作物的品種；作物是「其他」或沒選，就全部列
-    const list = all.filter(v => !crop || crop === '其他' || !v.crop || v.crop === crop).map(v => ({ value: v.name, text: v.name }));
-    setSelect($('pVariety'), list, keep === undefined ? $('pVariety').value : keep, '— 選擇品種 မျိုးရွေးပါ —');
+    const cos = (state.options && state.options.seedCompanies) || [];
+    const value = keep === undefined ? $('pVariety').value : keep;
+    // 0.4.31：先選種子公司。帶進舊資料（keep）時從品種名稱推回公司；選單沒有公司時這一欄藏起來，照舊只選品種
+    const co = keep !== undefined && value ? coOf(value, cos) : $('pVarCo').value;
+    setSelect($('pVarCo'), cos.map(c => ({ value: c, text: c })), cos.indexOf(co) >= 0 ? co : '', '— 全部公司 ကုမ္ပဏီအားလုံး —');
+    $('pVarCo').parentElement.hidden = !cos.length;
+    const cur = $('pVarCo').value;
+    // 選了作物就只列那個作物的品種；作物是「其他」或沒選，就全部列。選了公司就只列那間公司的，選單上省略公司名
+    const list = all.filter(v => (!crop || crop === '其他' || !v.crop || v.crop === crop) && (!cur || coOf(v.name, [cur])))
+      .map(v => ({ value: v.name, text: cur ? (v.name.slice(cur.length).trim() || v.name) : v.name }));
+    setSelect($('pVariety'), list, value, '— 選擇品種 မျိုးရွေးပါ —');
   }
 
   /* ───── 拜訪畫面 ───── */
@@ -416,6 +426,7 @@
     const val = $('farmer').value;
     const box = $('profileBox');
     Object.values(PROFILE_INPUTS).forEach(id => { $(id).value = ''; });
+    $('pVarCo').value = ''; // 0.4.31：換客戶就重選公司，不帶上一位的
     state.original = null;
     if (!val) { box.hidden = true; refreshSave(); return; }
     box.hidden = false;
@@ -1031,6 +1042,7 @@
     Object.values(PROFILE_INPUTS).forEach(id => $(id).addEventListener('input', refreshSave));
     $('pArea').addEventListener('change', refreshSave);
     $('pCrop').addEventListener('change', () => fillVarieties('')); // 換作物就重選品種
+    $('pVarCo').addEventListener('change', () => { fillVarieties(''); refreshSave(); }); // 0.4.31 換種子公司就重選品種
     $('note').addEventListener('input', refreshSave);
     ['cRegion', 'cPrice', 'cYield', 'cBuyer', 'cPhone'].forEach(id => { $(id).addEventListener('input', refreshSave); $(id).addEventListener('change', refreshSave); });
     $('photoInput').addEventListener('change', e => addPhotos(e.target.files, '相機', $('photoBtn')).finally(() => { e.target.value = ''; }));
