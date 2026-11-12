@@ -405,7 +405,7 @@
     $n('closeModeBtn').innerHTML = cat === '結案' || state.dealerClose
       ? '← 取消結案<span class="my">ပိတ်သိမ်းမှု ပယ်ဖျက်</span>'
       : '結案（送主管審核）<span class="my">ပိတ်သိမ်း (မန်နေဂျာ စစ်ဆေးရန်)</span>';
-    $n('noteLab').innerHTML = isDealerCat() ? '討論進度<span class="my">ဆွေးနွေးမှု တိုးတက်မှု</span>' : '打字<span class="my">စာရိုက်</span>'; // 0.4.42 董事長：盤商、種子商有見到就記討論進度
+    $n('noteLab').innerHTML = isDealerCat() ? '匯報紀錄<span class="my">အစီရင်ခံ မှတ်တမ်း</span>' /* 0.4.52 */ : '打字<span class="my">စာရိုက်</span>'; // 0.4.42 董事長：盤商、種子商有見到就記討論進度
     $('saveBtn').innerHTML = cat === '結案' || state.dealerClose ? '結案送主管審核（自動上傳）<span class="my">မန်နေဂျာ စစ်ဆေးရန် ပို့မည်</span>' : '儲存（自動上傳）<span class="my">သိမ်းမည်</span>';
     $('catSwitch').innerHTML = CAT_GROUPS[groupOf(cat)].filter(c => c !== '結案').map(c => `<button type="button" data-setcat="${esc(c)}" aria-pressed="${c === cat}">${esc(SWITCH_LABEL[c] || CAT_LABEL(c))}<span class="my">${esc(CAT_MY[c] || '')}</span></button>`).join('');
     $('catSwitch').querySelectorAll('[data-setcat]').forEach(b => {
@@ -640,7 +640,8 @@
   const NM_TEXT = {
     farmer: { yes: '有見到農民，開始拜訪<span class="my">တွေ့ပြီ၊ စတင်မည်</span>', no: '沒見到／農民拒絕 → 下次再訪<span class="my">မတွေ့ / ငြင်း → နောက်မှ</span>',
       opts: [['沒見到農民', '沒見到農民／မတွေ့'], ['農民拒絕', '農民拒絕／ငြင်းဆို'], ['其他', '其他／အခြား']] },
-    dealer: { yes: '有見到，開始討論<span class="my">တွေ့ပြီ၊ ဆွေးနွေးမည်</span>', no: '沒見到／被拒絕 → 下次再訪<span class="my">မတွေ့ / ငြင်း → နောက်မှ</span>',
+    // 0.4.52 董事長：種子商跟盤商一樣拜訪「失敗就下次拜訪，成功就寫匯報紀錄」
+    dealer: { yes: '成功拜訪 → 寫匯報紀錄<span class="my">တွေ့ပြီ → အစီရင်ခံ ရေးမည်</span>', no: '失敗（沒見到／被拒絕）→ 下次拜訪<span class="my">မအောင်မြင် → နောက်တစ်ကြိမ်</span>',
       opts: [['沒見到老闆', '沒見到老闆／ပိုင်ရှင် မတွေ့'], ['對方拒絕', '對方拒絕／ငြင်းဆို'], ['其他', '其他／အခြား']] }
   };
   /** 沒見到的按鈕字、原因選項：農民和盤商／種子商用不同說法（換組才重畫，選好的原因不會被洗掉） */
