@@ -1395,6 +1395,14 @@
     // 0.4.64（2號 0.4.63 清單中#2）：從結案分頁進來的盤商、種子商結案也只列自己負責的（跟農民結案同一規則；後台也會擋）
     if (state.cat === '結案') { const me = String(((await getConfig()) || {}).name || ''); mine = mine.filter(f => f.pending || String(f.staff || '') === me); }
     else if (state.closeOnly && isDealerCat()) { const me = String(((await getConfig()) || {}).name || ''); mine = mine.filter(f => f.pending || !String(f.staff || '') || String(f.staff) === me); } // 0.4.82 盤商、種子商結案：負責業務空白照舊算可以（同 dealerIsMine、後台 ownDc）
+    // 0.5.06 董事長「試作農民是試作農民，一般農民是一般農民，推廣農民是推廣農民」（選完全分開）：
+    // 一般拜訪只列沒有進行中試作／推廣的農民；試作只列有進行中試作的；推廣只列有進行中推廣的（手機剛開始、還沒上傳的也算）。
+    // 一般農民要做試作／推廣：在試作／推廣選單用「＋新增農民」另建一筆（董事長同意）
+    if (state.cat === '農戶' || state.cat === '試作' || state.cat === '推廣') {
+      const gOf = {};
+      for (const f of mine) gOf[f.id] = (await activeTrialFor(f.id, '試作')) ? '試作' : (await activeTrialFor(f.id, '推廣')) ? '推廣' : '農戶';
+      mine = mine.filter(f => gOf[f.id] === state.cat);
+    }
     // 業務BUG#3（1號）：結案（農民結案、從結案分頁進來的盤商／種子商結案）不能新增客戶，選單不放「＋新增」
     const closing = state.cat === '結案' || !!state.dealerClose || (state.closeOnly && isDealerCat());
     // 0.5.05 董事長截圖：種子商選單不用顯示品類（作物）；地區「曼德勒區」等改顯示英文（只改畫面，存的值照舊是中文）
@@ -2661,7 +2669,7 @@ ${state.cat}：${who}
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.05'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.06'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
