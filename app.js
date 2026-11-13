@@ -1282,6 +1282,9 @@
 
   /* ───── 拜訪畫面 ───── */
   const isDealerCat = () => state.cat === '盤商' || state.cat === '種子商';
+  /** 0.5.05 董事長：客戶選單裡的地區顯示英文（曼德勒區→Mandalay；另兩區一起改，保持一致）。只換畫面上的字，不改資料 */
+  const REGION_EN = { 曼德勒區: 'Mandalay', 仰光區: 'Yangon', 奈比多區: 'Nay Pyi Taw' };
+  const regionEn = s => String(s).replace(/曼德勒區|仰光區|奈比多區/g, m => REGION_EN[m]);
 
   /** 打卡畫面上方的類別切換：農民一組、盤商或種子商一組（2026-11-12 董事長同意優化 1：首頁少點一層） */
   const CAT_GROUPS = { farmer: ['農戶', '試作', '推廣', '結案'], dealer: ['盤商', '種子商'] }; // 結案：農民收成賣掉後（2026-11-12 手稿）
@@ -1394,7 +1397,9 @@
     else if (state.closeOnly && isDealerCat()) { const me = String(((await getConfig()) || {}).name || ''); mine = mine.filter(f => f.pending || !String(f.staff || '') || String(f.staff) === me); } // 0.4.82 盤商、種子商結案：負責業務空白照舊算可以（同 dealerIsMine、後台 ownDc）
     // 業務BUG#3（1號）：結案（農民結案、從結案分頁進來的盤商／種子商結案）不能新增客戶，選單不放「＋新增」
     const closing = state.cat === '結案' || !!state.dealerClose || (state.closeOnly && isDealerCat());
-    const optOf = f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(String(f.area).trim() /* 0.4.89 地區完整顯示（業務－地區），不切字 */) : ''}${f.crop ? '｜' + esc(f.crop) : ''}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`;
+    // 0.5.05 董事長截圖：種子商選單不用顯示品類（作物）；地區「曼德勒區」等改顯示英文（只改畫面，存的值照舊是中文）
+    const showCrop = state.cat !== '種子商';
+    const optOf = f => `<option value="${esc(f.id)}">${esc(f.name)}${f.area ? '｜' + esc(regionEn(String(f.area).trim()) /* 0.4.89 地區完整顯示（業務－地區），不切字 */) : ''}${showCrop && f.crop ? '｜' + esc(f.crop) : ''}${f.pending ? '（新，未上傳 မတင်ရသေး）' : ''}</option>`;
     let body = mine.map(optOf).join('');
     // 0.4.73 董事長「結案改為一般農民、試作農民、推廣農民結案」：選的那一種排前面（有進行中試作＝試作農民、推廣＝推廣農民、都沒有＝一般農民），
     // 其他自己負責的農民排在後面「其他農民」（分類只看進行中的試作，結束過的會被算一般，所以不藏起來，免得找不到人）
@@ -2656,7 +2661,7 @@ ${state.cat}：${who}
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.04'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.05'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
