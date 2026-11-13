@@ -639,7 +639,7 @@
       const open = k in state.grpOpen ? state.grpOpen[k] : openDefault;
       return `<details class="grp" data-grp="${esc(k)}"${open ? ' open' : ''}><summary>${esc(k)}（${groups[k].length}）</summary><ul>${groups[k].slice().sort(custOrder).map(c => {
         const a = attnOf(c);
-        return `<li><button type="button" class="crow" data-go="${esc(c.id)}" aria-current="${sel && sel.id === c.id}"><span><b>${esc(c.name)}</b><span class="sub">${esc(c.type || '農民')}${c.crop ? '・' + esc(c.crop) : ''}${c.area ? '・' + esc(c.area) : ''}</span></span>${a ? `<span class="pill ${a.cls}">${esc(a.text)}</span>` : ''}</button></li>`;
+        return `<li><button type="button" class="crow" data-go="${esc(c.id)}" aria-current="${sel && sel.id === c.id}"><span><b>${esc(c.name)}</b><span class="sub">${esc(c.kind || c.type || '農民')}${c.crop ? '・' + esc(c.crop) : ''}${c.area ? '・' + esc(c.area) : ''}</span></span>${a ? `<span class="pill ${a.cls}">${esc(a.text)}</span>` : ''}</button></li>`;
       }).join('')}</ul></details>`;
     }).join('');
   }
@@ -683,7 +683,7 @@
     const list = visitsOf(c.id), s = dueState(c);
     const dealer = c.type === '盤商' || c.type === '種子商';
     const kv = (k, val) => val !== '' && val != null ? `<span>${k}：${esc(val)}</span>` : '';
-    return `<div class="card profile"><span><b>${esc(c.name)}</b>（${esc(c.id)}・${esc(c.type || '農民')}）</span><span>${esc(c.area || '')}</span>${kv('鎮', c.town)}${kv('村', c.village) /* 0.4.75 董事長「農民改鎮跟村」：鄉改村、鎮放前面 */}${kv('電話', c.phone)}
+    return `<div class="card profile"><span><b>${esc(c.name)}</b>（${esc(c.id)}・${esc(c.kind || c.type || '農民')}）</span><span>${esc(c.area || '')}</span>${kv('鎮', c.town)}${kv('村', c.village) /* 0.4.75 董事長「農民改鎮跟村」：鄉改村、鎮放前面 */}${kv('電話', c.phone)}
         ${dealer ? kv('老闆', c.owner) + kv('地址', c.address) + kv('作物', c.crop) + kv('品牌（舊資料）', c.brand) + kv('其他', c.fertilizer) /* 0.4.73 董事長：盤商、種子商品牌改作物；舊的品牌資料有才顯示 */
           : kv('作物', c.crop) + kv('品種', c.variety) + kv('代碼', c.varCode) + kv('目前種植面積', c.areaNow === '' || c.areaNow == null ? '' : c.areaNow + ' ' + (state.data.areaUnit || '英畝')) + kv('可種植面積', c.areaMax === '' || c.areaMax == null ? '' : c.areaMax + ' ' + (state.data.areaUnit || '英畝')) /* 主管BUG#11 */ + kv('種植日期', c.plantDate) + kv('其他', c.fertilizer)
             + `<span>試作：${esc(c.trial || '—')}${c.start ? '（' + md(c.start) + ' 開始）' : ''}</span>`}<span>負責：${esc(c.staff || '—')}</span>
@@ -842,7 +842,7 @@
         <span class="sub">${esc(t.by || '')} ${esc(String(t.at).slice(5, 16))} 派</span></span><button class="btn" type="button" data-mytaskdone="${esc(t.id)}">完成了</button></li>`).join('') || '<li class="empty">沒有任務</li>'}</ul>` : '';
     const opt = s => `<option value="${esc(s.account)}"${f.staff === s.account ? ' selected' : ''}>${esc(s.name)}（${esc(s.account)}）</option>`;
     const custSel = toBoss
-      ? `<select id="tFarmer" aria-label="哪一位客戶（可以不選）"><option value="">— 不指定客戶／ဖောက်သည် မရွေး —</option>${allCust.map(c => `<option value="${esc(c.id)}"${f.cid === c.id ? ' selected' : ''}>${esc(c.name)}｜${esc(c.type || '農民')}${c.area ? '｜' + esc(c.area) : ''}</option>`).join('')}</select>`
+      ? `<select id="tFarmer" aria-label="哪一位客戶（可以不選）"><option value="">— 不指定客戶／ဖောက်သည် မရွေး —</option>${allCust.map(c => `<option value="${esc(c.id)}"${f.cid === c.id ? ' selected' : ''}>${esc(c.name)}｜${esc(c.kind || c.type || '農民')}${c.area ? '｜' + esc(c.area) : ''}</option>`).join('')}</select>`
       : (() => {
         // 0.4.94（第11任第五輪 7）：選了業務後，他自己負責的農民排前面（分兩組）
         const selName = ((staff.find(s => s.account === f.staff) || {}).name) || '';

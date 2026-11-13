@@ -243,6 +243,19 @@
   // 0.4.75 董事長「我的進度要改：一般農民、試作農民、推廣農民、種子商、盤商，都要有下拉選單」：五顆切換，每一類一個看得見的下拉選單
   const MINE_TYPES = { 一般農民: 'ပုံမှန် လယ်သမား', 試作農民: 'စမ်းသပ် လယ်သမား', 推廣農民: 'မြှင့်တင် လယ်သမား', 種子商: 'မျိုးစေ့ဆိုင်', 盤商: 'ကုန်သည်' };
   const FARMER_GROUPS = ['一般農民', '試作農民', '推廣農民']; // 0.4.73 結案分頁三顆
+  // 0.5.09 董事長「試算表也要分一般、試作、推廣農民，基本資料從那裡抓」：後台給 kind（客戶清單類型欄寫的那一種，建立時就寫死）。
+  // 有 kind 就照 kind 分；舊資料沒有 kind（類型只寫「農民」）才照進行中的試作／推廣推算（0.5.06 的做法）
+  const KIND_CAT = { 一般農民: '農戶', 試作農民: '試作', 推廣農民: '推廣' };
+  const CAT_KIND = { 農戶: '一般農民', 試作: '試作農民', 推廣: '推廣農民' };
+  async function customerById(cid) {
+    const all = ((await Store.getMeta('farmers')) || []).concat((await Store.getMeta('localCustomers')) || []);
+    return all.find(x => x.id === cid) || null;
+  }
+  async function farmerCatOf(f) {
+    if (f && KIND_CAT[f.kind]) return KIND_CAT[f.kind];
+    const id = f && f.id;
+    return (await activeTrialFor(id, '試作')) ? '試作' : (await activeTrialFor(id, '推廣')) ? '推廣' : '農戶';
+  }
   /* 0.4.75 董事長「主管訂的目標進度，農民 150 天做成一個進度 100%」：從種植日期算起，150 天＝100%（全專案只有這裡定天數） */
   const GROW_DAYS = 150;
   /** 種植進度：沒填（或格式不對）回 null；日期在未來＝0%；超過 150 天顯示 100%、full＝true。today、plantDate 都是 YYYY-MM-DD（緬甸日期） */
@@ -1346,7 +1359,9 @@
   async function autoCat(cid) {
     const gen = state.formGen;
     let want = state.entryCat;
-    for (const c of ['試作', '推廣']) { if (await activeTrialFor(cid, c)) { want = c; break; } }
+    const fk = await customerById(cid); // 0.5.09 有分類就照分類
+    if (fk && KIND_CAT[fk.kind]) want = KIND_CAT[fk.kind];
+    else for (const c of ['試作', '推廣']) { if (await activeTrialFor(cid, c)) { want = c; break; } }
     if (gen !== state.formGen || $('farmer').value !== cid || state.catManual) return;
     await setCat(want);
   }
@@ -1357,7 +1372,7 @@
    */
   async function openFromList(cid, type) {
     let cat = type === '盤商' || type === '種子商' ? type : '農戶';
-    if (cat === '農戶' && cid) for (const c of ['試作', '推廣']) { if (await activeTrialFor(cid, c)) { cat = c; break; } }
+    if (cat === '農戶' && cid) cat = await farmerCatOf((await customerById(cid)) || { id: cid }); // 0.5.09 有分類照分類，沒有才看進行中的試作
     state.lockNext = true;
     await openVisit(cat, cid);
   }
@@ -1400,7 +1415,7 @@
     // 一般農民要做試作／推廣：在試作／推廣選單用「＋新增農民」另建一筆（董事長同意）
     if (state.cat === '農戶' || state.cat === '試作' || state.cat === '推廣') {
       const gOf = {};
-      for (const f of mine) gOf[f.id] = (await activeTrialFor(f.id, '試作')) ? '試作' : (await activeTrialFor(f.id, '推廣')) ? '推廣' : '農戶';
+      for (const f of mine) gOf[f.id] = await farmerCatOf(f); // 0.5.09 先看 kind
       mine = mine.filter(f => gOf[f.id] === state.cat);
     }
     // 業務BUG#3（1號）：結案（農民結案、從結案分頁進來的盤商／種子商結案）不能新增客戶，選單不放「＋新增」
@@ -1413,7 +1428,7 @@
     // 其他自己負責的農民排在後面「其他農民」（分類只看進行中的試作，結束過的會被算一般，所以不藏起來，免得找不到人）
     if (state.cat === '結案' && FARMER_GROUPS.indexOf(state.closeGroup) >= 0) {
       const gOf = {};
-      for (const f of mine) gOf[f.id] = (await activeTrialFor(f.id, '試作')) ? '試作農民' : (await activeTrialFor(f.id, '推廣')) ? '推廣農民' : '一般農民';
+      for (const f of mine) gOf[f.id] = CAT_KIND[await farmerCatOf(f)]; // 0.5.09 結案三組也先看 kind
       const hit = mine.filter(f => gOf[f.id] === state.closeGroup), rest = mine.filter(f => gOf[f.id] !== state.closeGroup);
       body = `<optgroup label="${esc(state.closeGroup)}">${hit.map(optOf).join('') || '<option value="" disabled>（沒有／မရှိ）</option>'}</optgroup>`
         + (rest.length ? `<optgroup label="其他農民／အခြား လယ်သမား">${rest.map(optOf).join('')}</optgroup>` : '');
@@ -1660,6 +1675,7 @@
     $('trialNow').textContent = t ? `進行中 လုပ်ဆောင်ဆဲ：${t.item || '（未填品項）'}${t.start ? '，' + t.start + ' 開始 စတင်' : ''}${t.pending ? '（還沒上傳 မတင်ရသေး）' : ''}` : `這位客戶目前沒有進行中的${state.cat}。／လုပ်ဆောင်ဆဲ ${CAT_MY[state.cat]} မရှိ`;
     $('trialStartBtn').hidden = !!t; $('trialEndBtn').hidden = !t;
     if ((state.trialMode === 'end' && !t) || (state.trialMode === 'start' && t)) setTrialMode(null);
+    else if (sel === '__new' && !state.trialMode) setTrialMode('start'); // 0.5.08 試作／推廣新增農民：直接打開「開始新的」表單（一定要開始，見 trialProblem）
   }
   function setTrialMode(m) {
     state.trialMode = m;
@@ -1828,6 +1844,7 @@
   }
   const collectFailure = () => ({ weather: $('fWeather').value, temp: $('fTemp').value, fert: $('fFert').value.trim(), water: $('fWater').value, pest: $('fPest').value, pestNote: $('fPestNote').value.trim(), reason: $('fReason').value.trim() });
   function trialProblem() {
+    // 0.5.09：0.5.08 的「試作／推廣新增農民一定要同時開始」拿掉——現在建檔就寫死是試作／推廣農民（客戶清單類型欄），沒開始也不會掉到一般
     if (state.trialMode === 'end' && !state.activeTrial) return `找不到進行中的${state.cat}，請重新選一次客戶／${CAT_MY[state.cat]} ရှာမတွေ့၊ ဖောက်သည် ပြန်ရွေးပါ`; // T9
     if (state.trialMode === 'start' && !trialItemValue()) return `請填${state.cat}品項／ပစ္စည်းအမည် ဖြည့်ပါ`; // 0.4.89：下拉沒選、選「其他」沒填都擋
     if (state.trialMode === 'end' && $('tOutcome').value === '失敗') {
@@ -2494,7 +2511,7 @@ ${state.cat}：${who}
     if (ctr && ctr.id && !metaFns.localTrials) metaFns.localTrials = cur => { const lt = (cur || []).slice(); const i = lt.findIndex(l => l.id === ctr.id); if (i >= 0) lt[i] = Object.assign({}, lt[i], { ended: true }); else lt.push({ id: ctr.id, ended: true }); return lt; };
     if (isNew) {
       // 還沒上傳前，新客戶先放在手機的選單裡，下一次拜訪也選得到
-      const rec = Object.assign({}, profile, { id: farmerId, pending: true });
+      const rec = Object.assign({}, profile, { id: farmerId, pending: true }, CAT_KIND[state.cat] ? { kind: CAT_KIND[state.cat] } : {}); // 0.5.09 還沒上傳也照進來的類別分（後台建檔也是照這個寫）
       metaFns.localCustomers = cur => (cur || []).concat([rec]);
     } else if (changed && String(farmerId).startsWith('T_')) {
       // 還沒上傳的新客戶改了資料：手機裡的暫存客戶也要寫回，
@@ -2669,7 +2686,7 @@ ${state.cat}：${who}
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.06'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.09'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -2752,6 +2769,27 @@ ${state.cat}：${who}
       state.lockNext = true;
       await openVisit(b.dataset.dealercat);
     }));
+    // 0.5.07 下拉選單蓋在下面內容上 → 點選單和卡片以外的地方就收起來（不然會擋住上傳狀態）
+    document.addEventListener('click', e => {
+      if (e.target && e.target.closest && e.target.closest('.hubwrap')) return;
+      for (const [m, b] of [['farmerMenu', 'farmerBtn'], ['dealerMenu', 'dealerBtn']]) {
+        const menu = document.getElementById(m);
+        if (menu && !menu.hidden) { menu.hidden = true; const btn = document.getElementById(b); if (btn) btn.setAttribute('aria-expanded', 'false'); }
+      }
+    });
+    // 0.5.08 董事長「點下去會出現一般農民、試作農民、推廣農民」：卡片上蓋的原生下拉選單，選了直接進那一種（跟上面點選項的流程一樣，一樣鎖死）
+    // 選完馬上把選單撥回「請選擇」，下次選同一種也會觸發
+    const hubSel = (id, go) => {
+      const s = document.getElementById(id);
+      if (!s) return; // 舊頁面（快取混版）沒有：照舊用上面的按鈕選單
+      s.addEventListener('change', async () => { const v = s.value; s.value = ''; if (v) await go(v); });
+    };
+    hubSel('farmerSel', async cat => {
+      state.lockNext = true;
+      await openVisit(cat);
+      if (cat !== '農戶') state.catManual = true;
+    });
+    hubSel('dealerSel', async cat => { state.lockNext = true; await openVisit(cat); });
     initHomeTabs();
     $('syncBadge').addEventListener('click', () => { setHomeTab('punch'); const q = document.querySelector('.queue'); if (q && q.scrollIntoView) q.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
     $('backBtn').addEventListener('click', () => {

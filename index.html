@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="0.5.06">
+<meta name="app-build" content="0.5.09">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -69,6 +69,13 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
 .catswitch button{flex:1;min-height:48px;border:1.5px solid var(--paddy);background:none;color:var(--paddy);border-radius:12px;font-weight:700;cursor:pointer;padding:6px 4px;word-break:keep-all;overflow-wrap:anywhere;min-width:0}
 /* 0.4.24（2026-11-12 業務面線上檢查）：375 點寬手機「一般拜訪」被拆成「一般拜／訪」兩行 → 中文詞不從中間斷（真的放不下才斷），窄手機字縮小一點 */
 @media (max-width:400px){.catswitch{gap:4px}.catswitch button{font-size:1rem;padding:6px 2px}.farmermenu{gap:6px;padding:8px}.farmermenu button{font-size:.95rem;padding:6px 2px}}
+/* 0.5.07 首頁兩張卡的下拉選單：從卡片正下方展開、一項一行、蓋在下面內容上（結案分頁的 farmermenu 不受影響） */
+.hubwrap{position:relative;min-width:0;display:flex;flex-direction:column}
+.hubwrap>.cat{width:100%;flex:1}
+.hubmenu{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:30;grid-template-columns:1fr;margin-top:0;padding:6px;gap:6px;box-shadow:0 8px 20px rgba(0,0,0,.22)}
+.hubmenu button{min-height:52px}
+/* 0.5.08 看不見的原生下拉選單蓋滿整張卡片：點卡片＝打開選項清單（font-size 16px：iPhone 點了不會放大畫面） */
+.hubsel{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:5;font-size:16px;border:0;margin:0;-webkit-appearance:menulist;appearance:auto}
 /* 首頁分頁標籤（0.4.26，董事長給的範例：一排文字分頁，選到的那個加框） */
 /* 寬度照中文字數分（4、6、4、4 字）：緬文小字比較長，用內容寬度分會把中文擠成兩行（0.4.29 字體 16px 後實測） */
 .htabs{display:grid;grid-template-columns:4fr 5.8fr 4fr 2.4fr 4fr;gap:1px; /* 1號清單低#8（第8任）：「結案」緬文在 375 寬斷 2 行（量到格子 35px、要 41px）→ 從「執行任務清單」挪一點寬度，窄螢幕緬文再小一點 */border-bottom:1px solid var(--line);margin:4px 0 14px;overflow:visible}
@@ -318,20 +325,37 @@ footer{margin-top:18px;text-align:center}
 
   <!-- 分頁 1 田間打卡：照手稿左卡「農民」、右卡「盤商或種子商」，點了直接進打卡畫面（2026-11-12 規劃 D＋優化 1），下面是上傳狀態 -->
   <div class="hpanel" id="hp-punch" role="tabpanel" aria-labelledby="htab-punch">
+  <!-- 0.5.07 董事長截圖：一般／試作／推廣改成真正的下拉選單 → 選單放進各自卡片的框裡（hubwrap），從卡片正下方往下展開、直排、蓋在下面內容上 -->
   <div class="cats">
+    <div class="hubwrap">
     <button type="button" class="cat hub" id="farmerBtn" aria-expanded="false" aria-controls="farmerMenu">農民 ▾<span class="my">လယ်သမား</span><small class="hint">點開選：一般拜訪／試作／推廣<br>လယ်သမား ရွေး → မှတ်တမ်း・ဓာတ်ပုံ・စာ・အသံ</small></button>
-    <button type="button" class="cat c3 hub" id="dealerBtn" aria-expanded="false" aria-controls="dealerMenu">盤商或種子商 ▾<span class="my">ကုန်သည် / မျိုးစေ့ဆိုင်</span><small class="hint">點開選：盤商／種子商<br>ကုန်သည် / မျိုးစေ့ဆိုင် ရွေးပါ</small></button>
-  </div>
   <!-- 0.4.32 董事長 2026-11-12：「農民」改成下拉選單：一般拜訪農民／試作農民／推廣農民，選了直接進那一種打卡（結案在打卡畫面上方切換） -->
-  <div class="farmermenu" id="farmerMenu" role="menu" hidden>
+  <div class="farmermenu hubmenu" id="farmerMenu" role="menu" hidden>
     <button type="button" role="menuitem" data-farmercat="農戶">一般拜訪農民<span class="my">ပုံမှန်သွားရောက်</span></button>
     <button type="button" role="menuitem" data-farmercat="試作">試作農民<span class="my">စမ်းသပ်စိုက်ပျိုး</span></button>
     <button type="button" role="menuitem" data-farmercat="推廣">推廣農民<span class="my">မြှင့်တင်ရောင်းချ</span></button>
   </div>
+  <!-- 0.5.08 董事長：「下拉選單不是這樣，是滑鼠點下去會出現一般農民、試作農民、推廣農民」→ 卡片上蓋一個看不見的標準下拉選單，點卡片就跳出手機／電腦原生的選項清單（上面的 farmerMenu 留著當後備，平常點不到） -->
+  <select class="hubsel" id="farmerSel" aria-label="選農民類別 လယ်သမား အမျိုးအစား ရွေးပါ">
+    <option value="" selected>— 請選擇 ရွေးပါ —</option>
+    <option value="農戶">一般拜訪農民／ပုံမှန်သွားရောက်</option>
+    <option value="試作">試作農民／စမ်းသပ်စိုက်ပျိုး</option>
+    <option value="推廣">推廣農民／မြှင့်တင်ရောင်းချ</option>
+  </select>
+    </div>
+    <div class="hubwrap">
+    <button type="button" class="cat c3 hub" id="dealerBtn" aria-expanded="false" aria-controls="dealerMenu">盤商或種子商 ▾<span class="my">ကုန်သည် / မျိုးစေ့ဆိုင်</span><small class="hint">點開選：盤商／種子商<br>ကုန်သည် / မျိုးစေ့ဆိုင် ရွေးပါ</small></button>
   <!-- 0.4.53 董事長：盤商、種子商互相鎖死 → 點「盤商或種子商」先選一種 -->
-  <div class="farmermenu dealermenu" id="dealerMenu" role="menu" hidden>
+  <div class="farmermenu dealermenu hubmenu" id="dealerMenu" role="menu" hidden>
     <button type="button" role="menuitem" data-dealercat="盤商">盤商<span class="my">ကုန်သည်</span></button>
     <button type="button" role="menuitem" data-dealercat="種子商">種子商<span class="my">မျိုးစေ့ဆိုင်</span></button>
+  </div>
+  <select class="hubsel" id="dealerSel" aria-label="選盤商或種子商 ကုန်သည် / မျိုးစေ့ဆိုင် ရွေးပါ">
+    <option value="" selected>— 請選擇 ရွေးပါ —</option>
+    <option value="盤商">盤商／ကုန်သည်</option>
+    <option value="種子商">種子商／မျိုးစေ့ဆိုင်</option>
+  </select>
+    </div>
   </div>
   <div class="queue">
     <p class="count" id="pendingCount"></p>
