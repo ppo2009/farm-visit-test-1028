@@ -1430,9 +1430,9 @@
     if (state.cat === '結案' && FARMER_GROUPS.indexOf(state.closeGroup) >= 0) {
       const gOf = {};
       for (const f of mine) gOf[f.id] = CAT_KIND[await farmerCatOf(f)]; // 0.5.09 結案三組也先看 kind
-      const hit = mine.filter(f => gOf[f.id] === state.closeGroup), rest = mine.filter(f => gOf[f.id] !== state.closeGroup);
-      body = `<optgroup label="${esc(state.closeGroup)}">${hit.map(optOf).join('') || '<option value="" disabled>（沒有／မရှိ）</option>'}</optgroup>`
-        + (rest.length ? `<optgroup label="其他農民／အခြား လယ်သမား">${rest.map(optOf).join('')}</optgroup>` : '');
+      // 0.5.11 董事長「拿掉」：分類已寫死在類型欄（0.5.09），結案也不能錯位 → 只列按的那一類，不再列「其他農民」
+      const hit = mine.filter(f => gOf[f.id] === state.closeGroup);
+      body = `<optgroup label="${esc(state.closeGroup)}">${hit.map(optOf).join('') || '<option value="" disabled>（沒有／မရှိ）</option>'}</optgroup>`;
     }
     sel.innerHTML = '<option value="">— 請選擇 ရွေးပါ —</option>' + body +
       (closing ? '' : `<option value="__new">${isDealerCat() ? `＋ 新增${state.cat}（${CAT_MY[state.cat]} အသစ်）` : '＋ 新增農民（ လယ်သမား အသစ် ）'}</option>`);
@@ -1706,6 +1706,8 @@
   const closeTrialGroup = ct => (ct ? (ct.cat === '試作' ? '試作農民' : '推廣農民') : '一般農民');
   /** 0.4.75 低3：結案標題用哪一種——選了農民、而且查完試作 → 實際分類；還沒選（或還在查）→ 按的那顆按鈕 */
   const closeGroupNow = () => { const sel = $('farmer').value;
+    const fk = sel && sel !== '__new' ? (state.allCustomers || []).find(x => x.id === sel) : null;
+    if (fk && KIND_CAT[fk.kind]) return fk.kind; // 0.5.11 標題照這位的類型欄（試作／推廣農民沒有進行中試作也不會寫成一般農民結案）
     if (sel && sel !== '__new' && state.closeTrialFor === sel) return closeTrialGroup(state.closeTrial);
     return FARMER_GROUPS.indexOf(state.closeGroup) >= 0 ? state.closeGroup : ''; };
   function refreshCloseTitle() { if (state.cat === '結案' && closeGroupNow()) $('visitTitle').textContent = `${closeGroupNow()}結案 ပိတ်သိမ်း`; }
@@ -1973,7 +1975,8 @@
       const f = (state.allCustomers || []).find(x => x.id === sel);
       return { group: f && KIND_CAT[f.kind] ? f.kind : closeTrialGroup(null), trialResult: null };
     }
-    const group = closeTrialGroup(ct), outcome = $n('cTrialOutcome').value;
+    const fk = (state.allCustomers || []).find(x => x.id === sel);
+    const group = fk && KIND_CAT[fk.kind] ? fk.kind : closeTrialGroup(ct), outcome = $n('cTrialOutcome').value; // 0.5.11 低E：有類型欄分類就照分類（舊資料才看進行中的試作）
     if (outcome !== '成功' && outcome !== '失敗') return { group, trialResult: null }; // 舊頁面沒有結果欄：不送空結果（後台照舊寫「結束」）
     const tr = { id: ct.t.id, cat: ct.cat, outcome };
     if (outcome === '失敗') tr.failure = collectFailure();
@@ -2690,7 +2693,7 @@ ${state.cat}：${who}
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.10'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.11'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
