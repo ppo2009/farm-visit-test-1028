@@ -1016,7 +1016,7 @@
     const list = (h ? h.schedule : []).map(s => Object.assign({}, s, { late: s.due < today })); // 逾期用手機的今天重算
     const lastOf = {}; ((await Store.getMeta('farmers')) || []).forEach(f => { lastOf[f.id] = latestVisitDay(f.lastVisit, [f.id, f.tempId], state.myVisitList); }); // 0.4.82 日程那列加「距上次拜訪 N 天」；0.4.84 低1 合併這支手機的拜訪
     const soon = {}; ((h && Array.isArray(h.harvestSoon)) ? h.harvestSoon : []).forEach(x => { soon[x.cid] = true; }); // 0.4.82 日程裡快採收的人加標籤
-    $('scheduleList').innerHTML = list.map(s => `<li class="go" data-id="${esc(s.id)}" data-type="${esc(s.type)}"><span>${esc(s.name)}<br><small>${esc(catBi(s.type || '農民'))}・應回訪 ပြန်သွားရန် ${esc(s.due.slice(5).replace('-', '/'))}</small><br>${visitAgeHtml(lastOf[s.id], today)}${soon[s.id] ? ' <span class="pill late">快採收 ရိတ်သိမ်းခါနီး</span>' : ''}</span>${s.late ? '<span class="pill late">逾期 ရက်ကျော်</span>' : s.due === today ? '<span class="pill wait">今天 ယနေ့</span>' : ''}</li>`).join('')
+    $('scheduleList').innerHTML = list.map(s => `<li class="go" data-id="${esc(s.id)}" data-type="${esc(s.type)}"><span>${esc(s.name)}<br><small>${esc(MINE_TYPES[s.kind] ? s.kind + '／' + MINE_TYPES[s.kind] : catBi(s.type || '農民')) /* 0.5.12 低G：日程寫一般／試作／推廣農民（舊後台沒給 kind 照舊寫農民） */}・應回訪 ပြန်သွားရန် ${esc(s.due.slice(5).replace('-', '/'))}</small><br>${visitAgeHtml(lastOf[s.id], today)}${soon[s.id] ? ' <span class="pill late">快採收 ရိတ်သိမ်းခါနီး</span>' : ''}</span>${s.late ? '<span class="pill late">逾期 ရက်ကျော်</span>' : s.due === today ? '<span class="pill wait">今天 ယနေ့</span>' : ''}</li>`).join('')
       || `<li class="empty">${h ? '這 7 天沒有排到回訪／၇ ရက်အတွင်း သွားရန် မရှိ' : '連上網路後會顯示／အင်တာနက်ချိတ်ပြီးမှ ပြမည်'}</li>`;
     $('scheduleList').querySelectorAll('li.go').forEach(li => li.addEventListener('click', () => {
       openFromList(li.dataset.id, li.dataset.type); // 0.4.63 從清單進來也鎖死類別（先算好是一般／試作／推廣）
@@ -2693,7 +2693,7 @@ ${state.cat}：${who}
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.11'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.12'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="0.5.11">
+<meta name="app-build" content="0.5.12">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -386,6 +386,21 @@ footer{margin-top:18px;text-align:center}
   </div>
   <!-- 0.4.75 董事長截圖：右欄打叉拿掉——每月目標跟「我的進度」的「主管訂的目標」同一份，合成一份（todoPlan 拿掉，app.js 沒有這格就略過）；日程清單搬到「我的進度」 -->
   </div>
+  <!-- 0.5.12 董事長截圖「以下都放入執行中任務」：主管訂的目標、農民種植進度、日程清單從「歷史成就」搬到這裡（id 都不變），放在任務兩欄下面、我負責的客戶上面 -->
+  <div class="mine">
+  <section class="msec" id="todoPlanGrow">
+    <h3 class="msub">主管訂的目標<span class="my">လစဉ် ပစ်မှတ်</span></h3>
+    <ul id="planList"></ul>
+    <!-- 0.4.75 董事長：農民 150 天＝100%，自己負責的農民（三類）依百分比由高到低 -->
+    <h3 class="msub">農民種植進度（150 天）<span class="my">စိုက်ပျိုးမှု တိုးတက်မှု (ရက် ၁၅၀)</span></h3>
+    <ul id="growList"></ul>
+  </section>
+  <!-- 0.4.75 董事長截圖：日程清單從「執行任務清單」右欄搬過來（元件 id 不變）；本月新增客戶留在執行任務清單的「執行中任務」 -->
+  <section class="msec" id="mineSchedule">
+    <h2>日程清單<span class="my">သွားရန်ရက်စာရင်း</span><span class="sub">逾期＋未來 7 天要回訪的／ရက်ကျော်နှင့် နောက် ၇ ရက်အတွင်း ပြန်သွားရန်</span></h2>
+    <ul id="scheduleList"></ul>
+  </section>
+  </div>
   <div class="mine"><!-- 0.5.04 從「歷史成就」搬過來（董事長截圖紅框） -->
   <section class="msec" id="mineFarmers">
     <h2>我負責的客戶<span class="my">ကျွန်ုပ် တာဝန်ယူသော ဖောက်သည်</span><span class="sub" id="closeFarmerCount">點一位看進度和過往拜訪紀錄（照片、錄音）／နှိပ်ပြီး ကြည့်ပါ</span></h2>
@@ -464,18 +479,8 @@ footer{margin-top:18px;text-align:center}
     <ul class="nclist" id="statDetail" hidden aria-live="polite"></ul>
     <p class="sub" id="statByCat"></p>
     <p class="sub" id="homePendNote" hidden></p><!-- 0.4.94 低1：數字含這支手機還沒上傳的拜訪 -->
-    <h3 class="msub">主管訂的目標<span class="my">လစဉ် ပစ်မှတ်</span></h3>
-    <ul id="planList"></ul>
-    <!-- 0.4.75 董事長：農民 150 天＝100%，自己負責的農民（三類）依百分比由高到低 -->
-    <h3 class="msub">農民種植進度（150 天）<span class="my">စိုက်ပျိုးမှု တိုးတက်မှု (ရက် ၁၅၀)</span></h3>
-    <ul id="growList"></ul>
   </section>
 
-  <!-- 0.4.75 董事長截圖：日程清單從「執行任務清單」右欄搬過來（元件 id 不變）；本月新增客戶留在執行任務清單的「執行中任務」 -->
-  <section class="msec" id="mineSchedule">
-    <h2>日程清單<span class="my">သွားရန်ရက်စာရင်း</span><span class="sub">逾期＋未來 7 天要回訪的／ရက်ကျော်နှင့် နောက် ၇ ရက်အတွင်း ပြန်သွားရန်</span></h2>
-    <ul id="scheduleList"></ul>
-  </section>
 
   <!-- 0.4.73 董事長「試作報告拿掉」：業務手機不再有試作報告（0.4.61～0.4.72 這裡是試作報告摺疊區）；主管網頁照舊有 -->
   </div>
