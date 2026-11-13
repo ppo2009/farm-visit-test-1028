@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="0.5.12">
+<meta name="app-build" content="0.5.13">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -388,6 +388,11 @@ footer{margin-top:18px;text-align:center}
   </div>
   <!-- 0.5.12 董事長截圖「以下都放入執行中任務」：主管訂的目標、農民種植進度、日程清單從「歷史成就」搬到這裡（id 都不變），放在任務兩欄下面、我負責的客戶上面 -->
   <div class="mine">
+  <!-- 0.5.13 董事長「還沒做完的都算是執行任務那邊」：我的試作（進行中的試作、推廣）從歷史成就搬過來（id 不變） -->
+  <section class="msec" id="mineTrials">
+    <h2>我的試作<span class="my">ကျွန်ုပ်၏ စမ်းသပ်ကွက်များ</span><span class="sub">進行中的試作、推廣，點一下去拜訪／နှိပ်ပြီး သွားရောက်ပါ</span></h2>
+    <ul id="trialList"></ul>
+  </section>
   <section class="msec" id="todoPlanGrow">
     <h3 class="msub">主管訂的目標<span class="my">လစဉ် ပစ်မှတ်</span></h3>
     <ul id="planList"></ul>
@@ -461,9 +466,10 @@ footer{margin-top:18px;text-align:center}
 
   <!-- 0.5.04 董事長截圖紅框：「我負責的客戶」（分類＋選擇客戶＋進度卡＋修改種植資料）搬到「執行任務」最底下（id 都不變） -->
 
-  <section class="msec" id="mineTrials">
-    <h2>我的試作<span class="my">ကျွန်ုပ်၏ စမ်းသပ်ကွက်များ</span><span class="sub">進行中的試作、推廣，點一下去拜訪／နှိပ်ပြီး သွားရောက်ပါ</span></h2>
-    <ul id="trialList"></ul>
+  <!-- 0.5.13 董事長「歷史成就就保持著做完的，還沒做完的都算是執行任務那邊」：主管派的任務做完的搬來這裡（還沒做完的留在執行任務） -->
+  <section class="msec" id="mineDoneTasks">
+    <h2>已完成的任務<span class="my">ပြီးဆုံးသော အလုပ်များ</span><span class="sub">主管派的任務，近 7 天做完的／ရက် ၇ ရက်အတွင်း ပြီးသည်</span></h2>
+    <ul id="taskDoneList"></ul>
   </section>
 
   <section class="msec" id="mineMonth">
