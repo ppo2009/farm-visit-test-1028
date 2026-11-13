@@ -3,6 +3,15 @@
 (function () {
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  /* 0.5.15 董事長「作物都要改成英文跟緬甸文」（0.5.13 只改了業務手機）：主管網頁客戶的作物也顯示「English／緬文」；對照表跟 app.js 同一份，試算表存的值照舊是中文 */
+  const CROP_MY = { 番茄: 'ခရမ်းချဉ်သီး', 西瓜: 'ဖရဲသီး', 南瓜: 'ရွှေဖရုံသီး', 絲瓜: 'သပွတ်သီး', 茄子: 'ခရမ်းသီး', 苦瓜: 'ကြက်ဟင်းခါးသီး',
+    辣椒: 'ငရုတ်သီး', 玉米: 'ပြောင်းဖူး', 花椰菜: 'ပန်းဂေါ်ဖီ', 青花菜: 'ပန်းဂေါ်ဖီစိမ်း', 洋香瓜: 'သခွားမွှေးသီး', 扁蒲: 'ဘူးသီး', 水稻: 'စပါး',
+    高麗菜: 'ဂေါ်ဖီထုပ်' };
+  const CROP_EN = { 番茄: 'Tomato', 西瓜: 'Watermelon', 南瓜: 'Pumpkin', 絲瓜: 'Luffa', 茄子: 'Eggplant', 苦瓜: 'Bitter gourd', 辣椒: 'Chili',
+    玉米: 'Corn', 花椰菜: 'Cauliflower', 青花菜: 'Broccoli', 洋香瓜: 'Melon', 扁蒲: 'Bottle gourd', 水稻: 'Rice', 高麗菜: 'Cabbage' };
+  const cropText = c => (CROP_MY[c] && !/[က-႟]/.test(c) ? `${CROP_EN[c] || c}／${CROP_MY[c]}` : c);
+  /* 0.5.15 客戶「每月找 10 個農民（2/10）試作（0）推廣（2）一般（0）」：後台的新增農民目標有 parts 就多寫一行三類各幾位（跟業務手機同樣寫法）；舊後台沒有 parts 就不寫 */
+  const planParts = x => (x && x.parts ? `<small class="sub planparts">${['試作農民', '推廣農民', '一般農民'].map(k => `${k.replace('農民', '')} ${esc(String(x.parts[k] || 0))}`).join('・')}</small>` : '');
   /** 備用網址（0.4.30）：跟業務頁同一份清單（config.js 的 mirrors），主管頁網址＝每個網址＋boss.html；設定留空就不顯示 */
   function renderMirrors() {
     const box = $('mirrors'), ul = $('mirrorList');
@@ -491,7 +500,7 @@
       const idle = last ? daysBetween(last, d.today) : null;
       const ps = p && p.ok ? ((p.staff || []).find(x => x.name === s.name) || { plan: [] }).plan || [] : null;
       const plan = !p ? '<span class="sub">月計劃讀取中…</span>' : !p.ok ? '<span class="sub">月計劃讀取失敗</span>'
-        : ps.length ? ps.slice(0, 3).map(x => `<span>${esc(x.label)}　${x.done}／${x.target}${x.done >= x.target ? ' <span class="pill p-grn">達成</span>' : ''}<span class="bar"><i style="width:${pct(x.pct)}%"></i></span></span>`).join('')
+        : ps.length ? ps.slice(0, 3).map(x => `<span>${esc(x.label)}　${x.done}／${x.target}${x.done >= x.target ? ' <span class="pill p-grn">達成</span>' : ''}${planParts(x)}<span class="bar"><i style="width:${pct(x.pct)}%"></i></span></span>`).join('')
           + (ps.length > 3 ? `<span class="sub">還有 ${ps.length - 3} 項，看「更多 → 工作進度明細」</span>` : '')
         : '<span class="sub">本月沒有訂目標</span>';
       return `<button type="button" class="card scard" data-staff="${esc(s.name)}">
@@ -514,7 +523,7 @@
     if (!Array.isArray(list)) return '';
     const left = h => (h.overdue ? `<span class="pill p-red">已過 ${esc(-h.daysLeft)} 天還沒結案</span>` : h.daysLeft === 0 ? '<span class="pill p-yel">今天採收</span>' : `<span class="pill p-yel">剩 ${esc(h.daysLeft)} 天</span>`);
     return `<section class="harvest"><h3><span class="pill p-yel">快採收待盯</span> <span class="sub">預計採收日前 10 天內，請業務到現場；紅色＝已過預計採收日還沒結案</span></h3>
-      <ul class="list">${list.map(h => `<li${h.overdue ? ' class="hs-late"' : ''}>${esc(h.staff || '未指派')}｜<b><a href="javascript:void 0" data-go="${esc(h.cid)}">${esc(h.name)}</a></b>（${esc(h.crop)}）${left(h)}<br>
+      <ul class="list">${list.map(h => `<li${h.overdue ? ' class="hs-late"' : ''}>${esc(h.staff || '未指派')}｜<b><a href="javascript:void 0" data-go="${esc(h.cid)}">${esc(h.name)}</a></b>（${esc(cropText(h.crop))}）${left(h)}<br>
         <span class="sub">預計採收 ${esc(h.harvestDate)}（種植 ${esc(h.plantDate)}）｜最後拜訪 ${esc(h.lastVisit || '沒有')}</span></li>`).join('') || '<li class="empty">沒有</li>'}</ul></section>`;
   }
   /** 待確認結案（0.4.33 董事長：怕業務結案按錯 → 主管確認才算）：有才顯示，放總覽最上面 */
@@ -534,7 +543,7 @@
   function renderTodayLists() {
     const cs = active();
     const late = cs.filter(c => dueState(c) === 'late'), due = cs.filter(c => dueState(c) === 'due');
-    const li = c => { const l = visitsOf(c.id)[0]; return `<li><b><a href="javascript:void 0" data-go="${esc(c.id)}">${esc(c.name)}</a></b>（${esc(c.crop || '—')}）— ${esc(c.staff || '未指派')}${c.nextDue ? ' — 應回訪 ' + md(c.nextDue) : ''}${l && l.issue && l.issue !== '無' ? `<br><span class="sub">上次問題：${esc(l.issue)}</span>` : ''}</li>`; };
+    const li = c => { const l = visitsOf(c.id)[0]; return `<li><b><a href="javascript:void 0" data-go="${esc(c.id)}">${esc(c.name)}</a></b>（${esc(cropText(c.crop) || '—')}）— ${esc(c.staff || '未指派')}${c.nextDue ? ' — 應回訪 ' + md(c.nextDue) : ''}${l && l.issue && l.issue !== '無' ? `<br><span class="sub">上次問題：${esc(l.issue)}</span>` : ''}</li>`; };
     return `<section><h3><span class="pill p-red">逾期</span></h3><ul class="list">${late.map(li).join('') || '<li class="empty">沒有</li>'}</ul></section>
       <section><h3><span class="pill p-yel">今天該回訪</span></h3><ul class="list">${due.map(li).join('') || '<li class="empty">沒有</li>'}</ul></section>`;
   }
@@ -639,7 +648,7 @@
       const open = k in state.grpOpen ? state.grpOpen[k] : openDefault;
       return `<details class="grp" data-grp="${esc(k)}"${open ? ' open' : ''}><summary>${esc(k)}（${groups[k].length}）</summary><ul>${groups[k].slice().sort(custOrder).map(c => {
         const a = attnOf(c);
-        return `<li><button type="button" class="crow" data-go="${esc(c.id)}" aria-current="${sel && sel.id === c.id}"><span><b>${esc(c.name)}</b><span class="sub">${esc(c.kind || c.type || '農民')}${c.crop ? '・' + esc(c.crop) : ''}${c.area ? '・' + esc(c.area) : ''}</span></span>${a ? `<span class="pill ${a.cls}">${esc(a.text)}</span>` : ''}</button></li>`;
+        return `<li><button type="button" class="crow" data-go="${esc(c.id)}" aria-current="${sel && sel.id === c.id}"><span><b>${esc(c.name)}</b><span class="sub">${esc(c.kind || c.type || '農民')}${c.crop ? '・' + esc(cropText(c.crop)) : ''}${c.area ? '・' + esc(c.area) : ''}</span></span>${a ? `<span class="pill ${a.cls}">${esc(a.text)}</span>` : ''}</button></li>`;
       }).join('')}</ul></details>`;
     }).join('');
   }
@@ -684,8 +693,8 @@
     const dealer = c.type === '盤商' || c.type === '種子商';
     const kv = (k, val) => val !== '' && val != null ? `<span>${k}：${esc(val)}</span>` : '';
     return `<div class="card profile"><span><b>${esc(c.name)}</b>（${esc(c.id)}・${esc(c.kind || c.type || '農民')}）</span><span>${esc(c.area || '')}</span>${kv('鎮', c.town)}${kv('村', c.village) /* 0.4.75 董事長「農民改鎮跟村」：鄉改村、鎮放前面 */}${kv('電話', c.phone)}
-        ${dealer ? kv('老闆', c.owner) + kv('地址', c.address) + kv('作物', c.crop) + kv('品牌（舊資料）', c.brand) + kv('其他', c.fertilizer) /* 0.4.73 董事長：盤商、種子商品牌改作物；舊的品牌資料有才顯示 */
-          : kv('作物', c.crop) + kv('品種', c.variety) + kv('代碼', c.varCode) + kv('目前種植面積', c.areaNow === '' || c.areaNow == null ? '' : c.areaNow + ' ' + (state.data.areaUnit || '英畝')) + kv('可種植面積', c.areaMax === '' || c.areaMax == null ? '' : c.areaMax + ' ' + (state.data.areaUnit || '英畝')) /* 主管BUG#11 */ + kv('種植日期', c.plantDate) + kv('其他', c.fertilizer)
+        ${dealer ? kv('老闆', c.owner) + kv('地址', c.address) + kv('作物', cropText(c.crop)) + kv('品牌（舊資料）', c.brand) + kv('其他', c.fertilizer) /* 0.4.73 董事長：盤商、種子商品牌改作物；舊的品牌資料有才顯示 */
+          : kv('作物', cropText(c.crop)) + kv('品種', c.variety) + kv('代碼', c.varCode) + kv('目前種植面積', c.areaNow === '' || c.areaNow == null ? '' : c.areaNow + ' ' + (state.data.areaUnit || '英畝')) + kv('可種植面積', c.areaMax === '' || c.areaMax == null ? '' : c.areaMax + ' ' + (state.data.areaUnit || '英畝')) /* 主管BUG#11 */ + kv('種植日期', c.plantDate) + kv('其他', c.fertilizer)
             + `<span>試作：${esc(c.trial || '—')}${c.start ? '（' + md(c.start) + ' 開始）' : ''}</span>`}<span>負責：${esc(c.staff || '—')}</span>
         <span>下次回訪：${c.nextDue ? md(c.nextDue) : '—'} ${s === 'late' ? '<span class="pill p-red">逾期</span>' : s === 'due' ? '<span class="pill p-yel">今天</span>' : s === 'stop' ? `<span class="pill">${esc(c.status)}</span>` : ''}</span>
         ${c.lat != null && c.lng != null ? `<a href="https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}" target="_blank" rel="noopener">田區導航 ↗</a>` : ''}</div>
@@ -794,14 +803,14 @@
     const p = state.prog[state.pm];
     if (!p) return sel + '<p class="sub">讀取中…</p>';
     if (!p.ok) return sel + `<p class="empty">${esc(p.message || '讀取失敗')}</p>`;
-    const planHtml = list => list.length ? `<div class="plans">${list.map(x => `<span>${esc(x.label)}（${esc(x.period)}）<span class="bar"><i style="width:${Math.max(0, Math.min(100, x.pct))}%"></i></span>${x.done}／${x.target}${x.done >= x.target ? ' <span class="pill p-grn">達成</span>' : ''}</span>`).join('')}</div>` : '<span class="sub">沒有目標</span>';
+    const planHtml = list => list.length ? `<div class="plans">${list.map(x => `<span>${esc(x.label)}（${esc(x.period)}）<span class="bar"><i style="width:${Math.max(0, Math.min(100, x.pct))}%"></i></span>${x.done}／${x.target}${x.done >= x.target ? ' <span class="pill p-grn">達成</span>' : ''}${planParts(x)}</span>`).join('')}</div>` : '<span class="sub">沒有目標</span>';
     const cats = ['試作', '推廣', '農戶', '盤商', '種子商']; // 「農戶」顯示成「一般拜訪」；盤商、種子商分開算（2026-11-11 董事長）
     // 0.4.85 中5：各地區表選過去月份時只有拜訪數照月份，客戶數、進行中試作是今天的 → 表頭寫所選月份、那幾欄標（目前）
     return sel + `<h3>每位業務（${esc(p.label)}）</h3><div class="tbl"><table><thead><tr><th>業務</th><th>拜訪</th>${cats.map(c => `<th>${c === '農戶' ? '一般拜訪' : c}</th>`).join('')}<th>拜訪過的客戶</th><th>新增客戶</th><th>試作 開始／完成</th><th>計劃達成</th></tr></thead><tbody>
       ${p.staff.map(s => `<tr><td><b>${esc(s.name)}</b></td><td>${s.visits}</td>${cats.map(c => `<td>${s.byCategory[c] || 0}</td>`).join('')}<td>${s.customersVisited}</td><td>${s.newCustomers}</td><td>${s.trialsStarted}／${s.trialsEnded}</td><td>${planHtml(s.plan)}</td></tr>`).join('') || '<tr><td colspan="11" class="empty">沒有業務帳號</td></tr>'}
       </tbody></table></div>
       <h3>各地區（${esc(p.label)}）</h3><div class="tbl"><table><thead><tr><th>地區</th><th>農民（目前）</th><th>盤商（目前）</th><th>種子商（目前）</th><th>${Number(state.pm.slice(5))} 月拜訪</th><th>進行中的試作（目前）</th></tr></thead><tbody>      ${p.regions.map(r => `<tr><td>${esc(r.area)}</td><td>${r.customers}</td><td>${r.dealers}</td><td>${r.seeds || 0}</td><td>${r.visits}</td><td>${r.trialsActive}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">還沒有客戶</td></tr>'}
-      </tbody></table></div><p class="sub">目標在試算表「計劃」分頁設定：月份空白＝每個月都適用；業務空白＝每位業務各自的目標；指標有拜訪次數、拜訪客戶數、新增客戶、開始試作、完成試作。</p>`;
+      </tbody></table></div><p class="sub">目標在試算表「計劃」分頁設定：月份空白＝每個月都適用；業務空白＝每位業務各自的目標；指標有拜訪次數、拜訪客戶數、新增客戶、開始試作、完成試作、簽約（盤商、種子商結案「已簽約」；還在等主管確認、被退回的不算；類別空白＝兩種都算）。新增客戶的類別填「農戶」時，會另外列出試作、推廣、一般農民各幾位。</p>`;
   }
   /* ───── 任務：主管、總經理派給業務（每條跟著一位農民）；總經理另外派給主管（可以不指定客戶）（2026-11-12）─────
      業務在手機打勾；主管在這裡「我的任務」按「完成了」 */
