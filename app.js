@@ -297,6 +297,7 @@
   async function mineGroupOf(f) {
     const type = f.type || '農民';
     if (type !== '農民') return type;
+    if (KIND_CAT[f.kind]) return f.kind; // 0.5.10 抓BUG中1：類型欄寫了分類就照分類（試作／推廣農民還沒開始也不會掉到一般農民）
     for (const cat of ['試作', '推廣']) { const t = await activeTrialFor(f.id, cat); if (t) return closeTrialGroup({ cat, t }); }
     return closeTrialGroup(null);
   }
@@ -1968,7 +1969,10 @@
   /** 0.4.74 董事長「要讓主管看到」＋「要，先填結果」：group 依送出當下這位農民的實際狀態（不看按哪一顆結案鈕）；trialResult 格式照 2 號約定 */
   function closeTrialFields() {
     const sel = $('farmer').value, ct = state.closeTrialFor === sel ? state.closeTrial : null;
-    if (!ct) return { group: closeTrialGroup(null), trialResult: null };
+    if (!ct) { // 0.5.10 抓BUG低3：沒有進行中的試作時，結案分類照這位農民的類型欄（試作／推廣農民不再記成一般農民）
+      const f = (state.allCustomers || []).find(x => x.id === sel);
+      return { group: f && KIND_CAT[f.kind] ? f.kind : closeTrialGroup(null), trialResult: null };
+    }
     const group = closeTrialGroup(ct), outcome = $n('cTrialOutcome').value;
     if (outcome !== '成功' && outcome !== '失敗') return { group, trialResult: null }; // 舊頁面沒有結果欄：不送空結果（後台照舊寫「結束」）
     const tr = { id: ct.t.id, cat: ct.cat, outcome };
@@ -2686,7 +2690,7 @@ ${state.cat}：${who}
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.09'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.10'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
