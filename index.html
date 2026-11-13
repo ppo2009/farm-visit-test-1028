@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="0.5.13">
+<meta name="app-build" content="0.5.14">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -126,7 +126,7 @@ li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px
 .tcgrp li{overflow-wrap:anywhere} .tcgrp li.go{cursor:pointer} .tcgrp li small{color:var(--muted)} .tcgrp .none{margin:0 0 4px;color:var(--muted)}
 /* 0.4.87 董事長「兩欄太亂」：標題緬文放同一行後面、字小；說明縮成一行小灰字；0 筆的分類合成一行灰字；卡片邊框只留一層、間距一致 */
 .todoboard h2{margin:0 0 6px} .todoboard h2 .my{display:inline;font-size:.72rem;margin-left:6px}
-.todoboard h2 .sub{font-size:.78rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.todoboard h2 .sub{font-size:.85rem;color:var(--muted)} /* 0.5.14 排版：說明不再截成「…」，跟其他區塊一樣大小、可換行 */
 .todoboard .tasksum{border:0;background:none;padding:0;margin:0 0 6px}
 .todoboard #taskList,.todoboard .tcgrps{margin:0 0 18px}
 .tcgrp h3{margin:10px 0 4px} .tcgrp:first-child h3{margin-top:0}
@@ -264,6 +264,32 @@ header.homehdr{position:relative}
 .hvhide{border:1px solid var(--chili);background:var(--surface);color:var(--chili);border-radius:99px;font:inherit;font-size:.85rem;padding:4px 12px;min-height:36px;cursor:pointer} .hvhide .my{font-size:.7rem;margin-left:4px}
 .vage{font-weight:700;font-size:.85rem;overflow-wrap:anywhere} .vage.r{color:var(--chili)} .vage.y{color:var(--turmeric)} .vage.g{color:var(--paddy)} /* 0.4.82 多久沒回訪：≥10 天紅、5～9 天黃、0～4 天綠（字裡另有「久未回訪」等文字，不只靠顏色） */
 footer{margin-top:18px;text-align:center}
+/* 0.5.14 董事長「手機版排版排工整一點、每個頁面都檢查」（第14任，375 寬逐頁截圖後統一）：
+   ① 首頁各區塊標題一個樣：中文粗體＋緬文同一行小字，說明一行一行小灰字（不截斷）；「主管訂的目標」「種植進度」小標題也一樣大
+   ② 目標、種植進度右邊的小標籤固定寬度 → 每條進度條一樣長
+   ③ 已開發的客戶：新增日期自己一行（不再被擠到下一行還縮排）；進度卡姓名放標題下一行
+   ④ 打卡首頁兩張大卡：字從上面排齊；中文詞不從中間斷（「種子／商」）
+   ⑤ 結案：第二排（盤商、種子商）兩顆平分整排；表單兩欄：標題上緣、輸入框都對齊
+   ⑥ 只剩「有見到農民」一顆時佔滿整排；錄音提示和下一個欄位隔開；本月成績格子說明字小一點 */
+.hpanel h2{margin:22px 0 8px}
+.hpanel h2 .my,.hpanel h3.msub .my{display:inline;font-size:.72rem;margin-left:6px}
+.hpanel h2 .sub{display:block;font-size:.85rem;line-height:1.45;color:var(--muted);margin-top:2px}
+.hpanel h3.msub{font-size:1rem;margin:22px 0 8px}
+.hpanel .todoboard h2{margin:0 0 8px} .todoboard{row-gap:22px}
+li.plan>.pill{min-width:6.6em;text-align:center;flex:none}
+.hpanel .todoboard #taskList,.hpanel .todoboard .tcgrps{margin-bottom:0}
+#newCustList li small{display:block;margin-left:0;white-space:normal}
+.progress h3 .who{display:flex;margin:2px 0 0}
+.cat.hub{justify-content:flex-start}
+.cat.hub .hint{word-break:keep-all;overflow-wrap:anywhere}
+#closePick2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.closerow>div,.fields .row2>div{display:flex;flex-direction:column;min-width:0}
+.closerow>div>input,.closerow>div>select,.fields .row2>div>input,.fields .row2>div>select{margin-top:auto}
+.closerow,.fields .row2{align-items:stretch}
+.meetswitch{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
+.rechint{margin-bottom:12px}
+#mineType{margin-bottom:12px}
+.stat .sub{display:block;font-size:.85rem;line-height:1.4}
 </style>
 </head>
 <body>
@@ -376,9 +402,7 @@ footer{margin-top:18px;text-align:center}
   <h2>主管已派發的任務<span class="my">မန်နေဂျာ ပေးထားသော အလုပ်များ</span><span class="sub">誰派、什麼時候派、做完沒；做完打勾／ပြီးလျှင် အမှန်ခြစ်ပါ</span></h2>
   <div class="tasksum" id="taskSummary"></div>
   <ul id="taskList"></ul>
-  <!-- 0.4.72 董事長：本月新增幾個一般農民、試作農民、推廣農民、盤商、種子商，詳細的要列出來（1號）；0.4.82 改名「已開發的客戶」、五類直接列名字＋編號 -->
-  <h2>已開發的客戶<span class="my">ဖော်ထုတ်ပြီး ဖောက်သည်</span><span class="sub" id="newCustSum">本月新增的客戶／ဤလ ဖောက်သည်အသစ်</span></h2>
-  <div class="tcgrps" id="newCustList"></div>
+  <!-- 0.5.14 客戶「歷史就是已完成的事情，還沒是歷史的就留在執行」：「已開發的客戶」（本月已經新增的）搬到歷史成就（id 不變） -->
   </div>
   <div class="todocol" id="todoRight">
   <h2>快速打卡<span class="my">အမြန် ကွင်းဆင်းမှတ်တမ်း</span><span class="sub">我負責的客戶，點一位去田間打卡／နှိပ်ပြီး ကွင်းဆင်းမှတ်တမ်း ရေးပါ</span></h2>
@@ -396,8 +420,8 @@ footer{margin-top:18px;text-align:center}
   <section class="msec" id="todoPlanGrow">
     <h3 class="msub">主管訂的目標<span class="my">လစဉ် ပစ်မှတ်</span></h3>
     <ul id="planList"></ul>
-    <!-- 0.4.75 董事長：農民 150 天＝100%，自己負責的農民（三類）依百分比由高到低 -->
-    <h3 class="msub">農民種植進度（150 天）<span class="my">စိုက်ပျိုးမှု တိုးတက်မှု (ရက် ၁၅၀)</span></h3>
+    <!-- 0.4.75 董事長：農民 150 天＝100%，自己負責的農民（三類）依百分比由高到低；0.5.14 改照選單分頁每種作物的生長天數，緬文也拿掉「150 天」 -->
+    <h3 class="msub">農民種植進度（依作物生長天數）<span class="my">စိုက်ပျိုးမှု တိုးတက်မှု (သီးနှံ ကြီးထွားရက်အလိုက်)</span></h3>
     <ul id="growList"></ul>
   </section>
   <!-- 0.4.75 董事長截圖：日程清單從「執行任務清單」右欄搬過來（元件 id 不變）；本月新增客戶留在執行任務清單的「執行中任務」 -->
@@ -470,6 +494,12 @@ footer{margin-top:18px;text-align:center}
   <section class="msec" id="mineDoneTasks">
     <h2>已完成的任務<span class="my">ပြီးဆုံးသော အလုပ်များ</span><span class="sub">主管派的任務，近 7 天做完的／ရက် ၇ ရက်အတွင်း ပြီးသည်</span></h2>
     <ul id="taskDoneList"></ul>
+  </section>
+  <!-- 0.4.72 董事長：本月新增幾個一般農民、試作農民、推廣農民、盤商、種子商，詳細的要列出來（1號）；0.4.82 改名「已開發的客戶」、五類直接列名字＋編號；
+       0.5.14 客戶「歷史就是已完成的事情」→ 從執行任務搬來歷史成就（已經新增完成的客戶），id 不變 -->
+  <section class="msec" id="mineNewCust">
+    <h2>已開發的客戶<span class="my">ဖော်ထုတ်ပြီး ဖောက်သည်</span><span class="sub" id="newCustSum">本月新增的客戶／ဤလ ဖောက်သည်အသစ်</span></h2>
+    <div class="tcgrps" id="newCustList"></div>
   </section>
 
   <section class="msec" id="mineMonth">

@@ -256,22 +256,27 @@
     const id = f && f.id;
     return (await activeTrialFor(id, '試作')) ? '試作' : (await activeTrialFor(id, '推廣')) ? '推廣' : '農戶';
   }
-  /* 0.4.75 董事長「主管訂的目標進度，農民 150 天做成一個進度 100%」：從種植日期算起，150 天＝100%（全專案只有這裡定天數） */
-  const GROW_DAYS = 150;
-  /** 種植進度：沒填（或格式不對）回 null；日期在未來＝0%；超過 150 天顯示 100%、full＝true。today、plantDate 都是 YYYY-MM-DD（緬甸日期） */
-  function growOf(plantDate, today) {
+  /* 種植進度（0.4.75 起從種植日期算天數）。0.5.14 客戶「每個作物訂個天數追蹤，不需要用 150 天」＋董事長「不用寫死了，改給對方主管填天數」：
+     總天數＝選單分頁該作物的「生長天數」（主管自己填；後台 options.cropDays）。**沒填就沒有總天數**：只算第幾天、不畫進度條、提醒主管去填，不再假設 150 天 */
+  const cropDaysOf = (crop, opts) => { const d = (opts || state.options || {}).cropDays || {}; const n = Number(d[String(crop || '').trim()]); return n > 0 ? n : 0; };
+  /** 種植進度：沒填種植日期（或格式不對）回 null；日期在未來＝future；total＝作物生長天數（0＝主管還沒設）。today、plantDate 都是 YYYY-MM-DD（緬甸日期） */
+  function growOf(plantDate, today, total) {
+    const T = Number(total) > 0 ? Number(total) : 0;
     const pd = String(plantDate || '').slice(0, 10);
     if (!/^\d{4}-\d\d-\d\d$/.test(pd) || !/^\d{4}-\d\d-\d\d$/.test(String(today || ''))) return null;
     const days = Math.round((Date.parse(today) - Date.parse(pd)) / 86400000);
     if (!isFinite(days)) return null;
-    if (days < 0) return { days: 0, pct: 0, future: true, full: false };
-    return { days, pct: Math.min(100, Math.round(days / GROW_DAYS * 100)), future: false, full: days >= GROW_DAYS };
+    if (days < 0) return { days: 0, pct: 0, future: true, full: false, total: T, noTotal: !T };
+    if (!T) return { days, pct: 0, future: false, full: false, total: 0, noTotal: true };
+    return { days, pct: Math.min(100, Math.round(days / T * 100)), future: false, full: days >= T, total: T, noTotal: false };
   }
-  // 0.4.82 董事長「百分比改天數」：畫面只寫天數（pct 只拿來畫進度條）；未來＝還沒到種植日期、超過＝已滿 150 天、沒填＝未填種植日期
-  const growLabel = g => (!g ? '未填種植日期' : g.future ? '還沒到種植日期' : g.full ? `已滿 ${GROW_DAYS} 天` : `第 ${g.days} 天／${GROW_DAYS} 天`);
-  function growHtml(g) { // 進度條＋第 N 天／150 天（跟「主管訂的目標」同一種進度條）
+  // 畫面寫天數（pct 只拿來畫進度條）：未來＝還沒到種植日期、超過＝已滿 N 天、沒設天數＝第 N 天（未設生長天數）、沒填日期＝未填種植日期
+  const growLabel = g => (!g ? '未填種植日期' : g.future ? '還沒到種植日期' : g.noTotal ? `第 ${g.days} 天（未設生長天數）` : g.full ? `已滿 ${g.total} 天` : `第 ${g.days} 天／${g.total} 天`);
+  function growHtml(g) { // 進度條＋第 N 天／作物天數（跟「主管訂的目標」同一種進度條）
     if (!g) return '<p class="sub">未填種植日期，算不出種植進度（到「種植資料」分頁補填）／စိုက်ပျိုးသည့်ရက် မဖြည့်ရသေး</p>';
-    return `<div class="grow"><span class="lab">種植進度 စိုက်ပျိုးမှု တိုးတက်မှု：${g.future ? '<b>還沒到種植日期</b>／မစိုက်ရသေး' : `<b>第 ${g.days} 天／${GROW_DAYS} 天</b> <span class="my">ရက် ${g.days}／${GROW_DAYS}</span>`}${g.full ? `（已滿 ${GROW_DAYS} 天 <span class="my">ပြည့်</span>）` : ''}</span>`
+    if (g.noTotal && !g.future) return `<div class="grow"><span class="lab">種植進度 စိုက်ပျိုးမှု တိုးတက်မှု：<b>第 ${g.days} 天</b> <span class="my">ရက် ${g.days}</span></span>`
+      + '<p class="sub">這個作物主管還沒設定生長天數（試算表「選單」分頁、作物那一列的「生長天數」欄），設好就會顯示進度條／မန်နေဂျာ စိုက်ပျိုးရက် မသတ်မှတ်ရသေး</p></div>';
+    return `<div class="grow"><span class="lab">種植進度 စိုက်ပျိုးမှု တိုးတက်မှု：${g.future ? '<b>還沒到種植日期</b>／မစိုက်ရသေး' : `<b>第 ${g.days} 天／${g.total} 天</b> <span class="my">ရက် ${g.days}／${g.total}</span>`}${g.full ? `（已滿 ${g.total} 天 <span class="my">ပြည့်</span>）` : ''}</span>`
       + `<span class="bar"><i style="width:${g.pct}%"></i></span></div>`;
   }
   /* 0.4.82 董事長「業務端客戶多久沒回訪要上色」：距最後拜訪日 10 天以上紅、5～9 天黃、0～4 天綠；從沒拜訪過＝紅「還沒拜訪」。
@@ -315,7 +320,8 @@
     state.endedMine = ((await Store.getMeta('endedMine')) || []).filter(f => (f.type || '農民') === '農民' && !state.closeList.some(x => x.id === f.id)); // 0.4.80 中3
     const today = mmDay(0); // 業務BUG#4：緬甸的今天（0.4.75 種植進度也用這個日期算）
     const groupOf = {}, growOfId = {};
-    for (const f of allMine) { groupOf[f.id] = await mineGroupOf(f); if ((f.type || '農民') === '農民') growOfId[f.id] = growOf(f.plantDate, today); }
+    const optsG = state.options || (await Store.getMeta('options')) || {}; // 0.5.14 作物生長天數
+    for (const f of allMine) { groupOf[f.id] = await mineGroupOf(f); if ((f.type || '農民') === '農民') growOfId[f.id] = growOf(f.plantDate, today, cropDaysOf(f.crop, optsG)); }
     const mtype = MINE_TYPES[state.mineType] ? state.mineType : '一般農民';
     const list = allMine.filter(f => groupOf[f.id] === mtype);
     // 0.5.04：最上面 6 格改成「立案／失敗／成功％」（renderCaseStats，後台算），這裡不再寫人數
@@ -337,8 +343,8 @@
       const dayKey = g => (!g ? -2 : g.future ? -1 : g.days); // 0.4.82 照天數排：天數多的在前，還沒到種植日期其次，沒填最後
       const farmers = state.closeList.slice().sort((a, b) => dayKey(growOfId[b.id]) - dayKey(growOfId[a.id]));
       gl.innerHTML = farmers.map(f => { const g = growOfId[f.id];
-        return `<li class="plan"><span>${esc(f.name)}<br><small>${esc(groupOf[f.id])}・${g ? (g.future ? '還沒到種植日期／မစိုက်ရသေး' : `第 ${g.days} 天／${GROW_DAYS} 天（ရက် ${g.days}）`) : '未填種植日期／ရက် မဖြည့်ရ'}</small><span class="bar"><i style="width:${g ? g.pct : 0}%"></i></span></span>`
-          + `${!g ? '<span class="pill wait">未填 မဖြည့်ရ</span>' : g.full ? `<span class="pill ok">已滿 ${GROW_DAYS} 天 ပြည့်</span>` : g.future ? '<span class="pill wait">還沒到種植日期</span>' : `<span class="pill wait">第 ${g.days} 天</span>`}</li>`; }).join('')
+        return `<li class="plan"><span>${esc(f.name)}<br><small>${esc(groupOf[f.id])}・${g ? (g.future ? '還沒到種植日期／မစိုက်ရသေး' : (g.noTotal ? `第 ${g.days} 天（未設生長天數）` : `第 ${g.days} 天／${g.total} 天（ရက် ${g.days}）`)) : '未填種植日期／ရက် မဖြည့်ရ'}</small><span class="bar"><i style="width:${g ? g.pct : 0}%"></i></span></span>`
+          + `${!g ? '<span class="pill wait">未填 မဖြည့်ရ</span>' : g.full ? `<span class="pill ok">已滿 ${g.total} 天 ပြည့်</span>` : g.future ? '<span class="pill wait">還沒到種植日期</span>' : g.noTotal ? '<span class="pill wait">未設天數 ရက်မသတ်မှတ်ရ</span>' : `<span class="pill wait">第 ${g.days} 天</span>`}</li>`; }).join('')
         || '<li class="empty">還沒有自己負責的農民／လယ်သမား မရှိသေး</li>';
     }
   }
@@ -661,7 +667,7 @@
     if (cid && f && (f.type || '農民') === '農民') {
       gb.hidden = false;
       // 0.4.82 董事長「修改搬走」：還在種、自己負責、已上傳的農民 → 種植進度下面一顆「修改種植資料」，按了就地打開表單
-      gb.innerHTML = growHtml((state.mineGrow || {})[cid] || growOf(f.plantDate, mmDay(0)))
+      gb.innerHTML = growHtml((state.mineGrow || {})[cid] || growOf(f.plantDate, mmDay(0), cropDaysOf(f.crop)))
         + (plantEditable(cid) ? `<button type="button" class="btn2 small" id="pfEditBtn"${state.plEditCid === cid ? ' hidden' : ''}>✎ 修改種植資料<span class="my">စိုက်ပျိုးမှု အချက်အလက် ပြင်ရန်</span></button>` : '');
       const eb = document.getElementById('pfEditBtn'); if (eb) eb.onclick = () => openPlantEdit(cid);
     }
@@ -1029,7 +1035,9 @@
     renderReports(); // 0.4.61 試作報告：按過「看試作報告」才有清單，首頁重畫時照舊顯示
     // 月計劃（2C）
     const plan = (h && h.plan) || [];
-    $('planList').innerHTML = plan.map(p => `<li class="plan"><span>${esc(p.label)}<br><small>${esc(p.period)}　${p.done}／${p.target}</small>
+    // 0.5.14 客戶「每月找 10 個農民（2/10）試作（0）推廣（2）一般農戶（0）」：後台有 parts 就在下面多一行三類各幾位
+    const partsTxt = p => (p.parts ? '<br><small class="planparts">' + ['試作農民', '推廣農民', '一般農民'].map(k => `${esc(k.replace('農民', ''))} ${esc(String(p.parts[k] || 0))}`).join('・') + '</small>' : '');
+    $('planList').innerHTML = plan.map(p => `<li class="plan"><span>${esc(p.label)}<br><small>${esc(p.period)}　${p.done}／${p.target}</small>${partsTxt(p)}
       <span class="bar"><i style="width:${Math.max(0, Math.min(100, p.pct))}%"></i></span></span>${p.done >= p.target ? '<span class="pill ok">達成 ပြည့်မီ</span>' : `<span class="pill wait">${esc(String(p.done))}／${esc(String(p.target))}</span>`}</li>`).join('') /* 0.4.82 董事長：不顯示 %，只留 done／target；進度條保留 */
       || `<li class="empty">${h && h.plan ? '這個月沒有訂目標／ဤလ ပစ်မှတ် မရှိ' : '連上網路後會顯示／အင်တာနက်ချိတ်ပြီးမှ ပြမည်'}</li>`; // 舊版留下的首頁資料沒有計劃欄，不能說成沒有目標（第五輪自抓）
     // 0.4.63 執行任務清單右欄「我的進度」：本月拜訪次數＋月計劃（跟我的進度分頁同一份）
@@ -2703,7 +2711,7 @@ ${state.cat}：${who}
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.13'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.14'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
