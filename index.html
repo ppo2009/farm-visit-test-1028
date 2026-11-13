@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="0.5.03">
+<meta name="app-build" content="0.5.04">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -218,6 +218,7 @@ li.plan>span:first-child{flex:1;min-width:0}
 .mstat b{display:block;font-size:1.4rem;line-height:1.2;font-variant-numeric:tabular-nums;color:var(--paddy)}
 .mstat>span{display:block;font-size:.85rem;line-height:1.25;word-break:keep-all;overflow-wrap:anywhere}
 .mstat .my{display:block;font-size:.72rem;color:var(--muted)}
+.mstat .cs{display:block;font-size:.72rem;line-height:1.35;color:var(--muted)} .mstat .cs .bad{color:var(--chili);font-weight:700} /* 0.5.04 立案／失敗／成功％ */
 .msec{margin-top:6px}
 .msec h2{margin-top:14px}
 .msub{font-size:.95rem;margin:12px 0 6px}
@@ -308,7 +309,7 @@ footer{margin-top:18px;text-align:center}
     <!-- 0.4.81 董事長：「我的進度」改名「月分工作進度」（緬文待校對；id、data-htab 不變） -->
     <!-- 0.4.91 董事長截圖「分頁列太佔空間」（第11任派）：「執行任務清單」→「執行任務」、「月分工作進度」→「工作進度」（緬文沿用，待校對；id、data-htab 不變）；
          中文分兩段 .zh span：手機（≤480px）兩字一行、兩行，電腦照舊一行 -->
-    <button type="button" role="tab" id="htab-mine" data-htab="mine" aria-selected="false"><span class="zh"><span>工作</span><span>進度</span></span><span class="my">လစဉ် လုပ်ငန်း တိုးတက်မှု</span></button>
+    <button type="button" role="tab" id="htab-mine" data-htab="mine" aria-selected="false"><span class="zh"><span>歷史</span><span>成就</span></span><span class="my">အောင်မြင်မှု မှတ်တမ်း</span></button><!-- 0.5.04 董事長：「工作進度」改名「歷史成就」（緬文待校對；id、data-htab 不變） -->
     <!-- 0.4.60 董事長截圖：三顆結案按鈕搬到自己的「結案」分頁（我的進度和種植資料中間） -->
     <!-- 0.4.77 董事長截圖：種植資料移到結案前面；0.4.82 董事長：再換回來（結案在前、種植資料最後，等於 0.4.78 之前的順序） -->
     <button type="button" role="tab" id="htab-close" data-htab="close" aria-selected="false"><span class="zh"><span>結案</span></span><span class="my">ပိတ်သိမ်း</span></button>
@@ -356,29 +357,12 @@ footer{margin-top:18px;text-align:center}
   <div class="tcgrps" id="newCustList"></div>
   </div>
   <div class="todocol" id="todoRight">
-  <h2>我負責的客戶<span class="my">ကျွန်ုပ် တာဝန်ယူသော ဖောက်သည်</span><span class="sub">點一位去田間打卡／နှိပ်ပြီး ကွင်းဆင်းမှတ်တမ်း ရေးပါ</span></h2>
+  <h2>快速打卡<span class="my">အမြန် ကွင်းဆင်းမှတ်တမ်း</span><span class="sub">我負責的客戶，點一位去田間打卡／နှိပ်ပြီး ကွင်းဆင်းမှတ်တမ်း ရေးပါ</span></h2>
   <div class="tcgrps" id="todoCust"></div>
   </div>
   <!-- 0.4.75 董事長截圖：右欄打叉拿掉——每月目標跟「我的進度」的「主管訂的目標」同一份，合成一份（todoPlan 拿掉，app.js 沒有這格就略過）；日程清單搬到「我的進度」 -->
   </div>
-  </div>
-
-  <!-- 分頁 4 我的進度：我的試作、月計劃、工作進度 -->
-  <div class="hpanel" id="hp-mine" role="tabpanel" aria-labelledby="htab-mine" hidden>
-  <!-- 0.4.69 董事長「我的進度裡面很亂，介面優化一下」（1號）：最上面一排重點數字；我負責的農民只留清單、點一位就在那張卡下面展開進度；
-       月計劃＋工作進度合成「本月成績」；試作報告摺到最下面；電腦寬度最多 760 置中。資料、後台都沒改 -->
-  <div class="mine">
-  <div class="mstats" id="mineStats">
-    <!-- 0.4.73 董事長：我的進度列自己負責的農民、盤商、種子商；試作報告拿掉 → 前三格是三種客戶各幾位（點了切到那一種） -->
-    <!-- 0.4.75 董事長：一般農民、試作農民、推廣農民、種子商、盤商五類＋本月拜訪（3 欄 2 列，375 寬不左右滑） -->
-    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="一般農民"><b id="msGen">—</b><span>一般農民<span class="my">ပုံမှန် လယ်သမား</span></span></button>
-    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="試作農民"><b id="msTrial">—</b><span>試作農民<span class="my">စမ်းသပ် လယ်သမား</span></span></button>
-    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="推廣農民"><b id="msPromo">—</b><span>推廣農民<span class="my">မြှင့်တင် လယ်သမား</span></span></button>
-    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="種子商"><b id="msSeeds">—</b><span>種子商<span class="my">မျိုးစေ့ဆိုင်</span></span></button>
-    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="盤商"><b id="msDealers">—</b><span>盤商<span class="my">ကုန်သည်</span></span></button>
-    <button type="button" class="mstat" data-jump="mineMonth"><b id="msVisits">—</b><span>本月拜訪<span class="my">ဤလ သွားရောက်မှု</span></span></button>
-  </div>
-
+  <div class="mine"><!-- 0.5.04 從「歷史成就」搬過來（董事長截圖紅框） -->
   <section class="msec" id="mineFarmers">
     <h2>我負責的客戶<span class="my">ကျွန်ုပ် တာဝန်ယူသော ဖောက်သည်</span><span class="sub" id="closeFarmerCount">點一位看進度和過往拜訪紀錄（照片、錄音）／နှိပ်ပြီး ကြည့်ပါ</span></h2>
     <!-- 0.4.73 董事長：只列自己負責的；切換看農民、盤商、種子商 -->
@@ -417,6 +401,26 @@ footer{margin-top:18px;text-align:center}
     <!-- 0.4.73 董事長「點進去要有之前拜訪過的紀錄及照片及錄音」：過往全部拜訪（照片、錄音按了才下載） -->
     <div class="progress vhist" id="closeHistory" hidden aria-live="polite"></div>
   </section>
+  </div>
+  </div>
+
+  <!-- 分頁 4 我的進度：我的試作、月計劃、工作進度 -->
+  <div class="hpanel" id="hp-mine" role="tabpanel" aria-labelledby="htab-mine" hidden>
+  <!-- 0.4.69 董事長「我的進度裡面很亂，介面優化一下」（1號）：最上面一排重點數字；我負責的農民只留清單、點一位就在那張卡下面展開進度；
+       月計劃＋工作進度合成「本月成績」；試作報告摺到最下面；電腦寬度最多 760 置中。資料、後台都沒改 -->
+  <div class="mine">
+  <div class="mstats" id="mineStats">
+    <!-- 0.4.73 董事長：我的進度列自己負責的農民、盤商、種子商；試作報告拿掉 → 前三格是三種客戶各幾位（點了切到那一種） -->
+    <!-- 0.4.75 董事長：一般農民、試作農民、推廣農民、種子商、盤商五類＋本月拜訪（3 欄 2 列，375 寬不左右滑） -->
+    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="一般農民"><span>一般農民<span class="my">ပုံမှန် လယ်သမား</span></span><b id="msGen">—</b><small class="cs" id="msGenCs"></small></button>
+    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="試作農民"><span>試作農民<span class="my">စမ်းသပ် လယ်သမား</span></span><b id="msTrial">—</b><small class="cs" id="msTrialCs"></small></button>
+    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="推廣農民"><span>推廣農民<span class="my">မြှင့်တင် လယ်သမား</span></span><b id="msPromo">—</b><small class="cs" id="msPromoCs"></small></button>
+    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="種子商"><span>種子商<span class="my">မျိုးစေ့ဆိုင်</span></span><b id="msSeeds">—</b><small class="cs" id="msSeedsCs"></small></button>
+    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="盤商"><span>盤商<span class="my">ကုန်သည်</span></span><b id="msDealers">—</b><small class="cs" id="msDealersCs"></small></button>
+    <button type="button" class="mstat" data-jump="mineMonth"><span>合計<span class="my">စုစုပေါင်း</span></span><b id="msTotal">—</b><small class="cs" id="msTotalCs"></small><small class="cs">總拜訪 <span id="msVisits">—</span> 次</small></button><!-- 0.5.04 董事長看預覽確認：6 格改「立案、失敗（紅字）、成功％、失敗％」，第 6 格合計；總拜訪（同版先做的）放在合計格最下面一行；緬文待校對 -->
+  </div>
+
+  <!-- 0.5.04 董事長截圖紅框：「我負責的客戶」（分類＋選擇客戶＋進度卡＋修改種植資料）搬到「執行任務」最底下（id 都不變） -->
 
   <section class="msec" id="mineTrials">
     <h2>我的試作<span class="my">ကျွန်ုပ်၏ စမ်းသပ်ကွက်များ</span><span class="sub">進行中的試作、推廣，點一下去拜訪／နှိပ်ပြီး သွားရောက်ပါ</span></h2>

@@ -171,6 +171,23 @@
     });
   }
 
+  /**
+   * 0.5.04 董事長「立案就＋1、失敗紅字＋1，相除算出成功、失敗的 %」（看過預覽確認）：歷史成就最上面 6 格，
+   * 五類＋合計；大數字＝立案，下面小字「失敗 N（紅）」「成功 X%・失敗 Y%」（分母＝立案；立案 0 寫「—」）。舊後台沒有 caseStats 就全部「—」
+   */
+  function renderCaseStats(cs) {
+    const K = [['msGen', '一般農民'], ['msTrial', '試作農民'], ['msPromo', '推廣農民'], ['msSeeds', '種子商'], ['msDealers', '盤商']];
+    const pct = (n, d) => (d ? Math.round(n / d * 100) + '%' : '—');
+    const tot = { cases: 0, ok: 0, fail: 0 };
+    const put = (id, s) => {
+      const b = document.getElementById(id), sm = document.getElementById(id + 'Cs');
+      if (b) b.textContent = s ? String(s.cases) : '—';
+      if (sm) sm.innerHTML = s ? `立案 စတင် ${s.cases}・<span class="bad">失敗 မအောင်မြင် ${s.fail}</span><br>成功 ${pct(s.ok, s.cases)}・失敗 ${pct(s.fail, s.cases)}` : '';
+    };
+    K.forEach(([id, k]) => { const s = cs && cs[k] ? { cases: Number(cs[k].cases) || 0, ok: Number(cs[k].ok) || 0, fail: Number(cs[k].fail) || 0 } : null; if (s) { tot.cases += s.cases; tot.ok += s.ok; tot.fail += s.fail; } put(id, s); });
+    put('msTotal', cs ? tot : null);
+  }
+
   /* ───── 首頁 ───── */
   async function showHome() {
     if (await loginLostCheck()) return; // 0.4.87 中6：打卡時登入失效、先保留表單 → 回首頁這時才跳登入
@@ -287,8 +304,7 @@
     for (const f of allMine) { groupOf[f.id] = await mineGroupOf(f); if ((f.type || '農民') === '農民') growOfId[f.id] = growOf(f.plantDate, today); }
     const mtype = MINE_TYPES[state.mineType] ? state.mineType : '一般農民';
     const list = allMine.filter(f => groupOf[f.id] === mtype);
-    const cnt = t => allMine.filter(f => groupOf[f.id] === t).length;
-    [['msGen', '一般農民'], ['msTrial', '試作農民'], ['msPromo', '推廣農民'], ['msSeeds', '種子商'], ['msDealers', '盤商']].forEach(([id, t]) => { $n(id).textContent = String(cnt(t)); });
+    // 0.5.04：最上面 6 格改成「立案／失敗／成功％」（renderCaseStats，後台算），這裡不再寫人數
     if (typeof document.querySelectorAll === 'function') document.querySelectorAll('#mineType [data-mtype]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mtype === mtype)));
     const isFarmer = FARMER_GROUPS.indexOf(mtype) >= 0;
     const keep = sel.value;
@@ -1015,8 +1031,8 @@
     $('statVisits').textContent = cur ? cur.visits : (h ? h.monthVisits : '—');
     // 0.4.69 最上面一排：本月拜訪（不跟著月份切換）
     // 0.4.97（第12任 BUG 審查手機 2）：存著的首頁資料是上個月的（月初還沒同步過）→ 不能把上個月的數字當本月（0.4.95 起還會再加這個月未上傳的）→ 底數用「—」
-    const hThisMonth = !!(h && (!h.month || h.month === String(today || '').slice(0, 7)));
-    $n('msVisits').textContent = hThisMonth && h.monthVisits != null ? String(h.monthVisits) : '—';
+    renderCaseStats(h && h.caseStats); // 0.5.04 最上面 6 格
+    $n('msVisits').textContent = h && h.totalVisits != null ? String(h.totalVisits) : '—'; // 0.5.04 董事長「本月拜訪改總拜訪」：後台給的全部拜訪次數（舊後台沒有就「—」）；hThisMonth 不再用在這格
     $('statNew').textContent = cur ? cur.newCustomers : (h ? h.newCustomers : '—');
     $('statCust').textContent = cur ? cur.customersVisited : '—';
     $('statTrials').textContent = cur ? `${cur.trialsStarted}／${cur.trialsEnded}` : '—';
@@ -1033,7 +1049,7 @@
       const newN = new Set(pend.filter(v => /^T_/.test(String(v.farmerId || '')) && !srvTmp.has(v.farmerId)).map(v => v.farmerId)).size; // 新增客戶（臨時編號）
       const custN = new Set(pend.filter(v => v.farmerId && (lvOf[v.farmerId] || '').slice(0, 7) !== thisMonth).map(v => v.farmerId)).size; // 這個月後台還沒算到的客戶
       const plus = (el, n) => { if (!el || !n) return; const base = Number(el.textContent); el.textContent = String((isFinite(base) && el.textContent.trim() !== '' ? base : 0) + n); };
-      plus($n('statVisits'), pend.length); plus($n('msVisits'), pendAll.length); plus($n('statNew'), newN); plus($n('statCust'), custN);
+      plus($n('statVisits'), pend.length); plus($n('msVisits'), (state.myVisitList || []).filter(v => v && v.status === 'pending').length); /* 0.5.04 總拜訪：還沒上傳的不分月份都加 */ plus($n('statNew'), newN); plus($n('statCust'), custN);
       const pn = $n('homePendNote'); pn.hidden = !pend.length;
       pn.textContent = pend.length ? `含 ${pend.length} 筆還沒上傳的拜訪（上傳後主管那邊才看得到）／မတင်ရသေးသော ${pend.length} ခု ပါဝင်သည်` : '';
     }
@@ -2640,7 +2656,7 @@ ${state.cat}：${who}
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.03'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.04'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -2776,6 +2792,8 @@ ${state.cat}：${who}
     document.querySelectorAll('#mineStats [data-jump]').forEach(b => b.addEventListener('click', () => {
       if (b.dataset.mtype) pickMineType(b.dataset.mtype);
       const sec = document.getElementById(b.dataset.jump); if (!sec) return;
+      // 0.5.04「我負責的客戶」搬到執行任務：要跳的區塊在別的分頁就先切過去
+      const pan = sec.closest ? sec.closest('.hpanel') : null; if (pan && pan.hidden && /^hp-/.test(pan.id)) setHomeTab(pan.id.slice(3));
       if (sec.scrollIntoView) sec.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }));
     // 打卡畫面最下面「取消結案」：跟左上返回一樣，回首頁（還沒存的要先確認）

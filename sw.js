@@ -1,6 +1,6 @@
 /* 背景程式：讓網頁沒網路也打得開，並在 Android 手機一有網路時於背景自動上傳 */
 /* global self, caches, clients, FarmCore */
-const VERSION = 'build-20261113-113242';
+const VERSION = 'build-20261113-115806';
 const CACHE = 'farm-visit-' + VERSION;
 const NET_TIMEOUT_MS = 4000; // 0.4.87 中7：網路 4 秒還沒回，手機裡有快取就先用
 const SLOW = {};               // 逾時的記號
