@@ -53,6 +53,7 @@
     state.view = view;
     ['setup', 'home', 'visit'].forEach(v => { $(v).hidden = v !== view; });
     $('logoutBtn').hidden = view === 'setup';
+    const fb = document.getElementById('feedbackBtn'); if (fb) fb.hidden = view === 'setup'; // 0.5.03 舊頁面沒有這個鈕就不管
     window.scrollTo(0, 0);
   }
 
@@ -140,6 +141,34 @@
     try { await Promise.race([gasCall({ action: 'logout' }), new Promise(r => setTimeout(r, 5000))]); } catch (e) { /* 照樣清本機、回登入頁 */ } finally { lb.disabled = false; lb.innerHTML = lbl; }
     await Store.setMeta('config', null);
     showLogin();
+  }
+
+  /**
+   * 0.5.03 董事長「登出上面改為『提供建議』，傳到後台，看業務使用者有什麼建議」：
+   * 按了跳出填寫框 → 送 action 'feedback'（後台寫進「使用者建議」分頁）。要有網路才送得出去（不排進上傳佇列）；
+   * 送出失敗時字留著，可以再按一次；送出代號同一則不變，後台收過就不會重複記
+   */
+  function initFeedback() {
+    const btn = document.getElementById('feedbackBtn'), box = document.getElementById('feedbackBox');
+    if (!btn || !box) return; // 舊頁面
+    const txt = $n('feedbackText'), hint = $n('feedbackHint'), send = $n('feedbackSend');
+    let sid = '';
+    const close = () => { box.hidden = true; };
+    btn.addEventListener('click', () => { box.hidden = false; hint.textContent = ''; hint.className = 'sub'; if (!sid) sid = 'fb_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8); txt.focus(); });
+    $n('feedbackCancel').addEventListener('click', close);
+    box.addEventListener('click', e => { if (e.target === box) close(); });
+    send.addEventListener('click', async () => {
+      const text = txt.value.trim();
+      if (!text) { hint.textContent = '請先寫建議內容／အကြံပြုချက် ရေးပါ'; hint.className = 'sub err'; return; }
+      send.disabled = true; hint.className = 'sub'; hint.textContent = '送出中…／ပို့နေသည်';
+      let r = null;
+      try { r = await gasCall({ action: 'feedback', text, sid, appVersion: String((typeof FARM_CONFIG !== 'undefined' && FARM_CONFIG.appVersion) || '') }); } catch (e) { r = null; }
+      send.disabled = false;
+      if (r && r.ok) { txt.value = ''; sid = ''; close(); toast('已送出，謝謝你的建議／ပို့ပြီးပါပြီ၊ ကျေးဇူးတင်ပါသည်'); return; }
+      hint.className = 'sub err';
+      hint.textContent = r && r.offline ? '沒有網路，連上網路再按一次送出（字會留著）／အင်တာနက် ချိတ်ပြီး ထပ်ပို့ပါ'
+        : (r && r.message) || '沒有送出去，請再按一次（字會留著）／ထပ်နှိပ်ပါ';
+    });
   }
 
   /* ───── 首頁 ───── */
@@ -2611,7 +2640,7 @@ ${state.cat}：${who}
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.01'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.03'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -2666,6 +2695,7 @@ ${state.cat}：${who}
 
     $('loginForm').addEventListener('submit', onLogin);
     $('logoutBtn').addEventListener('click', logout);
+    initFeedback(); // 0.5.03 提供建議
     document.querySelectorAll('.cat[data-cat]').forEach(b => b.addEventListener('click', () => openVisit(b.dataset.cat)));
     // 首頁兩張大卡直接進打卡畫面；一般／試作／推廣、盤商／種子商在打卡畫面上方切換（優化 1）
     // 0.4.32 董事長：「農民」改成下拉選單（一般拜訪農民／試作農民／推廣農民），選了直接進那一種
