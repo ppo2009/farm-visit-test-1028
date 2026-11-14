@@ -55,12 +55,60 @@
     });
   }
 
+  /**
+   * R22-02：這輪沒問到的臨時編號，把舊快取同一件（同 id）的對照併回來。
+   * R23-05（GPT）：這輪**問過**的編號以後台答案為準（後台說它在哪一件就在哪一件，沒列就是沒有）→ 舊對照只留「這輪沒問到、新資料也沒有任何一件用著」的；
+   * R23-04（GPT）：客戶 tempId 畫面都當單一編號用 → 不再串成好幾個，只在新資料是空的時候補回舊的那一個
+   */
+  function mergeTemps(k, list, prevList, askedSet) {
+    if (!Array.isArray(prevList) || !prevList.length) return list;
+    const asked = askedSet instanceof Set ? askedSet : new Set(), prev = {}, used = new Set();
+    prevList.forEach(x => { if (x && x.id) prev[x.id] = x; });
+    list.forEach(x => { if (!x) return; (k === 'trials' ? (Array.isArray(x.temps) ? x.temps : []) : [x.tempId]).forEach(t => { if (t) used.add(String(t)); }); });
+    const keepOld = t => !!t && !asked.has(String(t)) && !used.has(String(t));
+    return list.map(x => {
+      const p = x && x.id && prev[x.id];
+      if (!p) return x;
+      if (k === 'trials') {
+        const a = Array.isArray(x.temps) ? x.temps : [], add = (Array.isArray(p.temps) ? p.temps : []).filter(keepOld);
+        return add.length ? Object.assign({}, x, { temps: a.concat(add) }) : x;
+      }
+      return !x.tempId && keepOld(p.tempId) ? Object.assign({}, x, { tempId: p.tempId }) : x;
+    });
+  }
+
+  /**
+   * R36-1／R37-1：結案查詢用到的所有資料的版本（後台資料版本、本機試作記號、暫存客戶、拜訪編號清單），在呼叫者的交易裡讀。
+   * lookupVersion 和 saveVisit（存檔前比對）共用，兩邊算出來的一定是同一種格式
+   */
+  function readLookupVer(visits, meta, done, fail) {
+    // R38-1（GPT）：後台沒給時間時 srvDataAt 不會變 → 多比一格 cacheRev（applyServer 每次寫快取都換新），放最後一格，前四格位置不變
+    const out = [], keys = ['srvDataAt', 'localTrials', 'localCustomers'], pos = [0, 1, 2];
+    keys.push('cacheRev'); pos.push(4);
+    let left = keys.length + 1;
+    const one = () => { if (--left === 0) done(JSON.stringify(out)); };
+    keys.forEach((k, i) => { const r = meta.get(k); r.onsuccess = () => { out[pos[i]] = r.result || null; one(); }; r.onerror = () => fail(r.error); });
+    const rv = visits.getAllKeys ? visits.getAllKeys() : visits.getAll();
+    rv.onsuccess = () => { out[3] = (rv.result || []).map(x => (x && typeof x === 'object' ? x.id : x)).map(String).sort(); one(); };
+    rv.onerror = () => fail(rv.error);
+  }
+  /** R38-1：每次寫後台快取換一個新記號（不靠後台時間、不靠手機時間是否往前；同一毫秒兩次也不同） */
+  let cacheRevSeq = 0;
+  function newCacheRev() { cacheRevSeq += 1; return Date.now().toString(36) + '.' + cacheRevSeq + '.' + Math.random().toString(36).slice(2, 10); }
+
   const Store = {
     putVisit: v => tx('visits', 'readwrite', s => reqP(s.put(v))),
     allVisits: () => tx('visits', 'readonly', s => reqP(s.getAll())),
     deleteVisit: id => tx('visits', 'readwrite', s => reqP(s.delete(id))),
     getVisit: id => tx('visits', 'readonly', s => reqP(s.get(id))),
     getMeta: k => tx('meta', 'readonly', s => reqP(s.get(k))),
+    /** R35-1（GPT）：在同一個交易裡讀好幾個（一致的快照：中間不會插進別的寫入） */
+    getMetaMany: keys => tx('meta', 'readonly', s => Promise.all(keys.map(k => reqP(s.get(k))))),
+    /**
+     * R36-1（GPT）：結案查詢用到的所有資料的版本，**在同一個交易裡**讀：後台資料版本、本機試作記號、暫存客戶，加上拜訪編號清單
+     *   （查詢會看拜訪判斷舊暫存是誰的；同步清掉 7 天前的舊拜訪也算資料變了）。拜訪只讀編號（有 getAllKeys 就用，不載照片錄音）
+     */
+    lookupVersion: () => txBoth((visits, meta, setOut, fail) => readLookupVer(visits, meta, setOut, fail)),
     setMeta: (k, v) => tx('meta', 'readwrite', s => reqP(s.put(v, k))),
     /**
      * 讀、改、寫在「同一個」讀寫交易裡做完。瀏覽器保證同一個資料表的讀寫交易一次只跑一個，
@@ -84,7 +132,7 @@
      *   再讀上次寫入的後台資料版本（srvDataAt，後台讀資料前取的 serverTime）——這份比較舊（晚到的舊回應）就不寫，回 'stale'；
      *   都通過才把每一項寫進去並更新版本。比較和寫入不分開，換帳號、舊回應晚到、兩邊同時寫都不會蓋錯；任何一筆寫入失敗整個交易作廢（不會只寫一半）
      */
-    applyServer: (sentKey, serverTime, entries) => tx('meta', 'readwrite', s => new Promise((resolve, reject) => {
+    applyServer: (sentKey, serverTime, entries, askedTemps, sentAt) => tx('meta', 'readwrite', s => new Promise((resolve, reject) => {
       const rc = s.get('config');
       rc.onerror = () => reject(rc.error);
       rc.onsuccess = () => {
@@ -95,12 +143,76 @@
         rv.onsuccess = () => {
           // 版本跟帳號綁在一起（Gemini R17 待確認：換帳號後上一位的版本不能擋新帳號的資料）
           const pv = rv.result, prev = pv && typeof pv === 'object' && pv.k === sentKey ? Number(pv.t) || 0 : 0, st = Number(serverTime) || 0;
-          if (st && prev && st <= prev) { resolve('stale'); return; } // R18（GPT 06）：同一毫秒的兩份也不蓋——先寫進來的留著（兩份都是那一刻讀的，不來回翻）
-          try {
-            Object.keys(entries).forEach(k => { const w = s.put(entries[k], k); w.onerror = () => reject(w.error); });
-            if (st) { const w = s.put({ k: sentKey, t: st }, 'srvDataAt'); w.onerror = () => reject(w.error); }
-          } catch (e) { reject(e); return; }
-          resolve(true);
+          // R24-2：「是不是舊後台」（srvOld）在這個交易裡判斷、寫——登入不同不寫（上面已擋）。
+          // R25-1（GPT）：R24 用手機送出時間排先後，手機時間往回調就會設不進去 → 改用**後台時間**（不會被手機調）：
+          //   舊後台的回應（沒有 known）一律設 true（保守：先停清理），記下當時的後台時間 srvOldAt＝max(這份的後台時間, 目前資料版本)；
+          //   只有之後一份新後台回應、而且後台時間**比 srvOldAt 新**，才改回 false。最壞情況是清理多停一輪，不會在舊後台狀態下清
+          const flag = typeof entries.srvOld === 'boolean' ? entries.srvOld : null;
+          delete entries.srvOld;
+          const writeFlag = done => {
+            if (flag === null) { done(); return; }
+            const ra = s.get('srvOldAt');
+            ra.onerror = () => reject(ra.error);
+            ra.onsuccess = () => {
+              const pa = ra.result && typeof ra.result === 'object' ? Number(ra.result.t) || 0 : 0;
+              try {
+                if (flag === true) {
+                  const w1 = s.put(true, 'srvOld'); w1.onerror = () => reject(w1.error);
+                  const w2 = s.put({ k: sentKey, t: Math.max(st, prev, pa) }, 'srvOldAt'); w2.onerror = () => reject(w2.error);
+                } else if (st && st > pa) {
+                  const w1 = s.put(false, 'srvOld'); w1.onerror = () => reject(w1.error);
+                }
+              } catch (e) { reject(e); return; }
+              done();
+            };
+          };
+          if (prev && (!st || st <= prev)) {
+            // R22 待確認：已有版本時，沒帶後台時間的回應也當舊的（分不出先後就不蓋資料）；R23-07：但舊後台的回應照樣要記 srvOld
+            if (flag === true) writeFlag(() => resolve('stale')); else resolve('stale');
+            return;
+          } // R18（GPT 06）：同一毫秒的兩份也不蓋——先寫進來的留著（兩份都是那一刻讀的，不來回翻）
+          // R22-02（GPT）：後台只回這輪問到的臨時編號（超過 500 個時輪流問）→ 沒問到的那幾件 temps／tempId 是空的，
+          //   直接蓋掉會讓手機對不上自己的記號（結束的試作又顯示成進行中）。臨時編號對到哪一件正式資料是不會變的事實 →
+          //   同一個交易裡把舊快取同一件（同 id）的臨時編號併回來
+          //   上一份快取是同一次登入、或同一個帳號（R23-01：重新登入）寫的才併；換成別的帳號不把上一位的對照帶進來
+          const sameOwner = pv && typeof pv === 'object' && (pv.k === sentKey || (!!pv.a && !!cfg.account && pv.a === cfg.account));
+          const keep = sameOwner ? ['trials', 'farmers', 'endedMine'].filter(k => Array.isArray(entries[k])) : [];
+          const askedSet = new Set(Array.isArray(askedTemps) ? askedTemps.map(String) : []);
+          const old = {};
+          const write = () => {
+            try {
+              keep.forEach(k => { entries[k] = mergeTemps(k, entries[k], old[k], askedSet); });
+              Object.keys(entries).forEach(k => { const w = s.put(entries[k], k); w.onerror = () => reject(w.error); });
+              { const wr = s.put(newCacheRev(), 'cacheRev'); wr.onerror = () => reject(wr.error); } // R38-1（GPT）：快取一改就換記號（同一個交易），結案存檔比對看得到
+              if (st) { const w = s.put({ k: sentKey, t: st, a: cfg.account || '' }, 'srvDataAt'); w.onerror = () => reject(w.error); } // R23-01：一起記帳號（重新登入時判斷是不是同一位）
+            } catch (e) { reject(e); return; }
+            resolve(true);
+          };
+          const next = i => {
+            if (i >= keep.length) { write(); return; }
+            const r = s.get(keep[i]);
+            r.onerror = () => reject(r.error);
+            r.onsuccess = () => { old[keep[i]] = r.result; next(i + 1); };
+          };
+          writeFlag(() => next(0));
+        };
+      };
+    })),
+    /**
+     * R24-1（GPT）：0.5.16 寫的版本紀錄 srvDataAt 沒有帳號（a）→ 同帳號重新登入時判斷不出「是同一位的快取」而不併對照。
+     * 在登入資料還在的時候（開網頁、登出、登入失效、登入前），同一個交易確認版本紀錄是這把金鑰寫的，就補記這把金鑰的帳號
+     */
+    tagSrvOwner: () => tx('meta', 'readwrite', s => new Promise((resolve, reject) => {
+      const rc = s.get('config'); rc.onerror = () => reject(rc.error);
+      rc.onsuccess = () => {
+        const cfg = rc.result, rv = s.get('srvDataAt'); rv.onerror = () => reject(rv.error);
+        rv.onsuccess = () => {
+          const pv = rv.result;
+          if (pv && typeof pv === 'object' && !pv.a && cfg && cfg.deviceKey && cfg.account && pv.k === cfg.deviceKey) {
+            const w = s.put(Object.assign({}, pv, { a: cfg.account }), 'srvDataAt'); w.onerror = () => reject(w.error);
+            resolve(true); return;
+          }
+          resolve(false);
         };
       };
     })),
@@ -124,13 +236,22 @@
      * 存一筆拜訪，同時改手機暫存清單（metaFns：{ 鍵: 舊清單 => 新清單 }，要同步函式），全部在同一個交易裡（R6-02）。
      * 原本先存拜訪、再分開讀寫 localCustomers／localTrials，背景清理夾在中間就會用舊清單蓋掉新客戶
      */
-    saveVisit: (v, metaFns) => txBoth((visits, meta, setOut, fail) => {
-      visits.put(v);
-      Object.keys(metaFns || {}).forEach(k => {
-        const r = meta.get(k);
-        r.onsuccess = () => { try { meta.put(metaFns[k](r.result), k); } catch (e) { fail(e); } };
-      });
-      setOut(true);
+    // R37-1（GPT）：expectVer＝結案最後一次檢查時的資料版本（lookupVersion）；有給就在**同一個交易**裡重算比對，
+    //   不一樣（檢查之後同步、清理改了資料）就整個不存，丟 code='STALE' 的錯，請業務確認後再存
+    saveVisit: (v, metaFns, expectVer) => txBoth((visits, meta, setOut, fail) => {
+      const go = () => {
+        visits.put(v);
+        Object.keys(metaFns || {}).forEach(k => {
+          const r = meta.get(k);
+          r.onsuccess = () => { try { meta.put(metaFns[k](r.result), k); } catch (e) { fail(e); } };
+        });
+        setOut(true);
+      };
+      if (expectVer === undefined || expectVer === null) { go(); return; }
+      readLookupVer(visits, meta, ver => {
+        if (ver !== expectVer) { const e = new Error('結案檢查之後資料剛更新，這次沒有存'); e.code = 'STALE'; fail(e); return; }
+        go();
+      }, fail);
     }),
     /**
      * 清理暫存清單：讀待上傳的拜訪、讀清單、留下 keep(項目, 待上傳拜訪) 為真的、寫回，全部在同一個交易裡（R6-02）
@@ -235,7 +356,9 @@
     // R21-05（GPT）：記住「最近一份成功回應是不是舊後台」（沒有 known）——清理在同一個交易讀它，舊後台狀態下不清，沒有待上傳、不查後台的那一輪也一樣
     if (data && data.ok) entries.srvOld = !(data.known && typeof data.known === 'object');
     if (!Object.keys(entries).length) return true;
-    const r = await Store.applyServer(sentKey, data && data.serverTime, entries);
+    // R23-07：舊後台的回應（沒有 known）就算因為沒帶後台時間被當成舊的、整份不寫，也記下「連到舊後台」→ 清理先停
+    // R24-2：這個旗標改在 applyServer 同一個交易寫（比登入、比送出時間），不在交易外補寫
+    const r = await Store.applyServer(sentKey, data && data.serverTime, entries, data && data.askedTemps, sentAt);
     return r === true;
   }
   /** 0.4.87 高1：現在登入的還是送出時那把金鑰嗎（登出、換帳號就不是） */
@@ -409,7 +532,7 @@
         const by = endByOf(l, ex.__visits);
         const ans = ex.known && ex.known.ends && ex.known.ends[l.id];
         if (ans && (ans.by || '') === by && (ans.a === 'ended' || ans.a === 'release')) return false;
-        if (!by && srv && !srv.held) return false;
+        if (!by && srv && srv.held === false) return false; // R22-03（GPT）：held 是 null（後台讀不到結案分頁、不知道）就不清
         return true;
       }
       return !(srv || knownHas(ex, 'trials', l.id));
@@ -429,12 +552,12 @@
     for (let i = 0; i < ASK_MAX; i++) part.push(sorted[(from + i) % sorted.length]);
     return { part, next: keyOf(part[part.length - 1]) };
   }
-  async function buildAsk() {
+  async function buildAsk(visitsIn) {
     try {
       const lc = (await Store.getMeta('localCustomers')) || [], lt = (await Store.getMeta('localTrials')) || [];
       const cur = (await Store.getMeta('askCursor')) || {}, id = x => String(x), lid = l => String(l.id);
       // R21-02（GPT）：客戶暫存清掉後，還有待上傳拜訪、試作記號用著這個臨時編號 → 照樣要問（後台才會回它對到的正式客戶），不然對照會不見
-      const allVisits = (await Store.allVisits()) || [];
+      const allVisits = Array.isArray(visitsIn) ? visitsIn : ((await Store.allVisits()) || []); // R22 待確認：上傳時傳進這輪已讀好的拜訪，不每筆都重讀全部
       const cIds = new Set(lc.filter(l => l && l.id).map(l => String(l.id)));
       allVisits.forEach(v => { if (v && v.status !== 'uploaded' && /^T_/.test(String(v.farmerId || ''))) cIds.add(String(v.farmerId)); });
       lt.forEach(l => { if (l && /^T_/.test(String(l.cid || ''))) cIds.add(String(l.cid)); });
@@ -513,7 +636,7 @@
           data = await post(cfg.gasUrl, {
             action: 'visit',
             deviceKey: cfg.deviceKey,
-            ask: await buildAsk(), // R19：問後台「我手機上這幾個暫存收到了沒」（後台只回答這些）
+            ask: await buildAsk(all), // R19：問後台「我手機上這幾個暫存收到了沒」（後台只回答這些）
             visit: {
               id: v.id, farmerId: v.farmerId, tempName: v.tempName || '', category: v.category || '',
               profile: v.profile || null, text, prices: v.prices || [], trial: v.trial || null, trialRef: v.trialRef || '', closing: v.closing || null, // 結案（2026-11-12）：上傳一定要帶，漏了後台就收不到
