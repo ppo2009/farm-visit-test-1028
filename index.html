@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="0.5.15">
+<meta name="app-build" content="0.5.16">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -290,11 +290,23 @@ li.plan>.pill{min-width:6.6em;text-align:center;flex:none}
 .rechint{margin-bottom:12px}
 #mineType{margin-bottom:12px}
 .stat .sub{display:block;font-size:.85rem;line-height:1.4}
+/* 0.5.16 第2輪 低：客戶名字一大段不斷行（長英文、緬文公司名）會把整頁撐寬、存檔鈕跑出畫面 → 清單文字、進度卡姓名一律可在任何地方換行 */
+/* 第3輪：只讓左邊文字縮、右邊狀態標籤（.pill：已上傳、第 N 週、逾期…）不縮；拿掉整頁繼承的 overflow-wrap（會讓窄按鈕被擠成一字一行） */
+li>span:not(.pill){min-width:0;overflow-wrap:anywhere}
+li>.pill{flex:none}
+.progress h3 .who{flex-wrap:wrap;min-width:0;overflow-wrap:anywhere}
+/* 0.5.16 董事長截圖「這個可以隱藏收合」：Android 加到主畫面說明預設收成一行（點開看全文），右邊一顆「知道了」 */
+#androidTip{display:flex;align-items:flex-start;gap:8px;padding:8px 12px;font-size:.92rem}
+#androidTip .tipfold{flex:1;min-width:0}
+#androidTip .tipfold summary{cursor:pointer;font-weight:700;min-height:32px;line-height:1.4}
+#androidTip .tipfold summary .my{display:block;font-weight:400;font-size:.72rem}
+#androidTip .tipfold[open] summary{margin-bottom:6px}
+#androidTipClose{flex:none;font-size:.8rem;min-height:32px;max-width:7.5em;text-align:right;line-height:1.3}
 </style>
 </head>
 <body>
 <div class="tip" id="iosTip" hidden>📱 iPhone 請先按下方「分享」→「加入主畫面」，以後<strong>只從主畫面的圖示打開</strong>，離線存的資料才不會不見。<span class="my">iPhone တွင် 「Share」→「Add to Home Screen」 နှိပ်ပြီး နောက်ပိုင်း ပင်မစာမျက်နှာရှိ အိုင်ကွန်မှသာ ဖွင့်ပါ။ ဒါမှ အော့ဖ်လိုင်း မှတ်တမ်း မပျောက်ပါ။</span></div><!-- 0.4.92 中2 加緬文（待校對） -->
-<div class="tip" id="androidTip" hidden>📱 Android 請按右上角「⋮」→「加到主畫面」（或「安裝應用程式」），以後<strong>只從主畫面的圖示打開</strong>，用起來比較快，離線存的資料也比較不會不見。<span class="my">Android တွင် ညာဘက်အပေါ် 「⋮」 →「Add to Home screen」(သို့)「Install app」 ကို နှိပ်ပြီး နောက်ပိုင်း ပင်မစာမျက်နှာရှိ အိုင်ကွန်မှသာ ဖွင့်ပါ။</span><button type="button" class="link" id="androidTipClose">知道了，不再顯示／နားလည်ပြီ</button></div><!-- 0.4.94 低3：可關閉、記住不再顯示（localStorage） -->
+<div class="tip" id="androidTip" hidden><details class="tipfold"><summary>📱 Android 加到主畫面（點開看說明）<span class="my">ပင်မစာမျက်နှာသို့ ထည့်နည်း (နှိပ်ပြီး ကြည့်ပါ)</span></summary>請按右上角「⋮」→「加到主畫面」（或「安裝應用程式」），以後<strong>只從主畫面的圖示打開</strong>，用起來比較快，離線存的資料也比較不會不見。<span class="my">Android တွင် ညာဘက်အပေါ် 「⋮」 →「Add to Home screen」(သို့)「Install app」 ကို နှိပ်ပြီး နောက်ပိုင်း ပင်မစာမျက်နှာရှိ အိုင်ကွန်မှသာ ဖွင့်ပါ။</span></details><button type="button" class="link" id="androidTipClose">知道了，不再顯示／နားလည်ပြီ</button></div><!-- 0.4.94 低3：可關閉、記住不再顯示（localStorage）；0.5.16 董事長截圖「可以隱藏收合」：預設收成一行，點開才看完整說明 -->
 
 <!-- 登入 -->
 <section id="setup" hidden>

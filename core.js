@@ -22,12 +22,17 @@
     return new Promise((resolve, reject) => {
       const t = db.transaction(store, mode);
       const s = t.objectStore(store);
-      let out;
-      Promise.resolve(fn(s)).then(v => { out = v; });
-      t.oncomplete = () => { db.close(); resolve(out); };
-      t.onerror = () => { db.close(); reject(t.error); };
+      // R18（GPT 03）：原本 fn 的承諾失敗沒人接——前面已寫的照樣提交、呼叫的人以為成功（寫一半）。
+      // 改成：fn 同步丟出或承諾失敗 → 立刻中止交易（這個交易裡已寫的全部作廢），把錯誤傳出去
+      let out, failed = null;
+      const fail = e => { if (failed) return; failed = e || new Error('存檔失敗'); try { t.abort(); } catch (_) { /* 已經結束或中止 */ } };
+      let p0;
+      try { p0 = Promise.resolve(fn(s)); } catch (e) { p0 = Promise.reject(e); }
+      p0.then(v => { out = v; }, fail);
+      t.oncomplete = () => { db.close(); if (failed) reject(failed); else resolve(out); };
+      t.onerror = () => { db.close(); reject(failed || t.error); };
       // 手機空間不足時交易會被中止（abort），沒有這行畫面會一直卡在儲存中（2026-11-11 審查發現）
-      t.onabort = () => { db.close(); reject(t.error || new Error('存檔被中止')); };
+      t.onabort = () => { db.close(); reject(failed || t.error || new Error('存檔被中止')); };
     });
   }
   const reqP = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
@@ -74,6 +79,32 @@
       };
     })),
     /**
+     * R17-01／04／05（GPT 高、中）：後台資料整份寫進手機快取，在「同一個讀寫交易」裡做完：
+     *   先讀登入資料——已登出、換了帳號（金鑰不同）就整份不寫，回 false；
+     *   再讀上次寫入的後台資料版本（srvDataAt，後台讀資料前取的 serverTime）——這份比較舊（晚到的舊回應）就不寫，回 'stale'；
+     *   都通過才把每一項寫進去並更新版本。比較和寫入不分開，換帳號、舊回應晚到、兩邊同時寫都不會蓋錯；任何一筆寫入失敗整個交易作廢（不會只寫一半）
+     */
+    applyServer: (sentKey, serverTime, entries) => tx('meta', 'readwrite', s => new Promise((resolve, reject) => {
+      const rc = s.get('config');
+      rc.onerror = () => reject(rc.error);
+      rc.onsuccess = () => {
+        const cfg = rc.result;
+        if (!cfg || !cfg.deviceKey || cfg.deviceKey !== sentKey) { resolve(false); return; }
+        const rv = s.get('srvDataAt');
+        rv.onerror = () => reject(rv.error);
+        rv.onsuccess = () => {
+          // 版本跟帳號綁在一起（Gemini R17 待確認：換帳號後上一位的版本不能擋新帳號的資料）
+          const pv = rv.result, prev = pv && typeof pv === 'object' && pv.k === sentKey ? Number(pv.t) || 0 : 0, st = Number(serverTime) || 0;
+          if (st && prev && st <= prev) { resolve('stale'); return; } // R18（GPT 06）：同一毫秒的兩份也不蓋——先寫進來的留著（兩份都是那一刻讀的，不來回翻）
+          try {
+            Object.keys(entries).forEach(k => { const w = s.put(entries[k], k); w.onerror = () => reject(w.error); });
+            if (st) { const w = s.put({ k: sentKey, t: st }, 'srvDataAt'); w.onerror = () => reject(w.error); }
+          } catch (e) { reject(e); return; }
+          resolve(true);
+        };
+      };
+    })),
+    /**
      * 改一筆拜訪：讀和寫在同一個讀寫交易裡（GPT-6.1 R7-03）。fn(目前的資料) 回傳新資料；回 null 就不寫。
      * 原本失敗分支先 getVisit、再 putVisit 是兩個交易，中間別的執行環境寫了「已上傳」，會被舊資料蓋回「待上傳」
      */
@@ -104,20 +135,28 @@
     /**
      * 清理暫存清單：讀待上傳的拜訪、讀清單、留下 keep(項目, 待上傳拜訪) 為真的、寫回，全部在同一個交易裡（R6-02）
      */
-    pruneByPending: (k, keep) => txBoth((visits, meta, setOut, fail) => {
+    // R14-01／02：extra＝同一個交易裡一起讀的其他快取（例如 farmers、trials），交給 keep 第三個參數判斷——
+    // 「後台快取裡有沒有它」跟清理在同一個交易，寫回失敗（快取沒有它）就自然留著，不靠另外存的旗標
+    pruneByPending: (k, keep, extra) => txBoth((visits, meta, setOut, fail) => {
       const rv = visits.getAll();
       rv.onsuccess = () => {
         const pending = (rv.result || []).filter(x => x.status === 'pending');
-        const rm = meta.get(k);
-        rm.onsuccess = () => {
-          try {
-            const local = rm.result || [];
-            if (!local.length) return;
-            const left = local.filter(l => keep(l, pending));
-            if (left.length !== local.length) meta.put(left, k);
-            setOut(local.length - left.length);
-          } catch (e) { fail(e); }
+        const keys = Array.isArray(extra) ? extra : [], ex = { __visits: rv.result || [] }; // R15：全部拜訪（含已上傳、uploadedAt）也給 keep 判斷
+        const go = () => {
+          const rm = meta.get(k);
+          rm.onsuccess = () => {
+            try {
+              const local = rm.result || [];
+              if (!local.length) return;
+              const left = local.filter(l => keep(l, pending, ex));
+              if (left.length !== local.length) meta.put(left, k);
+              setOut(local.length - left.length);
+            } catch (e) { fail(e); }
+          };
         };
+        if (!keys.length) { go(); return; }
+        let n = keys.length;
+        keys.forEach(x => { const r = meta.get(x); r.onsuccess = () => { ex[x] = r.result; if (--n === 0) go(); }; });
       };
     })
   };
@@ -175,21 +214,29 @@
     // 0.4.94 低4（第11任第五輪）：原本來回超過 5 秒就不校正，緬甸網路常常超過 → 一直沒校正。改成 60 秒內都校正（誤差最多約來回時間的一半），超過 60 秒才放棄
     // 0.4.98（第13任 手機5）：請求途中手機時間被往回調（自動對時、手動改時間）時來回時間會變負數，原本照樣用「一半來回時間」算 → 校正錯好幾分鐘到幾小時；來回時間 < 0 就這次不校正
     const rtt = Date.now() - sentAt;
+    const entries = {};
     if (data && data.serverTime && rtt >= 0 && rtt <= 60000) {
       // 伺服器時間 − 手機時間（扣掉一半來回時間），之後離線打卡都用它校正。
       // （第六輪原本只用來回 5 秒內的回應，怕上傳大檔時「一半來回時間」誤差太大；0.4.94 放寬到 60 秒，誤差最多約 30 秒，比完全不校正好）
+      // R19（GPT 06）：校正值也放進同一個交易（applyServer）——舊回應、換了帳號的回應整份不寫，校正值也不改
       const now = Date.now();
-      const offset = Math.round(data.serverTime - (sentAt + now) / 2);
-      await Store.setMeta('clockOffset', offset);
-      await Store.setMeta('lastSync', now);
+      entries.clockOffset = Math.round(data.serverTime - (sentAt + now) / 2);
+      entries.lastSync = now;
     }
-    if (data && Array.isArray(data.farmers)) await Store.setMeta('farmers', data.farmers);
-    if (data && Array.isArray(data.endedMine)) await Store.setMeta('endedMine', data.endedMine); // 0.4.80 中3：自己負責、已結案的農民（只給種植資料分頁用；舊後台沒有就不動）
-    if (data && data.options) await Store.setMeta('options', data.options);
-    if (data && data.home) await Store.setMeta('home', Object.assign({ syncedAt: Date.now() }, data.home));
-    if (data && Array.isArray(data.trials)) await Store.setMeta('trials', data.trials);
-    if (data && Array.isArray(data.tasks)) await Store.setMeta('tasks', data.tasks);
-    return true;
+    // R17：客戶、已結案、選單、首頁、試作、任務、後台已收到的編號（known）在同一個交易裡一起寫（Store.applyServer：
+    //   換了帳號不寫、比上次舊的回應不寫、任何一項寫入失敗整份作廢）。known 跟 farmers／trials 一定是同一份，清理暫存才靠得住
+    if (data && Array.isArray(data.farmers)) entries.farmers = data.farmers;
+    if (data && Array.isArray(data.endedMine)) entries.endedMine = data.endedMine; // 0.4.80 中3：自己負責、已結案的農民（只給種植資料分頁用；舊後台沒有就不動）
+    if (data && data.options) entries.options = data.options;
+    if (data && data.home) entries.home = Object.assign({ syncedAt: Date.now() }, data.home);
+    if (data && Array.isArray(data.trials)) entries.trials = data.trials;
+    if (data && Array.isArray(data.tasks)) entries.tasks = data.tasks;
+    if (data && data.known && typeof data.known === 'object') entries.known = data.known;
+    // R21-05（GPT）：記住「最近一份成功回應是不是舊後台」（沒有 known）——清理在同一個交易讀它，舊後台狀態下不清，沒有待上傳、不查後台的那一輪也一樣
+    if (data && data.ok) entries.srvOld = !(data.known && typeof data.known === 'object');
+    if (!Object.keys(entries).length) return true;
+    const r = await Store.applyServer(sentKey, data && data.serverTime, entries);
+    return r === true;
   }
   /** 0.4.87 高1：現在登入的還是送出時那把金鑰嗎（登出、換帳號就不是） */
   async function sameLogin(sentKey) {
@@ -302,6 +349,7 @@
   const NEXT_TRY_MAX_MS = 30 * 60000; // 0.4.87 中2：失敗重試最多排 30 分鐘後（下面 Math.min(30, …) 分鐘），超過就是時間被調過
   const READ_FAIL_MAX = 3; // 0.4.87 中1：同一筆讀檔連續失敗幾次後，先把讀得到的送出去
   const LOGIN_LOST_MSG = '登入已失效，回首頁重新登入後會自動補傳／ပြန်ဝင်ပြီးလျှင် တင်မည်'; // 0.4.91 中4
+  const SYNC_WARN = '同步資料寫回手機失敗（可能空間不足），稍後再同步／ဒေတာ မသိမ်းနိုင်၊ နောက်မှ ထပ်လုပ်မည်'; // R12-01／R13-01
   const READ_FAIL_MSG = '有拜訪的照片或錄音暫時讀不到（是手機裡的檔案，不是網路問題），稍後自動再試；連續 3 次讀不到會先送文字和其他資料／ဓာတ်ပုံ/အသံ ဖတ်မရသေးပါ၊ အင်တာနက် ပြဿနာ မဟုတ်ပါ';
   let running = false;
   /**
@@ -322,17 +370,85 @@
   // 0.4.97（第12任 BUG 審查手機 3）：同一位還有拜訪沒傳成（0.4.95 起逾時排重試更常見）時，原本暫存客戶會留著；
   // 後台客戶清單已經有正式的他（帶回同一個臨時編號 tempId）→ 選單、月分工作進度同時出現兩個他、首頁多算 → 後台已有的就拿掉
   // （沒傳成的拜訪照舊用臨時編號送，後台會對到同一位；拜訪本身帶完整客戶資料，不靠這份暫存）
+  // R17（GPT／Gemini）：R12～R16 用旗標、年齡、手機或後台時間「推論」後台收到了沒，每輪都有新破口。改成**後台直接說**（known），
+  // 跟 farmers／trials 在同一個交易寫進快取（Store.applyServer），清理也在同一個交易讀它判斷——寫回失敗就讀到舊的 known，自然不會誤清。
+  // R19（GPT 01）：R18 讓後台送全部編號，別的業務拿得到別人客戶的臨時編號（含建立者登入金鑰前 6 碼）、資料量也跟著全公司長大 →
+  //   改成手機問（buildAsk：只問自己手機上還留著的）、後台只回答這些。答案都是「這個編號、這筆拜訪」的事實，留著舊的也不會錯。
+  //   客戶：後台客戶快取有他的 tempId，或 known.customers 有他 → 清；有待上傳拜訪、或後台沒說收到 → 留著
+  const knownHas = (ex, k, id) => !!(ex.known && Array.isArray(ex.known[k]) && ex.known[k].indexOf(id) >= 0);
   async function pruneLocalCustomers() {
-    const srvTmp = new Set(((await Store.getMeta('farmers')) || []).map(f => f && f.tempId).filter(Boolean));
-    return Store.pruneByPending('localCustomers', (l, pending) => !srvTmp.has(l.id) && pending.some(v => v.farmerId === l.id));
+    return Store.pruneByPending('localCustomers', (l, pending, ex) => {
+      if (ex.srvOld === true) return true; // R21-05：最近連到的是舊後台 → 不清
+      const srvTmp = new Set((ex.farmers || []).map(f => f && f.tempId).filter(Boolean));
+      if (srvTmp.has(l.id)) return false;
+      if (pending.some(v => v.farmerId === l.id)) return true;
+      return !knownHas(ex, 'customers', l.id);
+    }, ['farmers', 'known', 'srvOld']);
   }
 
-  /** 手機裡暫存的試作（還沒上傳的開始、已結束待上傳的）：對應的拜訪都傳完就拿掉 */
-  function pruneLocalTrials() {
+  // 結束記號是哪筆拜訪結束／結案的：記號有 by 就用；舊記號沒有 by → 手機留著的拜訪裡，結束這件或結案帶這件試作結果的最新一筆
+  const endVisitOf = (l, visits) => (visits || []).filter(v => v && ((v.trial && v.trial.op !== 'start' && v.trial.id === l.id) || (v.closing && v.closing.trialResult && v.closing.trialResult.id === l.id)))
+    .sort((a, b) => (b.deviceTime || 0) - (a.deviceTime || 0) || String(b.id).localeCompare(String(a.id)))[0] || null;
+  const endByOf = (l, visits) => l.by || (endVisitOf(l, visits) || {}).id || '';
+
+  /** 手機裡暫存的試作（還沒上傳的開始、已結束待上傳的）：對應的拜訪都傳完、後台也說收到了才拿掉 */
+  async function pruneLocalTrials() {
     // 0.4.97（第12任 BUG 審查手機 1）：結案時一起填試作結果（closing.trialResult）也會記「這件已結束」，原本只認 v.trial → 結案還沒傳上去，記號就被清掉，試作又變回進行中
-    return Store.pruneByPending('localTrials', (l, pending) => pending.some(v => (v.trial && (v.trial.tempId === l.id || v.trial.id === l.id))
-      || (v.closing && v.closing.trialResult && v.closing.trialResult.id === l.id)));
+    // 「開始」記號：後台試作快取（進行中）有它，或 known.trials 有它（後台收到了，含已結束的）→ 清；否則留著。
+    // 「結束」記號只在後台**明確說**時拿掉（R18：快取寫入失敗、還是舊的都不能當成已結束）：
+    //   known.ends[記號] 的 by 跟這個記號的 by 一樣，而且 a 是 ended（後台已結束）或 release（那筆拜訪收到了但結束沒成立：
+    //   主管退回、後台拒收——R19 GPT 02 客戶改派時結案被拒收）→ 清
+    //   舊記號、手機已經找不到那筆拜訪（上傳超過 7 天被刪）：後台進行中快取列它、又不是「結案待主管確認」（held）→ 結案一定沒成立 → 清
+    //   其他（待主管確認、還沒收到、後續還沒做完）→ 留著蓋住
+    const refs = l => v => (v.trial && (v.trial.tempId === l.id || v.trial.id === l.id)) || (v.closing && v.closing.trialResult && v.closing.trialResult.id === l.id);
+    return Store.pruneByPending('localTrials', (l, pending, ex) => {
+      if (ex.srvOld === true) return true; // R21-05：最近連到的是舊後台 → 不清
+      if (pending.some(refs(l))) return true;
+      const srv = (ex.trials || []).find(t => t && (t.id === l.id || (t.temps || []).indexOf(l.id) >= 0));
+      if (l.ended) {
+        const by = endByOf(l, ex.__visits);
+        const ans = ex.known && ex.known.ends && ex.known.ends[l.id];
+        if (ans && (ans.by || '') === by && (ans.a === 'ended' || ans.a === 'release')) return false;
+        if (!by && srv && !srv.held) return false;
+        return true;
+      }
+      return !(srv || knownHas(ex, 'trials', l.id));
+    }, ['trials', 'known', 'srvOld']);
   }
+
+  /** R19：要問後台的——手機上還留著的暫存客戶、試作開始記號、試作結束記號（帶是哪筆拜訪）。各最多 ASK_MAX 個 */
+  // R20（GPT 03）：超過上限時原本永遠只問前 500 個，前面一直沒答案就輪不到後面 → 超過時從上次問到的地方接著問（輪流），每一個都輪得到
+  const ASK_MAX = 500;
+  // R21-04（GPT）：原本記「陣列位置」，清單前面刪一個、後面加一個，同一個記號會一直被跳過 → 改記「上次問到哪個編號」，照編號排序從它後面接著問（繞回開頭），每一個最多兩輪內一定問到
+  function askWindow(list, keyOf, after) {
+    if (list.length <= ASK_MAX) return { part: list, next: '' };
+    const sorted = list.slice().sort((a, b) => (keyOf(a) < keyOf(b) ? -1 : keyOf(a) > keyOf(b) ? 1 : 0));
+    let from = after ? sorted.findIndex(x => keyOf(x) > after) : 0;
+    if (from < 0) from = 0;
+    const part = [];
+    for (let i = 0; i < ASK_MAX; i++) part.push(sorted[(from + i) % sorted.length]);
+    return { part, next: keyOf(part[part.length - 1]) };
+  }
+  async function buildAsk() {
+    try {
+      const lc = (await Store.getMeta('localCustomers')) || [], lt = (await Store.getMeta('localTrials')) || [];
+      const cur = (await Store.getMeta('askCursor')) || {}, id = x => String(x), lid = l => String(l.id);
+      // R21-02（GPT）：客戶暫存清掉後，還有待上傳拜訪、試作記號用著這個臨時編號 → 照樣要問（後台才會回它對到的正式客戶），不然對照會不見
+      const allVisits = (await Store.allVisits()) || [];
+      const cIds = new Set(lc.filter(l => l && l.id).map(l => String(l.id)));
+      allVisits.forEach(v => { if (v && v.status !== 'uploaded' && /^T_/.test(String(v.farmerId || ''))) cIds.add(String(v.farmerId)); });
+      lt.forEach(l => { if (l && /^T_/.test(String(l.cid || ''))) cIds.add(String(l.cid)); });
+      const c = askWindow([...cIds], id, cur.c);
+      const t = askWindow(lt.filter(l => l && l.id && !l.ended).map(l => l.id), id, cur.t);
+      const e = askWindow(lt.filter(l => l && l.id && l.ended), lid, cur.e);
+      if (c.next || t.next || e.next || cur.c || cur.t || cur.e) await Store.setMeta('askCursor', { c: c.next, t: t.next, e: e.next });
+      return { customers: c.part, trials: t.part, ends: e.part.map(l => ({ id: l.id, by: endByOf(l, allVisits) })) };
+    } catch (e) { return { customers: [], trials: [], ends: [] }; } // 讀不到就不問（後台照樣回其他資料）
+  }
+
+  // R20（GPT 04）：新版後台只要手機有帶 ask，回應一定有 known；成功的回應卻沒有 known＝後台被單獨退回舊版 → 不猜、不清理暫存，提示管理員（手機網頁和後台要一起回退）
+  const OLD_SRV_WARN = '後台版本比手機舊，暫存先不清；請管理員把手機網頁和後台一起更新或一起回退／ဆာဗာ ဗားရှင်း ဟောင်းနေသည်';
+  const oldServer = data => !!(data && data.ok && !(data.known && typeof data.known === 'object'));
 
   async function runSyncInner(onProgress) {
     if (running) return { busy: true };
@@ -350,6 +466,7 @@
       if (tk.code === 'BAD_LOGIN' && await sameLogin(cfg.deviceKey)) report.code = 'BAD_LOGIN'; // 0.4.87 高1：換人後上一位的登入失效不算
       const all = (await Store.allVisits()).sort((a, b) => a.deviceTime - b.deviceTime);
       const now = Date.now();
+      // R17：暫存清理改看後台的 known，不再靠已上傳的拜訪當憑據 → 已上傳 7 天照舊刪（R16 加的「被記號用到就不刪」拿掉，避免跟舊資料互鎖）
       for (const v of all) {
         if (v.status === 'uploaded' && now - (v.uploadedAt || 0) > KEEP_UPLOADED_MS) await Store.deleteVisit(v.id);
       }
@@ -396,6 +513,7 @@
           data = await post(cfg.gasUrl, {
             action: 'visit',
             deviceKey: cfg.deviceKey,
+            ask: await buildAsk(), // R19：問後台「我手機上這幾個暫存收到了沒」（後台只回答這些）
             visit: {
               id: v.id, farmerId: v.farmerId, tempName: v.tempName || '', category: v.category || '',
               profile: v.profile || null, text, prices: v.prices || [], trial: v.trial || null, trialRef: v.trialRef || '', closing: v.closing || null, // 結案（2026-11-12）：上傳一定要帶，漏了後台就收不到
@@ -429,7 +547,11 @@
           break; // 沒網路、伺服器回應異常：這一輪先停，下次再從這筆開始
         }
         timeouts = 0; // 0.4.94 中3：有回應就重算連續逾時
-        await rememberServer(data, sentAt, cfg.deviceKey); // 0.4.87 高1：送出後換了帳號就整份丟掉（拜訪本身的上傳狀態照記）
+        // 0.4.87 高1：送出後換了帳號就整份丟掉（拜訪本身的上傳狀態照記）
+        // 0.5.16 第2輪 中：寫回客戶清單、首頁等失敗（例如手機空間不足）時不能跳出整個上傳迴圈——後台已經收了，這筆照樣要標「已上傳」，不然每輪整包重送照片錄音
+        // R12-01～R14-02：寫回失敗時暫存客戶、試作不會被清——清理改成看後台快取裡有沒有它（見 pruneLocalCustomers），寫回失敗快取就沒有它
+        try { await rememberServer(data, sentAt, cfg.deviceKey); } catch (e) { report.syncWarn = SYNC_WARN; }
+        if (!report.syncWarn && oldServer(data)) report.syncWarn = OLD_SRV_WARN; // R20（GPT 04）
         // 寫回拜訪狀態一律在同一個交易裡讀最新的再改（R7-03）：已上傳的不會被降回待上傳或被拒
         if (data && data.ok) {
           await Store.updateVisit(v.id, cur => {
@@ -439,6 +561,8 @@
             if (media.audioLost) x.audioLost = true;
             // 0.4.91 低4：後台回 missingCustomer（客戶被刪，結案、試作沒收）→ 記下來，清單那一筆標出來
             if (data.missingCustomer) x.missingCustomer = true;
+            // 0.5.16 第1輪：後台說結案沒收（不是負責業務、已有一筆等主管確認…）→ 記下原因，清單那一筆標出來
+            if (data.closingDropped) x.closingDropped = String(data.closingDropped).slice(0, 200);
             delete x.nextTry;
             return x;
           });
@@ -469,13 +593,13 @@
         }
         serverFails = 0;
       }
-      await pruneLocalCustomers();
-      await pruneLocalTrials();
+      // R18（Gemini 2）：這一輪後台資料寫回手機失敗 → 不清理（清理規則本身只認後台明確說的，這裡再多一道保險）
+      if (!report.syncWarn) { await pruneLocalCustomers(); await pruneLocalTrials(); }
       return report;
     } finally {
       running = false;
     }
   }
 
-  g.FarmCore = { Store, runSync, post, rememberServer, sameLogin, pruneLocalCustomers, pruneLocalTrials, updateTaskDone, untickTask, isSending, isLocked }; // sameLogin：0.4.87 給 app.js 判斷回應是不是現在這個帳號的
+  g.FarmCore = { Store, runSync, post, rememberServer, sameLogin, pruneLocalCustomers, pruneLocalTrials, buildAsk, oldServer, OLD_SRV_WARN, updateTaskDone, untickTask, isSending, isLocked, SYNC_WARN }; // sameLogin：0.4.87 給 app.js 判斷回應是不是現在這個帳號的
 })(typeof self !== 'undefined' ? self : this);
