@@ -2574,7 +2574,10 @@
       box.innerHTML = `📍 已定位 တည်နေရာရပြီ <b>${state.gps.lat}, ${state.gps.lng}</b>（誤差 ±${state.gps.acc} m）`;
       done();
     }, err => {
-      if ((keep && state.gps) || seq < (Number(state.gpsSeqApplied) || 0)) { done(); return; } // 0.5.20 E2：補抓失敗 → 沿用原本的位置、畫面不改；0520R1-2：較晚發出的那次已經抓到了，這次的失敗不改畫面
+      // 0.5.20 E2：補抓失敗 → 沿用原本的位置、畫面不改；0520R1-2：較晚發出的那次已經抓到了，這次的失敗不改畫面
+      // 0526 H4（第21任）：拍照的背景補抓還沒回來、又按「重新定位」——①較早那次先失敗：較晚那次還在抓，不能先寫「抓不到」（等最後一次決定）；
+      //   ②較早那次先抓到、最後一次失敗：手上已經有位置（存檔會帶這個座標），畫面不能改成「抓不到、會標記無定位」
+      if (state.gps || seq < (Number(state.gpsSeq) || 0)) { done(); return; }
       const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
       box.innerHTML = err.code === 1
         ? '📍 <b style="color:var(--chili)">定位被關掉了 တည်နေရာ ပိတ်ထားသည်</b>，打卡會標記「無定位」。' + (isIOS
@@ -3047,9 +3050,24 @@
 
   /** ② 存檔前要讀的手機資料：這位暫存客戶（還沒上傳的新客戶才讀）、時差。在最後一次等待之前讀好（R29、R30-1） */
   async function readSavePre(sel0) {
-    const localPre = String(sel0).startsWith('T_') ? (((await Store.getMeta('localCustomers')) || []).find(l => l.id === sel0) || null) : null;
+    const isTemp = String(sel0).startsWith('T_');
+    const localPre = isTemp ? (((await Store.getMeta('localCustomers')) || []).find(l => l.id === sel0) || null) : null;
+    // 0526 H6（第21任）：這位新客戶的拜訪被後台拒收 → 暫存客戶被清掉（G3），業務若正停在打卡畫面選著他，原本存檔不帶姓名等資料、後台會建成「（未命名）」。
+    //   0521R1 曾改成從被拒收的舊拜訪補回客戶資料 → 0521R1 GPT 中：已上傳的拜訪 7 天後會被清掉，手機剩下「全部被拒收」不代表後台沒有他，
+    //   補回的舊電話會蓋掉主管改過的。手機沒有可靠的方法知道後台有沒有他（後台只回答手機問的編號），所以不補舊資料：
+    //   暫存客戶不在、也看不到後台有他（客戶快取的臨時編號、後台說收到了）、也沒有還在等上傳的拜訪帶著他 → orphan：這次不存，請業務重新選客戶
+    let orphan = false;
+    if (isTemp && !localPre) {
+      try {
+        const srv = ((await Store.getMeta('farmers')) || []).some(f => f && String(f.tempId || '').split(/\s+/).indexOf(sel0) >= 0);
+        const known = (await Store.getMeta('known')) || {};
+        const said = Array.isArray(known.customers) && known.customers.indexOf(sel0) >= 0;
+        const waiting = !srv && !said && Store.allVisits ? ((await Store.allVisits()) || []).some(v => v && v.farmerId === sel0 && v.status !== 'uploaded' && v.status !== 'rejected') : false;
+        orphan = !srv && !said && !waiting;
+      } catch (e) { orphan = false; } // 讀不到就照原本（照存、不擋）
+    }
     const clockPre = (await Store.getMeta('clockOffset')) || 0;
-    return { localPre, clockPre };
+    return { localPre, clockPre, orphan };
   }
   /**
    * ② 寫入手機：拜訪、試作暫存、新客戶暫存在同一個交易（R6-02）；expectVer＝結案檢查時的資料版本，交易裡再比一次（R37-1）。
@@ -3130,6 +3148,7 @@
     if (!sel0) { saveStop('請先選客戶／ဖောက်သည် ရွေးပါ'); return; }
     const pre = await readSavePre(sel0);
     if (moved()) { saveStop('讀資料時換了畫面或客戶，這次沒有存，請再按一次儲存／မသိမ်းရသေး၊ ထပ်နှိပ်ပါ'); return; }
+    if (pre.orphan) { saveStop('這位新客戶之前的資料被後台退回、已不在手機的客戶清單，這次沒有存；請重新選客戶（或重新新增）後再按儲存／ဖောက်သည် ပြန်ရွေးပါ'); return; } // 0521R2 H6
     // 結案送出前當下重新判斷試作（R26、R27）：有變或必填沒過就先不送，請業務確認後再按
     if (state.cat === '結案' && !state.dealerClose && !dealerSignOn() && typeof recheckCloseTrial === 'function') {
       const changed = await recheckCloseTrial(false);
@@ -3335,7 +3354,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.20'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.21'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');

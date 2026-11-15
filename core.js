@@ -588,7 +588,8 @@
       // R21-02（GPT）：客戶暫存清掉後，還有待上傳拜訪、試作記號用著這個臨時編號 → 照樣要問（後台才會回它對到的正式客戶），不然對照會不見
       const allVisits = Array.isArray(visitsIn) ? visitsIn : ((await Store.allVisits()) || []); // R22 待確認：上傳時傳進這輪已讀好的拜訪，不每筆都重讀全部
       const cIds = new Set(lc.filter(l => l && l.id).map(l => String(l.id)));
-      allVisits.forEach(v => { if (v && v.status !== 'uploaded' && /^T_/.test(String(v.farmerId || ''))) cIds.add(String(v.farmerId)); });
+      // 0526 H7（第21任）：被後台拒收的拜訪不會再送，不用為它問（原本 rejected 也算 → 暫存客戶清掉後每輪同步照樣問、永遠不停）
+      allVisits.forEach(v => { if (v && v.status !== 'uploaded' && v.status !== 'rejected' && /^T_/.test(String(v.farmerId || ''))) cIds.add(String(v.farmerId)); });
       lt.forEach(l => { if (l && /^T_/.test(String(l.cid || ''))) cIds.add(String(l.cid)); });
       const c = askWindow([...cIds], id, cur.c);
       const t = askWindow(lt.filter(l => l && l.id && !l.ended).map(l => l.id), id, cur.t);
