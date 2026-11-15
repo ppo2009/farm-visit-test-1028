@@ -1,6 +1,6 @@
 /* 背景程式：讓網頁沒網路也打得開，並在 Android 手機一有網路時於背景自動上傳 */
 /* global self, caches, clients, FarmCore */
-const VERSION = 'build-20261114-184138';
+const VERSION = 'build-20261115-162425';
 const CACHE = 'farm-visit-' + VERSION;
 const NET_TIMEOUT_MS = 4000; // 0.4.87 中7：網路 4 秒還沒回，手機裡有快取就先用
 const SLOW = {};               // 逾時的記號
@@ -73,6 +73,16 @@ async function syncAndTell() {
   list.forEach(c => c.postMessage({ type: 'synced', result }));
   // 拜訪或任務打勾還有沒送出的，就讓瀏覽器稍後再試（R6-04：只有打勾時原本不會再試）
   if (result && result.error && (result.left || result.tickLeft)) throw new Error('retry');
+  // 0.5.18（抓BUG B1）：網頁正拿著上傳鎖（busy）、或待傳的都在等重試時間（這輪沒送、也沒錯誤）→ 原本正常結束＝瀏覽器當成功、不再排重試，
+  //   網頁一關就要等業務下次打開才傳 → 同步完再看一次：這個帳號還有待上傳的拜訪，就請瀏覽器稍後再試（瀏覽器自己會限次數、拉長間隔）
+  if (result && result.busy) throw new Error('retry');
+  try {
+    const cfg = await FarmCore.Store.getMeta('config');
+    if (cfg && cfg.deviceKey) {
+      const left = (await FarmCore.Store.allVisits()).filter(v => v && v.status === 'pending' && (!v.account || !cfg.account || v.account === cfg.account)).length;
+      if (left) throw new Error('retry');
+    }
+  } catch (e) { if (e && e.message === 'retry') throw e; /* 讀不到手機資料就照原本的判斷 */ }
 }
 
 // Android Chrome：網頁關掉後，一有網路就會叫醒這裡

@@ -41,6 +41,8 @@ a{color:var(--paddy)}
   .stat .sub{font-size:.7rem;line-height:1.3;display:block}
 }
 section h3{margin:16px 0 8px;font-size:1rem;display:flex;gap:8px;align-items:center}
+section h3>.pill{flex-shrink:0;white-space:nowrap} /* 0.5.18 C5：375 寬「待確認結案 N 筆」原本被擠成一兩個字一行；標籤不縮，說明文字自己換行 */
+section h3>.sub{min-width:0}
 /* 0.4.23（2026-11-12 總經理逐頁檢查）：手機寬度總覽頁整頁被撐到 544 點寬、要左右滑。
    原因：清單是 grid，欄寬預設會等於「最寬那筆不能斷行的內容」；照片說明標籤（第1張…｜第2張…｜無定位）原本不准換行，一長就把整欄撐寬。
    修：欄寬固定不超過畫面（minmax(0,1fr)）、每筆可縮；標籤改成能自己換行（短的照樣一整塊不拆開）。 */

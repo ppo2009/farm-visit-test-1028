@@ -250,7 +250,7 @@
     // 總經理的帳號分頁管業務和主管（2026-11-12）；分頁名稱換掉後補一次緬文
     const accTab = document.querySelector('.tab[data-tab="accounts"]');
     if (accTab) { accTab.textContent = data.role === '總經理' ? '業務、主管帳號' : '業務帳號'; biDom(accTab.parentNode); }
-    $('updated').textContent = '更新於 ' + new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+    $('updated').textContent = '更新於 ' + (() => { try { return new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Yangon' }); } catch (e) { return new Date(Date.now() + 6.5 * 3600000).toISOString().slice(11, 16); } })() + '（緬甸時間）'; // 0.5.18 C8：原本用手機／電腦自己的時區，台灣看差一個半小時
     // 0.4.38 董事長：「開啟試算表」只有總經理有（後台只給總經理網址，主管拿到的是空的就藏起來）
     $('sheetLink').href = data.sheetUrl || '#';
     $('sheetLink').hidden = !(data.role === '總經理' && data.sheetUrl);
@@ -315,10 +315,16 @@
       // 結案清單低9：盤商、種子商結案（有洽談結果）確認框原本寫農民、試作
       const cl = (state.data.closings || []).find(x => x.visitId === b.dataset.vid) || {};
       const dealer = !!cl.result, signed = cl.result === '已簽約'; // 0.4.75 董事長「盤商跟種子商變成以簽約才結案」
-      if (!confirm(ok ? (signed ? '確認這家店已簽約、結案？' + (cl.reason ? '（' + cl.reason.slice(0, 40) + '）' : '') + '確認後這家店改「已結束」，業務選單不再出現、不能再拜訪。' : dealer ? '確認這家店結案（' + cl.result.slice(0, 40) + '）？確認後這家店改「已結束」，業務選單不再出現、不能再拜訪。' : '確認這位農民結案？確認後不再提醒回訪，結案前就在進行的試作也會結束。') + '\n\nပိတ်သိမ်းမှုကို အတည်ပြုမလား။ အတည်ပြုပြီးနောက် ဤဖောက်သည် ပိတ်သိမ်းပြီး ဖြစ်မည်' : biText('退回這筆結案？客戶照常追蹤，當作沒結案。', 'ဤပိတ်သိမ်းမှုကို ပြန်ပို့မလား။ ဖောက်သည်ကို ဆက်လက် စောင့်ကြည့်မည် (မပိတ်သိမ်း)'))) return;
+      // 0.5.18（抓BUG C2）：確認框原本看不出是哪一位，按錯一筆時最後一道關卡失效 → 最前面寫客戶、業務、日期（緬文段也看得到名字）
+      const who = '【' + [cl.name, cl.staff, cl.date].filter(Boolean).join('｜') + '】\n';
+      if (!confirm(who + (ok ? (signed ? '確認這家店已簽約、結案？' + (cl.reason ? '（' + cl.reason.slice(0, 40) + '）' : '') + '確認後這家店改「已結束」，業務選單不再出現、不能再拜訪。' : dealer ? '確認這家店結案（' + cl.result.slice(0, 40) + '）？確認後這家店改「已結束」，業務選單不再出現、不能再拜訪。' : '確認這位農民結案？確認後不再提醒回訪，結案前就在進行的試作也會結束。') + '\n\nပိတ်သိမ်းမှုကို အတည်ပြုမလား။ အတည်ပြုပြီးနောက် ဤဖောက်သည် ပိတ်သိမ်းပြီး ဖြစ်မည်' : biText('退回這筆結案？客戶照常追蹤，當作沒結案。', 'ဤပိတ်သိမ်းမှုကို ပြန်ပို့မလား။ ဖောက်သည်ကို ဆက်လက် စောင့်ကြည့်မည် (မပိတ်သိမ်း)')))) return;
       $('panel').querySelectorAll('[data-closedecide]').forEach(x => { x.disabled = true; });
+      // 0.5.18（抓BUG C1）：送出中別的讀取（月計劃）整頁重畫，按鈕原本又變可按 → 記在 state，renderClosings 照樣畫成停用
+      state.closeSending = b.dataset.vid;
       let r;
-      try { r = await api({ action: 'closeDecide', visitId: b.dataset.vid, decision: b.dataset.closedecide }); } catch (e) { r = { ok: false, message: '連不上伺服器' }; }
+      try { r = await api({ action: 'closeDecide', visitId: b.dataset.vid, decision: b.dataset.closedecide }); } catch (e) { r = { ok: false, message: '連不上伺服器' }; } finally { state.closeSending = null; }
+      // C1：後台說「已經處理過」，而且現在的狀態正好是這次要做的（確認→已確認、退回→已退回）＝其實成功了，不顯示紅字
+      if (r && r.code === 'DONE_ALREADY') { const st = String(r.state || (String(r.message || '').match(/（([^（）]+)）$/) || [])[1] || ''); if (st === (ok ? '已確認' : '已退回')) r = Object.assign({}, r, { ok: true }); }
       if (r.closings) setData({ closings: r.closings });
       state.closeMsg = r.ok ? (ok ? '已確認結案／ပိတ်သိမ်းမှု အတည်ပြုပြီး' : '已退回／ပြန်ပို့ပြီး') : '⚠ ' + (r.message || '處理失敗／မအောင်မြင်ပါ'); // 0.4.94 緬文
       state.closeMsgSeq = state.loadSeq + 1; // 0.4.88 低7：緊接著這次的重讀不清訊息，之後的讀取才清
@@ -335,6 +341,11 @@
     if (state.tab === 'progress') loadProgress(state.pm);
     if (state.tab === 'today') loadProgress(monthsBack(1)[0]); // 業務卡片的月計劃用本月進度
     if (state.tab === 'trial') { loadPhotos(); loadHistory(); }
+    // 0.5.18（抓BUG C4）：日曆最少 770 寬，手機上打開只看到上週一到週三 → 橫向捲到「今天」那格
+    if (state.tab === 'cal') {
+      const w = $('panel').querySelector('.cal-wrap'), td = w && w.querySelector('.day.today');
+      if (w && td && w.scrollWidth > w.clientWidth && td.getBoundingClientRect) w.scrollLeft = Math.max(0, w.scrollLeft + td.getBoundingClientRect().left - w.getBoundingClientRect().left - 8);
+    }
   }
 
   /** 播放錄音、朗讀摘要、下載報告的按鈕（整頁重畫和只重畫履歷都用這個；綁過的標 data-mbound 不重複綁） */
@@ -536,8 +547,8 @@
     return `<section class="closings"><h3><span class="pill p-red">待確認結案 ${list.length} 筆</span> <span class="sub">業務按了結案，確認後才真的結案；按錯就退回／ဝန်ထမ်း ပိတ်သိမ်းထားသည်၊ အတည်ပြုမှ ပိတ်သိမ်းမည်၊ မှားလျှင် ပြန်ပို့ပါ</span></h3>
       <ul class="list">${list.map(c => `<li><b><a href="javascript:void 0" data-go="${esc(c.cid)}">${esc(c.name)}</a></b>｜${esc(c.staff)}｜${esc(c.date)}${c.custEnded ? ' <span class="pill p-yel">客戶已經是「已結束」：確認＝維持結束，退回＝不記這筆結案（客戶仍是已結束）</span>' /* 主管BUG(2號)#6 */ : ''}${msum(c.measure) ? ' <span class="pill p-grn">' + esc(msum(c.measure)) + '</span>' : '' /* 0.4.77 採收量測 */}${c.group ? ' <span class="pill">' + esc(c.group) + (c.trialOutcome ? '・' + esc(c.trialCat || (c.group === '推廣農民' ? '推廣' : '試作')) + esc(c.trialOutcome) : '') + '</span>' /* 0.4.74 結案分類、試作結果；0.4.75 複查低3：照後台 trialCat 寫試作或推廣（舊後台沒送就看分類） */ : ''}${c.after && (c.after.visits || c.after.trials) ? '<br><span class="pill p-red">結案之後還有 ' + (c.after.visits || 0) + ' 筆拜訪' + (c.after.trials ? '、' + c.after.trials + ' 件新開始的試作（確認後新試作不會跟著結束）' : '') + '，請先看客戶履歷再決定</span>' /* 結案清單中1 */ : ''}<br>
         <span class="sub">${c.result ? esc(c.result) + (c.result === '已簽約' && c.reason ? '｜說明 ' + esc(c.reason) : '') /* 0.4.42 盤商、種子商洽談成功／失敗；0.4.75 已簽約＋說明 */ : !c.buyer && (c.price === '' || c.price == null) && (c.yield === '' || c.yield == null) ? '洽談結果沒記到（結案分頁少了「結果」欄，請在試算表按「第一次安裝／升級」）' /* 主管BUG#10 */ : `賣給 ${esc(c.buyer || '—')}（${esc(c.region || '地區未填')}）｜價格 ${esc(c.price)} ${esc(c.priceUnit || '')}｜產量 ${esc(c.yield)} ${esc(c.yieldUnit || '')}${c.phone ? '｜電話 ' + esc(c.phone) : ''}${c.reason ? '｜原因 ' + esc(c.reason) : ''}${c.progress ? '｜進度 ' + esc(c.progress) : ''}`}</span><br>
-        <button class="btn primary" type="button" data-closedecide="confirm" data-vid="${esc(c.visitId)}">確認結案</button>
-        <button class="btn" type="button" data-closedecide="reject" data-vid="${esc(c.visitId)}">退回（不結案）</button></li>`).join('')}</ul>
+        <button class="btn primary" type="button" data-closedecide="confirm" data-vid="${esc(c.visitId)}"${state.closeSending ? ' disabled' : ''}>確認結案</button>
+        <button class="btn" type="button" data-closedecide="reject" data-vid="${esc(c.visitId)}"${state.closeSending ? ' disabled' : ''}>退回（不結案）</button></li>`).join('')}</ul>
       <p class="sub" id="closeMsg" aria-live="polite">${esc(state.closeMsg || '')}</p></section>`;
   }
   function renderTodayLists() {
@@ -581,6 +592,13 @@
     if (nvCache.src !== vs) { const m = {}; vs.forEach(v => { if (v.status === '已完成') return; const day = String(v.time || '').slice(0, 10); if (day > (m[v.cid] || '')) m[v.cid] = day; }); nvCache = { src: vs, map: m }; } // 每次讀到新資料才重算一次
     return nvCache.map[cid] || '';
   }
+  /** 這位客戶進行中的試作（清單裡第一件）。第15任：原本每次從頭找，排序 3000 位客戶時每次比較都找兩遍（重畫約 1.9 秒）→ 每次讀到新資料才建一次對照表 */
+  let atCache = { src: null, map: new Map() };
+  function activeTrialOf(cid) {
+    const ts = state.data.trials || [];
+    if (atCache.src !== ts) { const m = new Map(); ts.forEach(x => { if (x.status === '進行中' && !m.has(x.cid)) m.set(x.cid, x); }); atCache = { src: ts, map: m }; }
+    return atCache.map.get(cid);
+  }
   /** 7 天內有「還沒處理完」的拜訪（待處理、處理中、處理異常），而且比最後拜訪日新：當作已拜訪。超過 7 天還沒跟上就照常算逾期，不會永遠被蓋掉 */
   function visitingNow(c) { const nv = newestVisitDay(c.id); return !!nv && (!c.lastVisit || nv > c.lastVisit) && nv >= addDays(state.data.today, -6); }
   function attnOf(c) {
@@ -588,7 +606,7 @@
     if (visitingNow(c)) return { cls: 'p-grn', text: `${md(newestVisitDay(c.id))} 拜訪（處理中）`, rank: 3 }; // 剛拜訪、還沒處理完：不算逾期
     if (isActive(c) && s === 'late') return { cls: 'p-red', text: `逾期 ${daysBetween(c.nextDue, d.today)} 天`, rank: 0 };
     if (isActive(c) && s === 'due') return { cls: 'p-yel', text: '今天該回訪', rank: 1 };
-    const t = (d.trials || []).find(x => x.cid === c.id && x.status === '進行中');
+    const t = activeTrialOf(c.id);
     const mw = measureDue(t, c.lastVisit, d.today);
     if (mw) return { cls: 'p-red', text: `第 ${mw} 週該量測`, rank: 1.5 };
     if (t) { const w = weekNo({ start: t.start }, d.today); return { cls: 'p-yel', text: `${t.cat || '試作'}${w ? '第 ' + w + ' 週' : '中'}`, rank: 2 }; }
@@ -601,7 +619,7 @@
     const f = state.cf, q = f.q.trim().toLowerCase();
     // 0.4.85 中4（第11任 0.4.84 清單）：搜尋框寫「搜尋全部客戶」→ 有搜尋字時真的搜全部，不受業務、地區、類型篩選限制；
     // 篩選本身沒動，清空搜尋就回到原本的篩選
-    if (q) return state.data.customers.filter(c => [c.name, c.phone, c.id, c.crop, c.area].some(x => String(x == null ? '' : x).toLowerCase().includes(q)));
+    if (q) return state.data.customers.filter(c => [c.name, c.phone, c.id, c.crop, c.crop ? cropText(String(c.crop)) : '', c.area].some(x => String(x == null ? '' : x).toLowerCase().includes(q))); // 0.5.18 C3：畫面上作物寫「英文／緬文」，用看到的字也要搜得到
     return state.data.customers.filter(c => (!f.staff || (c.staff || NO_STAFF) === f.staff) && (!f.area || c.area === f.area) && (!f.type || (c.kind || c.type || '農民') === f.type) /* 0.5.11 低B：篩選照一般／試作／推廣農民 */
       && (f.show !== 'attn' || attnOf(c)));
   }
@@ -610,7 +628,7 @@
     const cs = state.data.customers;
     // 0.4.75（1號主管清單低4）：有指定客戶但清單裡已經沒有（被刪、改編號）→ 回 null、畫面寫「找不到」，不悄悄改顯示另一位
     if (state.trial) return cs.find(x => x.id === state.trial) || null;
-    return custFiltered().slice().sort(custOrder)[0] || null;
+    return sortByAttn(custFiltered())[0] || null;
   }
   /** 履歷那一欄的內容（低3、低4 共用） */
   function custDetailHtml() {
@@ -632,9 +650,10 @@
     if (box) box.querySelectorAll('.crow[data-go]').forEach(b => b.setAttribute('aria-current', String(!!c && b.dataset.go === c.id)));
     loadPhotos(); loadHistory();
   }
-  function custOrder(a, b) {
-    const ra = attnOf(a), rb = attnOf(b);
-    return ((ra ? ra.rank : 9) - (rb ? rb.rank : 9)) || String(a.name).localeCompare(String(b.name));
+  /** 照「要注意的程度」排（逾期最前），同程度照姓名。第15任：先把每位的程度算好一次再排（原本每次比較都重算兩位，3000 位要算好幾萬次）；排出來的順序跟原本一樣 */
+  function sortByAttn(list) {
+    const rank = new Map(list.map(c => { const a = attnOf(c); return [c, a ? a.rank : 9]; }));
+    return list.slice().sort((a, b) => (rank.get(a) - rank.get(b)) || String(a.name).localeCompare(String(b.name)));
   }
   function renderCustList() {
     const list = custFiltered(), sel = custSelected();
@@ -646,7 +665,7 @@
     const openDefault = list.length <= 40 || names.length === 1;
     return `<p class="sub" style="margin:0 0 6px">共 ${list.length} 位</p>` + names.map(k => {
       const open = k in state.grpOpen ? state.grpOpen[k] : openDefault;
-      return `<details class="grp" data-grp="${esc(k)}"${open ? ' open' : ''}><summary>${esc(k)}（${groups[k].length}）</summary><ul>${groups[k].slice().sort(custOrder).map(c => {
+      return `<details class="grp" data-grp="${esc(k)}"${open ? ' open' : ''}><summary>${esc(k)}（${groups[k].length}）</summary><ul>${sortByAttn(groups[k]).map(c => {
         const a = attnOf(c);
         return `<li><button type="button" class="crow" data-go="${esc(c.id)}" aria-current="${sel && sel.id === c.id}"><span><b>${esc(c.name)}</b><span class="sub">${esc(c.kind || c.type || '農民')}${c.crop ? '・' + esc(cropText(c.crop)) : ''}${c.area ? '・' + esc(c.area) : ''}</span></span>${a ? `<span class="pill ${a.cls}">${esc(a.text)}</span>` : ''}</button></li>`;
       }).join('')}</ul></details>`;
@@ -895,15 +914,15 @@
       form.addEventListener('submit', async ev => {
         ev.preventDefault(); keep();
         const toBoss = isGM() && (state.data.bossList || []).some(b => b.account === state.tf.staff);
-        if (!toBoss && !state.tf.cid) { $('tMsg').textContent = '請選一位農民'; return; }
-        if (!state.tf.text.trim()) { $('tMsg').textContent = '請填任務內容'; return; }
+        if (!toBoss && !state.tf.cid) { $('tMsg').textContent = '請選一位農民／လယ်သမား တစ်ဦး ရွေးပါ'; return; } // 0.5.18 C7：補緬文
+        if (!state.tf.text.trim()) { $('tMsg').textContent = '請填任務內容／လုပ်ငန်း အကြောင်းအရာ ဖြည့်ပါ'; return; }
         $('tAdd').disabled = true; $('tMsg').textContent = '送出中…';
         // 0.4.66 主管BUG(2號)#4：同一個內容（同人、同農民、同字）重按用同一個送出代號，斷線後再按不會派兩條；內容改了就換新代號
         const key = state.tf.staff + '|' + state.tf.cid + '|' + state.tf.text.trim();
         if (!state.tf.rid || state.tf.ridKey !== key) { state.tf.rid = newRid(); state.tf.ridKey = key; }
         let r;
         try { r = await api({ action: 'taskAdd', staff: state.tf.staff, cid: state.tf.cid, text: state.tf.text.trim(), rid: state.tf.rid }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再按一次（不會派成兩條）' }; }
-        if (r.ok) { setData({ tasks: r.tasks }); state.tf.text = ''; state.tf.rid = ''; state.tf.ridKey = ''; state.taskMsg = toBoss ? '已派出（主管打開主管網頁「任務」就會看到）' : '已派出（業務手機下次同步就會看到）'; }
+        if (r.ok) { setData({ tasks: r.tasks }); state.tf.text = ''; state.tf.rid = ''; state.tf.ridKey = ''; state.taskMsg = toBoss ? '已派出（主管打開主管網頁「任務」就會看到）／ပေးပို့ပြီး' : '已派出（業務手機下次同步就會看到）／ပေးပို့ပြီး'; }
         else state.taskMsg = '⚠ ' + (r.message || '派發失敗／မပေးနိုင်ပါ');
         render();
       });
@@ -924,8 +943,11 @@
       try { r = await api({ action: 'taskDone', done: [{ id: b.dataset.mytaskdone, at: Date.now() }] }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再試一次' }; }
       if (r.ok && (r.done || []).indexOf(b.dataset.mytaskdone) >= 0) {
         // 主管BUG(2號)#10：先在畫面上標完成、重畫（按鈕不會卡灰），再整份重讀；重讀失敗也看得到「已完成」
-        const t = (state.data.tasks || []).find(x => x.id === b.dataset.mytaskdone); if (t) { t.status = '已完成'; state.dataGen++; }
-        state.taskMsg = '已完成'; render(); load(); return;
+        // 0.5.18（抓BUG C6）：後台說這條其實已被取消（或別的狀態）→ 照實寫，不說「已完成」（舊後台沒有 states 照舊）
+        const real = r.states && r.states[b.dataset.mytaskdone];
+        const fin = real && real !== '已完成' ? real : '已完成';
+        const t = (state.data.tasks || []).find(x => x.id === b.dataset.mytaskdone); if (t) { t.status = '已完成'; if (fin !== '已完成') t.status = fin; state.dataGen++; }
+        state.taskMsg = fin === '取消' ? '這條任務已經被取消了，不用再做／ဤလုပ်ငန်း ပယ်ဖျက်ပြီးသား' : fin === '已完成' ? '已完成／ပြီးပါပြီ' : '這條任務已經是「' + fin + '」'; render(); load(); return;
       }
       state.taskMsg = '⚠ ' + (r.message || '沒有完成，請再按一次');
       render();
