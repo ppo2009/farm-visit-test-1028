@@ -521,6 +521,9 @@
       const srvTmp = new Set((ex.farmers || []).map(f => f && f.tempId).filter(Boolean));
       if (srvTmp.has(l.id)) return false;
       if (pending.some(v => v.farmerId === l.id)) return true;
+      // 0.5.20 G3（第19任）：帶這位新客戶的拜訪全部被後台拒收（rejected，不會再送）→ 後台不會有這位，清掉（不然選單一直多一位）
+      const mine = (ex.__visits || []).filter(v => v && v.farmerId === l.id);
+      if (mine.length && mine.every(v => v.status === 'rejected')) return false;
       return !knownHas(ex, 'customers', l.id);
     }, ['farmers', 'known', 'srvOld']);
   }
@@ -546,12 +549,22 @@
       const srv = (ex.trials || []).find(t => t && (t.id === l.id || (t.temps || []).indexOf(l.id) >= 0));
       if (l.ended) {
         const by = endByOf(l, ex.__visits);
+        // 0520R3 H2（第19任）：結束那筆（或結案帶試作結果那筆）被後台拒收（rejected，不會再送）→ 這次結束不會成立，記號拿掉，試作回到進行中、業務可以再結束一次
+        //   （那筆根本沒進後台，後台不會回 ended／release，原本永遠 hold）。還有待上傳的拜訪帶這件時上面已經留著
+        const byV = by ? (ex.__visits || []).find(v => v && v.id === by) : null;
+        if (byV && byV.status === 'rejected') return false;
         const ans = ex.known && ex.known.ends && ex.known.ends[l.id];
         if (ans && (ans.by || '') === by && (ans.a === 'ended' || ans.a === 'release')) return false;
         if (!by && srv && srv.held === false) return false; // R22-03（GPT）：held 是 null（後台讀不到結案分頁、不知道）就不清
         return true;
       }
-      return !(srv || knownHas(ex, 'trials', l.id));
+      // 0.5.20 F1（第19任）：開始記號——帶它的那筆拜訪已上傳、後台回「試作沒收」（trialDropped：不是負責業務、編號對不上）→ 這件試作不會成立，清掉；
+      //   不然畫面一直顯示一件進行中的幻影試作。只看「開始」那筆（op start、tempId 是這個記號），而且同一個記號沒有別筆還沒上傳的拜訪（上面已經擋）
+      // 0.5.20 G2、G3（第19任）：同樣不會成立的還有：後台回「客戶不存在」（missingCustomer：主管刪了客戶，後台不建試作也不回 trialDropped）、
+      //   那筆拜訪被後台拒收（rejected：格式錯，之後不會再送）。帶這個開始記號的拜訪「每一筆」都是這三種之一才清（有一筆正常上傳就等後台說）
+      const starts = (ex.__visits || []).filter(v => v && v.trial && v.trial.op === 'start' && v.trial.tempId === l.id);
+      const dropped = starts.length > 0 && starts.every(v => v.status === 'rejected' || (v.status === 'uploaded' && (v.trialDropped || v.missingCustomer)));
+      return !(srv || knownHas(ex, 'trials', l.id) || dropped);
     }, ['trials', 'known', 'srvOld']);
   }
 

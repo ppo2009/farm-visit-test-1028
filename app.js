@@ -44,6 +44,7 @@
     view: '', cat: '試作', photos: [], audio: null, audioSec: 0, rec: null, recTimer: null, gps: null,
     farmers: [], options: null, original: null, mustChange: false,
     homeMonth: '', // 首頁工作進度目前看哪個月
+    homeTop: null, // 0.5.20 E1：上次畫首頁時資料裡最新的月份（變了就跳到最新月）
     monthOpen: '', // 0.4.82 本月成績展開哪一格明細：'' / 'new' / 'trial'
     harvestOpen: false, // 0.4.82 快採收提醒條展開了沒
     formGen: 0, // 每清一次表單就加一；非同步處理完的錄音、照片，世代不同就丟掉
@@ -66,6 +67,7 @@
   function showLogin(msg) {
     // 2號 0.4.69 清單低3（第8任）：換帳號後「我的報告」還用上一位的名字篩 → 回到登入畫面就清掉報告清單、範圍、我是誰
     state.me = ''; state.reportScope = 'all'; state.reports = null;
+    state.homeMonth = ''; state.homeTop = null; // 0520R4 I3（第19任）：換人登入不要停在上一位點的月份（下一位的首頁照第一次畫的規則）
     show('setup');
     $('setupMsg').textContent = msg || '只要登入一次，之後沒網路也能打卡。帳號和密碼請向主管索取（密碼不能自己改）。／တစ်ကြိမ် ဝင်ပြီးလျှင် အင်တာနက်မရှိလည်း မှတ်တမ်းတင်နိုင်သည်။ အကောင့်နှင့် စကားဝှက်ကို မန်နေဂျာထံ တောင်းပါ။';
     $('setupMsg').className = msg ? 'sub err' : 'sub';
@@ -288,8 +290,8 @@
     const id = f && f.id;
     return (await activeTrialFor(id, '試作')) ? '試作' : (await activeTrialFor(id, '推廣')) ? '推廣' : '農戶';
   }
-  /* 種植進度（0.4.75 起從種植日期算天數）。0.5.14 客戶「每個作物訂個天數追蹤，不需要用 150 天」＋董事長「不用寫死了，改給對方主管填天數」：
-     總天數＝選單分頁該作物的「生長天數」（主管自己填；後台 options.cropDays）。**沒填就沒有總天數**：只算第幾天、不畫進度條、提醒主管去填，不再假設 150 天 */
+  /* 種植進度（0.4.75 起從種植日期算天數）。0.5.14 客戶「每個作物訂個天數追蹤」＋董事長「不用寫死了，改給對方主管填天數」：
+     總天數＝選單分頁該作物的「生長天數」（主管自己填；後台 options.cropDays）。**沒填就沒有總天數**：只算第幾天、不畫進度條、提醒主管去填，程式裡不假設任何固定天數 */
   const cropDaysOf = (crop, opts) => { const d = (opts || state.options || {}).cropDays || {}; const n = Number(d[String(crop || '').trim()]); return n > 0 ? n : 0; };
   /** 種植進度：沒填種植日期（或格式不對）回 null；日期在未來＝future；total＝作物生長天數（0＝主管還沒設）。today、plantDate 都是 YYYY-MM-DD（緬甸日期） */
   function growOf(plantDate, today, total) {
@@ -326,7 +328,7 @@
   function latestVisitDay(serverDay, cid, mine) {
     // 0.4.91 低2：cid 可以給 [正式編號, 臨時編號]——剛新增的客戶，手機拜訪記的是 T_ 臨時編號，上傳後後台給正式編號（2 號在 customerOut_ 加 tempId）；舊後台沒有 tempId 照舊
     const ids = [].concat(cid).filter(Boolean);
-    const own = (mine || []).filter(v => v && ids.indexOf(v.farmerId) >= 0 && Number(v.deviceTime) > 0).map(v => mmDay(0, Number(v.deviceTime)));
+    const own = (mine || []).filter(v => v && v.status !== 'rejected' && ids.indexOf(v.farmerId) >= 0 && Number(v.deviceTime) > 0).map(v => mmDay(0, Number(v.deviceTime))); // 0520R4 I4：被後台拒收（不會進後台）的不算
     return [String(serverDay || '').slice(0, 10)].concat(own).filter(d => /^\d{4}-\d\d-\d\d$/.test(d)).sort().pop() || '';
   }
   const visitAgeHtml = (lastVisit, today) => { const a = visitAge(lastVisit, today); return `<span class="vage ${a.lv}">${esc(a.text)}</span>`; };
@@ -631,6 +633,7 @@
     const ms = payload && payload.action === 'farmerReport' ? 150000 : payload && (payload.action === 'trialReportFile' || payload.action === 'myFile' || payload.action === 'plantSave') ? 60000 : 20000; // 0.4.94 中4：種植資料存檔 20 秒不夠，改 60 秒 // 0.4.77 種植紀錄 Word 含全部照片，給 120 秒
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctl && typeof setTimeout === 'function' ? setTimeout(() => ctl.abort(), ms) : null;
+    state.netBusy = (Number(state.netBusy) || 0) + 1; // 0.5.20 G1：有請求送出中（建議、種植資料、下載報告…），新版背景程式先不重整
     try {
       const res = await fetch(FARM_CONFIG.gasUrl, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(Object.assign({ deviceKey: cfg.deviceKey }, payload)), signal: ctl ? ctl.signal : undefined });
@@ -643,7 +646,7 @@
     } catch (e) {
       if (e && e.name === 'AbortError') return { ok: false, timeout: true, message: '網路太慢，可能沒讀到，請再按一次／ထပ်နှိပ်ပါ' };
       throw e;
-    } finally { if (timer) clearTimeout(timer); }
+    } finally { if (timer) clearTimeout(timer); state.netBusy = Math.max(0, (Number(state.netBusy) || 0) - 1); }
   }
   async function loadReports() {
     const btn = $n('reportLoadBtn'); btn.disabled = true; $n('reportHint').textContent = '讀取中…／ဖတ်နေသည်';
@@ -704,7 +707,7 @@
   function showCloseProgress() {
     const sel = document.getElementById('closeFarmer'), cid = sel ? sel.value : '';
     const current = () => !!sel && sel.value === cid, list = state.mineAll || state.closeList || [];
-    // 0.4.75 董事長「農民 150 天做成一個進度 100%」：選到農民 → 進度卡最上面放種植進度條（盤商、種子商沒有）
+    // 0.4.75 董事長「種植進度做成進度條」：選到農民 → 進度卡最上面放種植進度條（盤商、種子商沒有）；100%＝該作物的生長天數（0.5.14 起主管在選單分頁填）
     const gb = $n('closeGrow'), f = list.find(x => x.id === cid);
     if (state.plEditCid && state.plEditCid !== cid) closePlantEdit(); // 換人：正在改的那份收起來
     if (cid && f && (f.type || '農民') === '農民') {
@@ -1076,10 +1079,14 @@
       || `<li class="empty">${h ? '這 7 天沒有排到回訪／၇ ရက်အတွင်း သွားရန် မရှိ' : '連上網路後會顯示／အင်တာနက်ချိတ်ပြီးမှ ပြမည်'}</li>`;
   }
   /** ① 月計劃清單 HTML（只寫 done／target 和進度條；上個月的資料不當本月） */
-  function planHtml(h, homeOld) {
+  // 0520R4 I6（第19任）：那一天所在的週（週一開始）——首頁資料是哪一天的（h.today）跟手機今天不同週時，每週目標的數字是上週的
+  const weekOf = d => { const p = String(d || '').slice(0, 10).split('-').map(Number); if (p.length < 3 || !(p[0] > 0)) return ''; const t = new Date(Date.UTC(p[0], p[1] - 1, p[2])); t.setUTCDate(t.getUTCDate() - (t.getUTCDay() + 6) % 7); return t.toISOString().slice(0, 10); };
+  function planHtml(h, homeOld, today) {
     const plan = homeOld ? [] : (h && h.plan) || [];
+    const oldWeek = !!(today && h && h.today && weekOf(h.today) && weekOf(today) && weekOf(h.today) !== weekOf(today)); // 舊後台沒有 h.today：照舊
+    const staleWeekly = p => oldWeek && p.period === '本週';
     const partsTxt = p => (p.parts ? '<br><small class="planparts">' + ['試作農民', '推廣農民', '一般農民'].map(k => `${esc(k.replace('農民', ''))} ${esc(String(p.parts[k] || 0))}`).join('・') + '</small>' : '');
-    return plan.map(p => `<li class="plan"><span>${esc(p.label)}<br><small>${esc(p.period)}　${p.done}／${p.target}</small>${partsTxt(p)}
+    return plan.map(p => staleWeekly(p) ? `<li class="plan"><span>${esc(p.label)}<br><small>${esc(p.period)}　連上網路後更新／အင်တာနက်ချိတ်ပြီးမှ ပြမည်</small></span><span class="pill wait">—</span></li>` : `<li class="plan"><span>${esc(p.label)}<br><small>${esc(p.period)}　${p.done}／${p.target}</small>${partsTxt(p)}
       <span class="bar"><i style="width:${Math.max(0, Math.min(100, p.pct))}%"></i></span></span>${p.done >= p.target ? '<span class="pill ok">達成 ပြည့်မီ</span>' : `<span class="pill wait">${esc(String(p.done))}／${esc(String(p.target))}</span>`}</li>`).join('') /* 0.4.82 董事長：不顯示 %，只留 done／target；進度條保留 */
       || `<li class="empty">${homeOld ? '這個月的目標要連上網路後才會更新／အင်တာနက်ချိတ်ပြီးမှ ပြမည်' : h && h.plan ? '這個月沒有訂目標／ဤလ ပစ်မှတ် မရှိ' : '連上網路後會顯示／အင်တာနက်ချိတ်ပြီးမှ ပြမည်'}</li>`; // 舊版留下的首頁資料沒有計劃欄，不能說成沒有目標（第五輪自抓）
   }
@@ -1119,31 +1126,38 @@
     }));
   }
   /** ③ 月計劃、執行任務右欄 */
-  function renderPlan(h, homeOld) {
-    $('planList').innerHTML = planHtml(h, homeOld);
+  function renderPlan(h, homeOld, today) {
+    $('planList').innerHTML = planHtml(h, homeOld, today); // 0520R4 I6：帶手機今天，分得出每週目標是不是上週的
     const tp = document.getElementById('todoPlan');
     if (tp) tp.innerHTML = todoPlanHtml(h, homeOld);
   }
   /** ③ 工作進度（最近 3 個月可以切換）與最上面一排數字；回傳正在看的那個月 */
-  function renderMonthStats(h) {
+  function renderMonthStats(h, today) {
     // 工作進度：最近 3 個月可以切換
-    const hist = (h && h.history) || [];
-    if (!hist.some(x => x.month === state.homeMonth)) state.homeMonth = hist.length ? hist[0].month : '';
+    // 0.5.20 G5（第19任）：換月後還沒同步（手機存的首頁資料最新是上個月）→ 前面補一顆「本月」（stale：後台還沒有本月數字，各格用「—」），
+    //   首頁就會停在本月，這個月還沒上傳的拜訪照樣加上去、顯示「含 N 筆未上傳」；同步拿到本月後就換成後台的數字
+    const hist0 = (h && h.history) || [], thisM = String(today || '').slice(0, 7);
+    const hist = thisM && hist0.length && String(hist0[0].month) < thisM ? [{ month: thisM, stale: true }].concat(hist0) : hist0;
+    // 0.5.20 E1（第19任）：換月後同步拿到新月份，上個月仍在清單裡 → 原本一直停在上個月（未上傳筆數也不顯示）。
+    //   記下「上次畫的時候最新的是哪個月」：最新月份變了就跳到最新月；同一批資料裡業務自己點的月份照舊保留
+    const top = hist.length ? hist[0].month : '';
+    if (top !== state.homeTop) { if (state.homeTop != null) state.homeMonth = top; state.homeTop = top; } // 第一次畫（還沒記過）不改，照原本規則
+    if (!hist.some(x => x.month === state.homeMonth)) state.homeMonth = top;
     $('monthChips').innerHTML = hist.map(x => `<button type="button" class="chip" data-m="${esc(x.month)}" aria-pressed="${x.month === state.homeMonth}">${Number(x.month.slice(5))} 月／လ</button>`).join('');
     $('monthChips').querySelectorAll('[data-m]').forEach(b => b.addEventListener('click', () => { state.homeMonth = b.dataset.m; renderHome(); }));
-    const cur = hist.find(x => x.month === state.homeMonth);
-    $('statVisits').textContent = cur ? cur.visits : (h ? h.monthVisits : '—');
+    const cur = hist.find(x => x.month === state.homeMonth), stale = !!(cur && cur.stale);
+    $('statVisits').textContent = stale ? '—' : cur ? cur.visits : (h ? h.monthVisits : '—');
     // 0.4.69 最上面一排：本月拜訪（不跟著月份切換）
     // 0.4.97（第12任 BUG 審查手機 2）：存著的首頁資料是上個月的（月初還沒同步過）→ 不能把上個月的數字當本月（0.4.95 起還會再加這個月未上傳的）→ 底數用「—」
     renderCaseStats(h && h.caseStats); // 0.5.04 最上面 6 格
     $n('msVisits').textContent = h && h.totalVisits != null ? String(h.totalVisits) : '—'; // 0.5.04 董事長「本月拜訪改總拜訪」：後台給的全部拜訪次數（舊後台沒有就「—」）；hThisMonth 不再用在這格
-    $('statNew').textContent = cur ? cur.newCustomers : (h ? h.newCustomers : '—');
-    $('statCust').textContent = cur ? cur.customersVisited : '—';
-    $('statTrials').textContent = cur ? `${cur.trialsStarted}／${cur.trialsEnded}` : '—';
-    renderMonthDetail(cur); // 0.4.82 新增客戶、試作兩格的分類和明細（舊後台沒有明細就照舊）
+    $('statNew').textContent = stale ? '—' : cur ? cur.newCustomers : (h ? h.newCustomers : '—');
+    $('statCust').textContent = stale ? '—' : cur ? cur.customersVisited : '—';
+    $('statTrials').textContent = !stale && cur ? `${cur.trialsStarted}／${cur.trialsEnded}` : '—';
+    renderMonthDetail(stale ? null : cur); // 0.4.82 新增客戶、試作兩格的分類和明細（舊後台沒有明細就照舊）
     // 0.5.16 第2輪 中：兩次重畫交錯（連點月份、返回、同步通知）時，後面 plus 讀畫面上的數字會把未上傳筆數加兩次 → 寫底數時另外記一份，plus 從記下的底數加
     ['statVisits', 'msVisits', 'statNew', 'statCust'].forEach(id => { const e = $n(id); if (e && e.dataset) e.dataset.base = e.textContent; });
-    const bc = cur ? cur.byCategory : (h && h.byCategory) || {};
+    const bc = stale ? {} : cur ? cur.byCategory : (h && h.byCategory) || {};
     $('statByCat').textContent = Object.keys(bc || {}).length ? '類別 အမျိုးအစား：' + Object.entries(bc).map(([k, n]) => `${catBi(k)} ${n} 次`).join('、') : '';
     return cur;
   }
@@ -1184,10 +1198,10 @@
     fillPlantFarmers(); // 0.4.59 種植資料分頁共用同一份「自己負責的農民」
     renderReports(); // 0.4.61 試作報告：按過「看試作報告」才有清單，首頁重畫時照舊顯示
     const homeOld = homeIsOldMonth(h, today);
-    renderPlan(h, homeOld);
+    renderPlan(h, homeOld, today);
     renderNewCust(homeOld ? { staleMonth: true } : h); // 0.4.72（1號）本月新增客戶五類＋明細；0.5.16 上個月的資料不當本月
     if (gen !== state.homeGen) return; // R12-02：上面等待途中已經有更新的重畫
-    const cur = renderMonthStats(h);
+    const cur = renderMonthStats(h, today); // 0.5.20 G5：帶校正過的今天
     const farmers = (await Store.getMeta('farmers')) || [];
     if (gen !== state.homeGen) return; // R12-02：讀客戶清單途中切了月份（更新的重畫已畫好），不加到別的月份
     addPendingToStats(pendingCounts(state.myVisitList, farmers, today, cur));
@@ -2509,23 +2523,58 @@
   }
 
   /* ───── 定位 ───── */
-  function locate() {
-    const box = $('gps');
-    state.gps = null;
+  // 0.5.20 E2（第19任）：原本只在打開打卡畫面時抓一次位置 → 開著畫面走到別塊田、半小時後才存，田區座標、照片浮水印都是舊位置。
+  //   記下抓到的時間（gpsAt）；存檔時位置超過 GPS_FRESH_MS 就再抓一次（keep：抓不到就沿用原本的，不會變成無定位）；拍照時舊了也在背景補抓
+  const GPS_FRESH_MS = 2 * 60000;
+  const gpsStale = () => !state.gps || !(Date.now() - (state.gpsAt || 0) <= GPS_FRESH_MS);
+  /** 0.5.20 G4：兩個位置相距幾公尺（近距離用平面近似就夠） */
+  // 0520R3 H1（第19任）：「看不出有移動」最多只認 200 m（董事長要求：不要用舊草稿固定天數那個數字，避免混淆；200 m 也讓人沒動時少被換成粗略位置）——原本用新位置誤差的 2 倍，±1000 m 時走到 2 km 外的下一塊田也被當成沒動、留著上一塊田的 ±5 m 座標
+  const GPS_SAME_M = 200;
+  const gpsDistM = (a, b) => { const k = 111320, dy = (b.lat - a.lat) * k, dx = (b.lng - a.lng) * k * Math.cos(a.lat * Math.PI / 180); return Math.sqrt(dx * dx + dy * dy); };
+  function locate(opt) {
+    const box = $('gps'), keep = !!(opt && opt.keep); // 位置是手機的、不是哪一張表單的：換客戶（formGen 會變）時抓到的照樣用
+    // 0520R1-2（GPT）：拍照、存檔、重新定位可能同時各抓一次，回覆先後會顛倒 → 每次編號（seq），比較晚發出的已經寫進來了，較早那次晚到就丟掉；
+    //   抓取時間用定位本身的時間（p.timestamp，快取的舊位置不會被當成剛抓的），也比它舊的不收
+    const seq = state.gpsSeq = (Number(state.gpsSeq) || 0) + 1;
+    if (!keep) { state.gps = null; state.gpsAt = 0; }
     // 0.4.33 董事長：測試期間定位先「假打開」（在電腦上測開始新的試作）。config.js 有 testFakeGps 才生效，正式上線前拿掉
     const fake = typeof FARM_CONFIG !== 'undefined' && FARM_CONFIG.testFakeGps;
     if (fake && isFinite(fake.lat) && isFinite(fake.lng)) {
-      state.gps = { lat: Number(fake.lat), lng: Number(fake.lng), acc: 0 };
+      state.gps = { lat: Number(fake.lat), lng: Number(fake.lng), acc: 0 }; state.gpsAt = Date.now();
       box.innerHTML = `📍 <b>測試用假定位</b> ${state.gps.lat}, ${state.gps.lng}（正式上線前會關掉）／စမ်းသပ်ရန် တည်နေရာ`;
       return Promise.resolve();
     }
     if (!('geolocation' in navigator)) { box.textContent = '📍 這支手機不支援定位，會標記「無定位」／ဤဖုန်း တည်နေရာ မရ'; return Promise.resolve(); }
-    box.textContent = '📍 定位中…（最多 30 秒）တည်နေရာ ရှာနေသည်';
+    if (!keep) box.textContent = '📍 定位中…（最多 30 秒）တည်နေရာ ရှာနေသည်';
     return new Promise(done => navigator.geolocation.getCurrentPosition(p => {
-      state.gps = { lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6), acc: Math.round(p.coords.accuracy) };
+      const fixAt = Number(p.timestamp) > 0 ? Math.min(Number(p.timestamp), Date.now()) : Date.now();
+      if (seq < (Number(state.gpsSeqApplied) || 0) || (state.gps && fixAt < (Number(state.gpsAt) || 0))) { done(); return; } // 0520R1-2：過時的回覆
+      state.gpsSeqApplied = seq;
+      const nw = { lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6), acc: Math.round(p.coords.accuracy) };
+      // 0.5.20 G4（第19任）：補抓（keep）拿到的位置明顯比原本不準（誤差超過原本 3 倍、也超過 100 m），而且原本的位置還在新位置誤差的 2 倍範圍內（誤差值只涵蓋約 7 成情況，2 倍約 95%；看不出有移動）
+      //   → 保留原本較準的位置，抓取時間更新（這次定位證實人還在原地，不用每次存檔都再等）；離很遠（真的移動了）照樣換新的
+      const old = state.gps;
+      // 0520R5／0520R6（GPT 低，第20任）：「看不出」的上限——變粗略前最後那個準的位置（＝gpsAt，看不出期間不更新）超過 10 分鐘就結束「看不出」、不再比它
+      //   （訊號一直差時，不要每次存檔都多等兩次定位）。要放在下面「保留較好位置」那條之前（R5 放在後面，那條先 return 就判斷不到）
+      if (keep && state.gpsAmbig && !(state.gpsRef && Date.now() - (Number(state.gpsAt) || 0) <= GPS_FRESH_MS * 5)) { state.gpsAmbig = false; state.gpsRef = null; }
+      // 0520R5（0520R4 GPT 低，第20任）：原本是「看不出有沒有移動」的粗略位置時，保留它但不當成剛抓的、也不清掉 gpsAmbig（原本會清掉 → 存檔不再多抓一次）
+      if (keep && old && isFinite(old.acc) && nw.acc > Math.max(old.acc * 3, 100) && gpsDistM(old, nw) <= Math.min(nw.acc * 2, GPS_SAME_M)) { if (!state.gpsAmbig) state.gpsAt = fixAt; done(); return; }
+      // 0520R4 I7（第19任）：補抓只拿到粗略位置（誤差超過 100 m，後台不會拿來寫田區座標）、原本是準的、又看不出有沒有移動（超過 GPS_SAME_M 但在新誤差 2 倍內）
+      //   → 照實換成新位置（真的走到別塊田不能留舊座標），但抓取時間不更新（還算舊）、記 gpsAmbig：存檔時再補抓一次、拍照也會再抓，給 GPS 機會鎖到準的位置
+      // 0520R5（0520R4 GPT 低，第20任）：已經在「看不出」狀態時，跟「變粗略之前最後那個準的位置」（gpsRef）比——原本跟目前這個粗略的比，
+      //   連兩次粗略時第二次 old.acc 超過 100 → 不算看不出、當成剛抓的 → 存檔不再多抓一次。準的位置、重新定位（不是補抓）都會結束「看不出」
+      //   （10 分鐘上限在上面已經判斷過：到這裡還在看不出＝準的位置還在 10 分鐘內）
+      const ref = keep && state.gpsAmbig && state.gpsRef ? state.gpsRef : old;
+      const ambig = !!(keep && ref && isFinite(ref.acc) && ref.acc <= 100 && nw.acc > 100 && gpsDistM(ref, nw) <= nw.acc * 2);
+      state.gps = nw;
+      if (!ambig) state.gpsAt = fixAt;
+      state.gpsAmbig = ambig;
+      state.gpsRef = ambig ? ref : null;
+      if (typeof fillGpsBox === 'function') fillGpsBox(); // 0520R4 I5：新增客戶表單的「GPS 座標」跟著換（原本只在拍照時填，存檔前補抓到新位置不更新）
       box.innerHTML = `📍 已定位 တည်နေရာရပြီ <b>${state.gps.lat}, ${state.gps.lng}</b>（誤差 ±${state.gps.acc} m）`;
       done();
     }, err => {
+      if ((keep && state.gps) || seq < (Number(state.gpsSeqApplied) || 0)) { done(); return; } // 0.5.20 E2：補抓失敗 → 沿用原本的位置、畫面不改；0520R1-2：較晚發出的那次已經抓到了，這次的失敗不改畫面
       const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
       box.innerHTML = err.code === 1
         ? '📍 <b style="color:var(--chili)">定位被關掉了 တည်နေရာ ပိတ်ထားသည်</b>，打卡會標記「無定位」。' + (isIOS
@@ -2533,7 +2582,7 @@
           : '請按網址列左邊的圖示 →「權限」→ 允許「位置」，並確認手機的定位服務是開的，再按「重新定位」。')
         : '📍 抓不到位置（可能訊號不好），仍可儲存，會標記「無定位」。可以到空曠處按「重新定位」。／တည်နေရာ မရပါ၊ သိမ်းနိုင်သည်။ ကွင်းပြင်တွင် ပြန်ရှာပါ။';
       done();
-    }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 60000 }));
+    }, { enableHighAccuracy: true, timeout: keep ? 15000 : 30000, maximumAge: keep ? 0 : 60000 })); // 0.5.20 E2：補抓不收快取的舊位置
   }
 
   /* ───── 照片：讀拍攝時間與照片定位、壓縮、印浮水印 ───── */
@@ -2644,6 +2693,7 @@
     const list = [...(files || [])];
     if (!list.length) return;
     if (state.mediaLocked) { toast('正在存檔（等定位），照片等一下再加／သိမ်းနေသည်'); return; } // 0.4.91 中3
+    if (source === '相機' && gpsStale()) locate({ keep: true }); // 0.5.20 E2：位置舊了，背景補抓（不等；這批照片浮水印用目前的，存檔時會再確認）；0520R4 I2：打開畫面時沒抓到（沒有位置）也補抓，原本要等按儲存才抓、照片全寫無定位
     const gen = state.formGen;
     const room = MAX_PHOTOS - state.photos.length - state.busyPhotos; // 0.4.87 中4：還在處理的也要扣（兩批同時處理會超過 6 張，後台只收前 6 張）
     if (room <= 0) { toast(`一次拜訪最多 ${MAX_PHOTOS} 張照片／ဓာတ်ပုံ အများဆုံး ${MAX_PHOTOS} ပုံ`); return; }
@@ -3067,11 +3117,12 @@
     const mode0 = state.trialMode, trial0 = state.activeTrial ? state.activeTrial.id : '';
     const cfg = await getConfig();
     if (!cfg || !cfg.deviceKey) { showLogin('請先登入／အရင် ဝင်ပါ'); return; }
-    if (!state.gps) {
+    if (gpsStale()) { // 0.5.20 E2：沒有位置，或位置是 2 分鐘以前抓的 → 再抓一次（抓不到就沿用原本的）
       toast('再抓一次位置… တည်နေရာ ပြန်ရှာနေ');
       // 等定位時不能再錄音、拍照（save() 整段鎖住、結束時才解鎖，這裡不解鎖）
       mediaLock(true);
-      await Promise.race([locate(), new Promise(r => setTimeout(r, 15000))]);
+      await Promise.race([locate({ keep: true }), new Promise(r => setTimeout(r, 15000))]);
+      if (state.gpsAmbig && !moved()) await Promise.race([locate({ keep: true }), new Promise(r => setTimeout(r, 10000))]); // 0520R4 I7：粗略、看不出有沒有移動 → 再給一次機會（只多抓一次）
     }
     let why = saveBusyReason(state);
     if (why) { saveStop(why); return; }
@@ -3284,7 +3335,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.19'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.20'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -3332,18 +3383,38 @@
   function setupServiceWorker() {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').then(reg => {
+        // 有新版：沒在填拜訪、也沒在上傳，就更新。
+        // 原本要等「手機裡沒有待上傳的資料」才更新，但一筆一直傳不上去的資料會讓這支手機永遠停在舊版、拿不到修正（第六輪自抓）；
+        // 新版一定能讀舊版存的資料（有測試保護），所以不用再等
+        // 2號 0.4.69 低6（第8任）：種植資料表單打開（改到一半或正在存）也先不更新，不然 0.6 秒後整頁重整、改的內容不見；下次打開網頁就是新版
+        // 0.5.20 F2（第19任）：原本只在「剛裝好那一刻」判斷一次——那時正在填拜訪就一直停在等待（背景自動上傳跑舊版核心），重開網頁也不會再問（updatefound 不會再來）。
+        //   改成：剛裝好、或打開網頁時就已經有等待中的新版，都交給 swTryActivate；當下不能更新就每 20 秒再看一次，離開打卡畫面、上傳完就更新
+        // 現在可不可以重整：沒在填拜訪、沒在上傳、種植資料沒打開、沒在打字；
+        // 0.5.20 G1（第19任）：建議框開著（字還沒送出或正在送）、登入中、有請求送出中（state.netBusy，gasCall 計數）也先不重整，不然寫好的字、送到一半的請求會不見
+        const safeNow = () => {
+          const plantEditing = !$n('plForm').hidden;
+          const ae = typeof document !== 'undefined' && document.activeElement, typing = !!(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName || '')); // 正在打字（建議、任務等其他欄位）也先不重整
+          const fbOpen = !!($n('feedbackBox') && $n('feedbackBox').hidden === false), busyNet = !!state.loggingIn || (Number(state.netBusy) || 0) > 0;
+          return { ok: state.view !== 'visit' && !syncing && !plantEditing && !typing && !fbOpen && !busyNet, plantEditing };
+        };
+        // 0520R1-1（GPT）：送出更新後原本固定 0.6 秒就重整、不再檢查——這段時間業務切到打卡畫面開始填，照樣被重整 → 重整「當下」再檢查一次，不行就每秒再看，可以了才重整
+        const reloadWhenSafe = first => setTimeout(() => { if (safeNow().ok) location.reload(); else reloadWhenSafe(false); }, first ? 600 : 1000);
+        const tryNow = nw => {
+          if (!nw || nw.state !== 'installed' || !navigator.serviceWorker.controller || state.swActivating) return true; // 不用再等（沒有新版、已經在更新）
+          const s = safeNow();
+          if (s.ok) { state.swActivating = true; nw.postMessage('skipWaiting'); reloadWhenSafe(true); return true; }
+          if (s.plantEditing && !state.swToasted) { state.swToasted = true; toast('有新版，種植資料存好後就會更新／ဗားရှင်းအသစ် ရှိသည်'); }
+          return false;
+        };
+        const watch = nw => {
+          if (tryNow(nw)) return;
+          clearInterval(state.swTimer);
+          state.swTimer = setInterval(() => { if (tryNow(reg.waiting || nw)) clearInterval(state.swTimer); }, 20000);
+        };
+        if (reg.waiting) watch(reg.waiting);
         reg.addEventListener('updatefound', () => {
           const nw = reg.installing;
-          nw && nw.addEventListener('statechange', async () => {
-            if (nw.state !== 'installed' || !navigator.serviceWorker.controller) return;
-            // 有新版：沒在填拜訪、也沒在上傳，就更新。
-            // 原本要等「手機裡沒有待上傳的資料」才更新，但一筆一直傳不上去的資料會讓這支手機永遠停在舊版、拿不到修正（第六輪自抓）；
-            // 新版一定能讀舊版存的資料（有測試保護），所以不用再等
-            // 2號 0.4.69 低6（第8任）：種植資料表單打開（改到一半或正在存）也先不更新，不然 0.6 秒後整頁重整、改的內容不見；下次打開網頁就是新版
-            const plantEditing = !$n('plForm').hidden;
-            if (state.view !== 'visit' && !syncing && !plantEditing) { nw.postMessage('skipWaiting'); setTimeout(() => location.reload(), 600); }
-            else if (plantEditing) toast('有新版，種植資料存好後重新打開網頁就會更新／ဗားရှင်းအသစ် ရှိသည်');
-          });
+          nw && nw.addEventListener('statechange', () => { if (nw.state === 'installed') watch(nw); });
         });
         if ('periodicSync' in reg) reg.periodicSync.register('upload-visits', { minInterval: 60 * 60 * 1000 }).catch(() => {});
       }).catch(() => {});

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="0.5.19">
+<meta name="app-build" content="0.5.20">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -432,7 +432,7 @@ li>.pill{flex:none}
   <section class="msec" id="todoPlanGrow">
     <h3 class="msub">主管訂的目標<span class="my">လစဉ် ပစ်မှတ်</span></h3>
     <ul id="planList"></ul>
-    <!-- 0.4.75 董事長：農民 150 天＝100%，自己負責的農民（三類）依百分比由高到低；0.5.14 改照選單分頁每種作物的生長天數，緬文也拿掉「150 天」 -->
+    <!-- 0.4.75 董事長：種植進度百分比，自己負責的農民（三類）依百分比由高到低；100%＝選單分頁該作物的生長天數（0.5.14 起主管填，程式不假設固定天數） -->
     <h3 class="msub">農民種植進度（依作物生長天數）<span class="my">စိုက်ပျိုးမှု တိုးတက်မှု (သီးနှံ ကြီးထွားရက်အလိုက်)</span></h3>
     <ul id="growList"></ul>
   </section>
@@ -456,7 +456,7 @@ li>.pill{flex:none}
     </div>
     <label class="lab" for="closeFarmer">選擇客戶<span class="my">ဖောက်သည် ရွေးပါ</span></label>
     <select id="closeFarmer"><option value="">—</option></select>
-    <!-- 0.4.75 董事長「農民 150 天做成一個進度 100%」：選到農民，進度卡最上面放種植進度 -->
+    <!-- 0.4.75 董事長「種植進度做成進度條」：選到農民，進度卡最上面放種植進度（100%＝該作物的生長天數） -->
     <div class="progress" id="closeGrow" hidden aria-live="polite"></div>
     <!-- 0.4.82 董事長「修改搬走」：修改種植資料的表單從種植資料分頁搬到這裡（id 不變）；選了還在種、自己負責的農民，按種植進度下面的「修改種植資料」就地打開 -->
     <div id="plForm" class="plform" hidden>
