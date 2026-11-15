@@ -485,6 +485,9 @@
   const NEXT_TRY_MAX_MS = 30 * 60000; // 0.4.87 中2：失敗重試最多排 30 分鐘後（下面 Math.min(30, …) 分鐘），超過就是時間被調過
   const READ_FAIL_MAX = 3; // 0.4.87 中1：同一筆讀檔連續失敗幾次後，先把讀得到的送出去
   const LOGIN_LOST_MSG = '登入已失效，回首頁重新登入後會自動補傳／ပြန်ဝင်ပြီးလျှင် တင်မည်'; // 0.4.91 中4
+  const LOGIN_LOST_TAIL = '。沒上傳的資料還在手機裡，重新登入後會自動補傳。／ပြန်ဝင်ပြီးလျှင် ကျန်သော မှတ်တမ်း တင်မည်။'; // 0.5.19 A1：跟 app.js syncNow 給 onLoginExpired 的字一樣
+  /** 0.5.19 A1（第18任抓BUG）：確認是同一把金鑰登入失效 → 記在手機裡（loginLost），這一輪停下；背景程式之後看到就不再用這把金鑰整包重送照片錄音（原本只有網頁打開時才記） */
+  async function noteLoginLost(cfg, msg) { await Store.setMeta('loginLost', { key: cfg.deviceKey, msg: (msg || '登入已失效') + LOGIN_LOST_TAIL }); }
   const SYNC_WARN = '同步資料寫回手機失敗（可能空間不足），稍後再同步／ဒေတာ မသိမ်းနိုင်၊ နောက်မှ ထပ်လုပ်မည်'; // R12-01／R13-01
   const READ_FAIL_MSG = '有拜訪的照片或錄音暫時讀不到（是手機裡的檔案，不是網路問題），稍後自動再試；連續 3 次讀不到會先送文字和其他資料／ဓာတ်ပုံ/အသံ ဖတ်မရသေးပါ၊ အင်တာနက် ပြဿနာ မဟုတ်ပါ';
   let running = false;
@@ -685,6 +688,8 @@
       if (data.missingCustomer) x.missingCustomer = true;
       // 0.5.16 第1輪：後台說結案沒收（不是負責業務、已有一筆等主管確認…）→ 記下原因，清單那一筆標出來
       if (data.closingDropped) x.closingDropped = String(data.closingDropped).slice(0, 200);
+      // 0.5.19 B1：後台說試作開始／結束沒收（不是負責業務、試作編號對不上）→ 記下原因，清單那一筆標出來
+      if (data.trialDropped) x.trialDropped = String(data.trialDropped).slice(0, 200);
       delete x.nextTry;
       return x;
     });
@@ -701,6 +706,7 @@
       const lost = await Store.getMeta('loginLost');
       if (lost && lost.key === cfg.deviceKey) { report.error = LOGIN_LOST_MSG; report.code = 'LOGIN_LOST'; return report; }
       await syncTicksFirst(cfg, report);
+      if (report.code === 'BAD_LOGIN') { await noteLoginLost(cfg, report.error); return report; } // 0.5.19 A1：打勾已經回登入失效（同一把金鑰），不再送拜訪
       const all = (await Store.allVisits()).sort((a, b) => a.deviceTime - b.deviceTime);
       const now = Date.now();
       await dropOldUploaded(all, now);
@@ -744,7 +750,7 @@
           report.sent++; report.left--;
         } else if (data && data.code === 'BAD_LOGIN') {
           // 0.4.87 高1：上一位的金鑰被登出停用、回「登入失效」時，現在已經換人登入 → 不回 BAD_LOGIN（不然新帳號會被踢回登入頁）
-          report.error = data.message; if (await sameLogin(cfg.deviceKey)) report.code = 'BAD_LOGIN'; break; // 資料留在手機，重新登入後會接著傳
+          report.error = data.message; if (await sameLogin(cfg.deviceKey)) { report.code = 'BAD_LOGIN'; await noteLoginLost(cfg, data.message); } break; // 資料留在手機，重新登入後會接著傳；0.5.19 A1 記下失效
         } else if (data && (data.code === 'BAD_ID' || data.code === 'BAD_REQUEST')) {
           // 伺服器確定收不了的（格式錯）：標成被拒、留在手機，不再重送，也不擋後面的
           await Store.updateVisit(v.id, cur => (cur && cur.status === 'uploaded' ? null : Object.assign({}, cur || v, { status: 'rejected', rejectReason: data.message || data.code })));

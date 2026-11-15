@@ -169,20 +169,24 @@
     const btn = document.getElementById('feedbackBtn'), box = document.getElementById('feedbackBox');
     if (!btn || !box) return; // 舊頁面
     const txt = $n('feedbackText'), hint = $n('feedbackHint'), send = $n('feedbackSend');
-    let sid = '';
+    let sid = '', sidText = null; // 0.5.19 B3：sidText＝這個送出代號上次送出的內容（沒送過是 null）
+    const newSid = () => 'fb_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
     const close = () => { box.hidden = true; };
-    state.resetFeedback = () => { txt.value = ''; sid = ''; hint.textContent = ''; close(); }; // 0.5.16：登出時清草稿
-    btn.addEventListener('click', () => { box.hidden = false; hint.textContent = ''; hint.className = 'sub'; if (!sid) sid = 'fb_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8); txt.focus(); });
+    state.resetFeedback = () => { txt.value = ''; sid = ''; sidText = null; hint.textContent = ''; close(); }; // 0.5.16：登出時清草稿
+    btn.addEventListener('click', () => { box.hidden = false; hint.textContent = ''; hint.className = 'sub'; if (!sid) { sid = newSid(); sidText = null; } txt.focus(); });
     $n('feedbackCancel').addEventListener('click', close);
     box.addEventListener('click', e => { if (e.target === box) close(); });
     send.addEventListener('click', async () => {
       const text = txt.value.trim();
       if (!text) { hint.textContent = '請先寫建議內容／အကြံပြုချက် ရေးပါ'; hint.className = 'sub err'; return; }
+      // 0.5.19 B3（第18任抓BUG）：上次沒確定送出（逾時等）、改了字再送 → 換新代號（後台看代號擋重複，同代號只留第一版）；沒改字照用舊代號，不會多一則
+      if (!sid || (sidText !== null && sidText !== text)) sid = newSid();
+      sidText = text;
       send.disabled = true; hint.className = 'sub'; hint.textContent = '送出中…／ပို့နေသည်';
       let r = null;
       try { r = await gasCall({ action: 'feedback', text, sid, appVersion: String((typeof FARM_CONFIG !== 'undefined' && FARM_CONFIG.appVersion) || '') }); } catch (e) { r = null; }
       send.disabled = false;
-      if (r && r.ok) { txt.value = ''; sid = ''; close(); toast('已送出，謝謝你的建議／ပို့ပြီးပါပြီ၊ ကျေးဇူးတင်ပါသည်'); return; }
+      if (r && r.ok) { txt.value = ''; sid = ''; sidText = null; close(); toast('已送出，謝謝你的建議／ပို့ပြီးပါပြီ၊ ကျေးဇူးတင်ပါသည်'); return; }
       hint.className = 'sub err';
       hint.textContent = r && r.offline ? '沒有網路，連上網路再按一次送出（字會留著）／အင်တာနက် ချိတ်ပြီး ထပ်ပို့ပါ'
         : (r && r.message) || '沒有送出去，請再按一次（字會留著）／ထပ်နှိပ်ပါ';
@@ -233,6 +237,16 @@
       const url = list[Number(b.dataset.copyurl)].url;
       try { await navigator.clipboard.writeText(url); toast('已複製網址／ကူးယူပြီး'); } catch (e) { toast(url); } // 不能複製時直接顯示網址，讓他自己抄
     }));
+    // 0.5.19 A2（第18任抓BUG）：每個網址的手機資料分開——打開這一段時，這個網址還有沒上傳的就紅字提醒先傳完再換
+    const box = $('mirrors');
+    if (box && box.addEventListener && !box._pendBound) { box._pendBound = true; box.addEventListener('toggle', () => { if (box.open) mirrorPendingNote(); }); }
+  }
+  async function mirrorPendingNote() {
+    const el = $('mirrorPending'); if (!el) return;
+    let n = 0;
+    try { n = (await Store.allVisits()).filter(v => v.status !== 'uploaded' && v.status !== 'rejected').length; } catch (e) { n = 0; }
+    el.hidden = !n;
+    el.textContent = n ? `這個網址還有 ${n} 筆沒上傳，請先在這裡傳完再換網址／ဤလိပ်စာတွင် မတင်ရသေးသော ${n} ခု ရှိသည်၊ ဤနေရာတွင် အရင်တင်ပါ` : '';
   }
 
   /* 首頁分頁（0.4.26）：記住上次看的分頁（只存在這支手機；存不了就每次從田間打卡開始） */
@@ -620,7 +634,12 @@
     try {
       const res = await fetch(FARM_CONFIG.gasUrl, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(Object.assign({ deviceKey: cfg.deviceKey }, payload)), signal: ctl ? ctl.signal : undefined });
-      return await res.json();
+      const data = await res.json();
+      // 0.5.19 B4（第18任抓BUG）：種植資料、照片錄音、Word、進度這些直接查後台的，收到登入失效原本只印一行字、不帶回登入頁 → 跟同步走同一條路
+      //   （onLoginExpired 會比對送出時的金鑰：換人登入了就不動；打卡填到一半先保留表單）
+      const sentKey = cfg.deviceKey; // 送出時的金鑰
+      if (data && data.code === 'BAD_LOGIN' && typeof onLoginExpired === 'function') await onLoginExpired(sentKey, (data.message || '登入已失效') + '。沒上傳的資料還在手機裡，重新登入後會自動補傳。／ပြန်ဝင်ပြီးလျှင် ကျန်သော မှတ်တမ်း တင်မည်။');
+      return data;
     } catch (e) {
       if (e && e.name === 'AbortError') return { ok: false, timeout: true, message: '網路太慢，可能沒讀到，請再按一次／ထပ်နှိပ်ပါ' };
       throw e;
@@ -2021,7 +2040,12 @@
     $('trialNow').textContent = waitC ? `結案待確認 ပိတ်သိမ်းရန် စစ်ဆေးဆဲ：${cropText(t.item || '（未填品項）')}（主管確認或退回後才能結束／မန်နေဂျာ စစ်ပြီးမှ ပြီးဆုံးနိုင်）` : unk ?`結案狀態未知，請洽主管 ပိတ်သိမ်းမှု အခြေအနေ မသိ၊ မန်နေဂျာကို မေးပါ：${cropText(t.item || '（未填品項）')}` : t ? `進行中 လုပ်ဆောင်ဆဲ：${cropText(t.item || '（未填品項）')}${t.start ? '，' + t.start + ' 開始 စတင်' : ''}${t.pending ? '（還沒上傳 မတင်ရသေး）' : ''}` : `這位客戶目前沒有進行中的${state.cat}。／လုပ်ဆောင်ဆဲ ${CAT_MY[state.cat]} မရှိ`;
     $('trialStartBtn').hidden = !!t; $('trialEndBtn').hidden = !t || unk;
     if (waitC) $('trialEndBtn').hidden = true; // 0.5.18 A2：結案待確認也不給按結束
-    if ((state.trialMode === 'end' && (!t || unk)) || (state.trialMode === 'start' && t) || (state.trialMode === 'end' && waitC)) setTrialMode(null);
+    // 0.5.19 B1（第18任抓BUG）：別人負責的農民（主管派任務來看的），後台不收開始／結束（handleTrial_ ownTrial）→ 手機也不給按，寫明請負責業務處理。
+    //   規則同後台：負責業務空白或是自己才可以；還不知道自己是誰（myName 空）時不擋，交給後台擋並回 trialDropped
+    const owner = sel === '__new' ? '' : String(((state.allCustomers || []).find(x => x.id === sel) || {}).staff || '');
+    const notMine = !!owner && !!state.myName && owner !== String(state.myName);
+    if (notMine) { $('trialStartBtn').hidden = true; $('trialEndBtn').hidden = true; $('trialNow').textContent += `（負責業務：${owner}，開始、結束請由負責業務處理／တာဝန်ခံ ${owner} သာ စတင်၊ ပြီးဆုံးနိုင်）`; }
+    if ((state.trialMode === 'end' && (!t || unk)) || (state.trialMode === 'start' && t) || (state.trialMode === 'end' && waitC) || (notMine && state.trialMode)) setTrialMode(null);
     else if (sel === '__new' && !state.trialMode) setTrialMode('start'); // 0.5.08 試作／推廣新增農民：直接打開「開始新的」表單（一定要開始，見 trialProblem）
   }
   function setTrialMode(m) {
@@ -3244,7 +3268,8 @@
       const what = [n ? `照片 ${n} ဓာတ်ပုံ` : '', v.audioSec && !v.audioLost ? `錄音 ${v.audioSec} 秒 အသံ` : '', v.text ? '打字 စာ' : '', v.prices && v.prices.length ? `價格 ${v.prices.length} ဈေး` : ''].filter(Boolean).join('・'); // 0.4.94 低2 加緬文
       // 0.4.91 低4：後台說客戶已經不存在（被刪）→ 這筆的結案、試作沒收，標出來
       const miss = (v.missingCustomer ? '<br><small class="err">客戶已不存在，結案／試作沒收，請洽主管／ဖောက်သည် မရှိတော့၊ မန်နေဂျာကို မေးပါ</small>' : '')
-        + (v.closingDropped && !v.missingCustomer ? `<br><small class="err">${esc(v.closingDropped)}／ပိတ်သိမ်းမှု မလက်ခံပါ၊ မန်နေဂျာကို မေးပါ</small>` : ''); // 0.5.16 第1輪：結案沒收要讓業務知道
+        + (v.closingDropped && !v.missingCustomer ? `<br><small class="err">${esc(v.closingDropped)}／ပိတ်သိမ်းမှု မလက်ခံပါ၊ မန်နေဂျာကို မေးပါ</small>` : '') // 0.5.16 第1輪：結案沒收要讓業務知道
+        + (v.trialDropped && !v.missingCustomer ? `<br><small class="err">${esc(v.trialDropped)}／စမ်းသပ်မှု မလက်ခံပါ၊ မန်နေဂျာကို မေးပါ</small>` : ''); // 0.5.19 B1：試作開始／結束沒收也要讓業務知道
       return `<li><span>${esc(v.farmerLabel)}<br><small>${d.getUTCMonth() + 1}/${d.getUTCDate()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}${what ? '・' + esc(what) : ''}</small>${miss}</span>${tag}</li>`;
     }).join('') || '<li class="empty">還沒有紀錄／မှတ်တမ်း မရှိသေး</li>';
   }
@@ -3259,7 +3284,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.18'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.19'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
