@@ -989,6 +989,8 @@
     // 0.5.26 抓BUG 中2-B：後台沒收的（closingDropped，例如不是負責業務）不算送過簽約
     const sent = f.signWait === true || (state.myVisitList || []).some(v => v && !v.closingDropped && (v.farmerId === f.id || (f.tempId && v.farmerId === f.tempId)) && v.closing && typeof v.closing === 'object' && v.closing.outcome === '簽約' && newer(v));
     // 第24任（董事長「已簽約顯示已簽約，沒簽約用紅字寫沒簽約」）：字改「已簽約（待主管確認）」；主管確認後客戶結束、不在清單
+    // 第24任：主管退回的簽約（後台 signRejected）寫出來，業務才知道要重談；手機有更新的簽約還沒被後台看到時照樣算待確認
+    if (!sent && f.signRejected === true) return ' <span class="signtag no">沒簽約（主管退回簽約）／မချုပ်ရသေး (မန်နေဂျာ ပြန်ပို့)</span>';
     return sent ? ' <span class="signtag wait">已簽約（待主管確認）／စာချုပ်ပြီး (စောင့်ဆဲ)</span>' : ' <span class="signtag no">沒簽約／မချုပ်ရသေး</span>';
   }
   function renderTodoCust() {
@@ -3114,6 +3116,20 @@
     }
     // 2號 0.4.69 低7（第8任）：存檔中按鈕停用時，提示原本落到「至少做一樣」→ 先說存檔中
     $('saveHint').textContent = !sel ? '' : state.saving ? '存檔中，請稍等…／သိမ်းနေသည်' : state.recStarting ? '等待麥克風權限，請稍候…／မိုက်ခရိုဖုန်း ခွင့်ပြုချက် စောင့်နေသည်' : !nameOk ? '請先填名字／အမည် အရင်ဖြည့်ပါ' : state.recBusy ? '錄音處理中，請稍等…／အသံ ပြင်ဆင်နေ' : state.rec ? '錄音中，先按一下結束錄音／အသံသွင်းနေသည်၊ အရင် ရပ်ပါ' : state.busyPhotos ? `照片處理中（還有 ${state.busyPhotos} 張）… ဓာတ်ပုံ ပြင်ဆင်နေ` : tp ? tp : signNeed ? '盤商、種子商結案：先按「有見到」，再寫簽約內容／ တွေ့ပြီး ကိုနှိပ်ပြီး စာချုပ် အကြောင်းအရာ ရေးပါ' : !ok ? `拍照、上傳照片、錄音、打字${state.cat === '盤商' ? '、記價格' : ''}${$('farmer').value === '__new' || SHOW_PROFILE_ON_VISIT ? '（或改客戶資料）' : ''}至少做一樣／ဓာတ်ပုံ၊ အသံ၊ စာ တစ်ခုခု လုပ်ပါ` : '';
+    // 第24任（原本一次只顯示一件：上面那串檢查碰到第一個問題就停，業務改好一件才看到下一件，例如種植日期 2 年下限要先選好作物才出現）
+    //   → 不是「等一下就好」的狀態時，把所有問題一次列出來（編號、一行一件）；只有一件照舊一行。這些檢查函式都只讀不改畫面
+    const allP = typeof saveProblems === 'function' && sel && !ok && !(state.saving || state.rec || state.recBusy || state.recStarting || state.busyPhotos) ? saveProblems(nameOk) : []; // 抽函式跑的舊測試沒有 saveProblems
+    const sh2 = $('saveHint');
+    if (sh2 && sh2.style) sh2.style.whiteSpace = allP.length > 1 ? 'pre-line' : '';
+    if (allP.length > 1 && sh2) sh2.textContent = allP.map((p, i) => `${i + 1}. ${p}`).join('\n');
+  }
+  /** 第24任：存檔前所有沒過的檢查（順序同 refreshSave 那一串），重複的只留一次 */
+  function saveProblems(nameOk) {
+    const out = [];
+    const add = p => { if (p && out.indexOf(p) < 0) out.push(p); };
+    if (!nameOk) add('請先填名字／အမည် အရင်ဖြည့်ပါ');
+    [noMeetProblem, trialProblem, closeProblem, priceProblem, typeof stageProblem === 'function' ? stageProblem : null, profileProblem].forEach(fn => { if (typeof fn === 'function') add(fn()); });
+    return out;
   }
 
   /**
