@@ -534,6 +534,12 @@
   const SYNC_WARN = '同步資料寫回手機失敗（可能空間不足），稍後再同步／ဒေတာ မသိမ်းနိုင်၊ နောက်မှ ထပ်လုပ်မည်'; // R12-01／R13-01
   const READ_FAIL_MSG = '有拜訪的照片或錄音暫時讀不到（是手機裡的檔案，不是網路問題），稍後自動再試；連續 3 次讀不到會先送文字和其他資料／ဓာတ်ပုံ/အသံ ဖတ်မရသေးပါ၊ အင်တာနက် ပြဿနာ မဟုတ်ပါ';
   let running = false;
+  // 0.5.33（第23任抓BUG P1，小助手2）：上傳迴圈裡寫手機失敗（多半是空間不足）不能讓整輪中斷
+  const STORE_FULL_MSG = '手機空間不足，上傳狀態存不進手機（已送到的後台都有收到），請清出空間／ဖုန်းထဲ နေရာ မလောက်ပါ၊ နေရာလွတ် လုပ်ပေးပါ';
+  // 後台已收、「標已上傳」寫不進手機的：記在記憶體（id → 標記要用的欄位），之後每輪先補標、補標前不再重送（這個網頁或背景程式還開著就有效；關掉後重開會再送一次，後台用拜訪編號擋重複）
+  const unmarked = new Map();
+  // 「排晚點再試」寫不進手機的：記在記憶體的下次再試時間（id → nextTry），照樣不每分鐘整包重送
+  const memNextTry = new Map();
   /**
    * 把暫存區裡還沒上傳的拜訪，一筆一筆送出去。回傳 { sent, left, error }。
    * 網頁和背景程式（sw.js）各有自己的 running 變數，所以再用瀏覽器的 Web Locks 讓兩邊不會同時上傳同一批
@@ -684,6 +690,24 @@
     });
     return already;
   }
+  /** 0.5.33 P1：寫手機失敗時記下來（不覆蓋已有的提示；有提示就不清暫存） */
+  function noteStoreFull(report) {
+    report.storeFull = true;
+    if (!report.syncWarn) report.syncWarn = STORE_FULL_MSG;
+  }
+  /**
+   * 0.5.33 P1：scheduleRetry 寫不進手機（空間不足）→ 不中斷整輪：下次再試時間改記在記憶體、跳過這筆。回 true＝已經不用送了
+   */
+  async function retryLater(v, patchOf, report) {
+    try { const already = await scheduleRetry(v.id, patchOf); memNextTry.delete(v.id); return already; } catch (e) {
+      noteStoreFull(report);
+      const p = patchOf(v);
+      if (p && p.nextTry) memNextTry.set(v.id, p.nextTry);
+      return false;
+    }
+  }
+  /** 0.5.33 P1：標已上傳要用的欄位（不留照片錄音內容，只留張數） */
+  const markKeep = (data, media) => ({ data: { missingCustomer: data.missingCustomer, closingDropped: data.closingDropped, trialDropped: data.trialDropped }, media: { lost: media.lost || 0, audioLost: !!media.audioLost } });
   /**
    * 0.4.87 中1（第11任驗收改）：照片、錄音逐張讀；讀不到跟網路錯誤分開（原本當成沒網路整輪停住，後面全部卡住、也不能登出）：
    * ① 讀不到 → 這筆記讀檔失敗次數、照一般失敗排 nextTry，回 null（先送後面的筆；IndexedDB 讀 Blob 有時只是一時失敗）
@@ -699,13 +723,13 @@
       report.readFail = (report.readFail || 0) + 1;
       if (!report.error) report.error = READ_FAIL_MSG;
       if (readFails < READ_FAIL_MAX) {
-        if (await scheduleRetry(v.id, () => ({ readFails, readError: READ_FAIL_MSG, nextTry: retryAt(readFails) }))) report.left--;
+        if (await retryLater(v, () => ({ readFails, readError: READ_FAIL_MSG, nextTry: retryAt(readFails) }), report)) report.left--;
         return null;
       }
       mediaLost = { photos: media.lost, audio: media.audioLost };
       text += (text ? '\n' : '') + '（' + [media.lost ? '手機照片 ' + media.lost + ' 張讀不到，沒傳' : '', media.audioLost ? '錄音讀不到，沒傳' : ''].filter(Boolean).join('；') + '）';
     } else if (v.readFails) {
-      await Store.updateVisit(v.id, cur => (cur && cur.status !== 'uploaded' ? Object.assign({}, cur, { readFails: 0, readError: '' }) : null)); // 這次讀到了：連續失敗歸零
+      try { await Store.updateVisit(v.id, cur => (cur && cur.status !== 'uploaded' ? Object.assign({}, cur, { readFails: 0, readError: '' }) : null)); } catch (e) { noteStoreFull(report); } // 這次讀到了：連續失敗歸零（0.5.33 P1：寫不進去照送）
     }
     return { media, text, mediaLost };
   }
@@ -752,6 +776,29 @@
     });
   }
 
+  /** 0.5.33 P1：後台已收的標「已上傳」；寫不進手機（空間不足）不中斷：記在記憶體、之後每輪補標，這輪接著送下一筆 */
+  async function markSent(v, data, media, report) {
+    try { await markUploaded(v, data, media); unmarked.delete(v.id); } catch (e) { unmarked.set(v.id, markKeep(data, media)); noteStoreFull(report); }
+    memNextTry.delete(v.id);
+  }
+  /** 0.5.33 P1：上次標不上「已上傳」的先補標（不用網路）。回這輪不要再送的編號（補標成功的也算：all 是補標前讀的） */
+  async function remarkUploaded(all, report) {
+    const skip = new Set(unmarked.keys());
+    for (const [id, m] of Array.from(unmarked)) {
+      const v = all.find(x => x.id === id);
+      if (!v) { unmarked.delete(id); continue; } // 拜訪已不在手機（例如登出清掉）：不補
+      try { await markUploaded(v, m.data, m.media); unmarked.delete(id); } catch (e) { noteStoreFull(report); }
+    }
+    return skip;
+  }
+  /** 0.5.33 P1：排重試寫不進手機時，記在記憶體的下次再試時間還沒到（規則同 syncTodo） */
+  const memWait = (v, now) => { const t = memNextTry.get(v.id); return !!(t && t > now && t - now <= NEXT_TRY_MAX_MS); };
+  /** 這輪要送的：syncTodo，再扣掉 0.5.33 P1 上次標不上「已上傳」的（先補標，這輪不重送）、記憶體裡還在等重試的 */
+  async function pickTodo(all, cfg, now, report) {
+    const skip = await remarkUploaded(all, report);
+    return syncTodo(all, cfg, now).filter(v => !skip.has(v.id) && !memWait(v, now));
+  }
+
   async function runSyncInner(onProgress) {
     if (running) return { busy: true };
     running = true;
@@ -767,7 +814,8 @@
       const all = (await Store.allVisits()).sort((a, b) => a.deviceTime - b.deviceTime);
       const now = Date.now();
       await dropOldUploaded(all, now);
-      const todo = syncTodo(all, cfg, now); // 規則見 syncTodo（別的帳號不送、等重試的不送、時間被調過的照送）
+      // 0.5.33 P1：後台已收、上次標不上「已上傳」的，先補標（不用網路）；補標前這一輪不再重送它
+      const todo = await pickTodo(all, cfg, now, report); // 規則見 syncTodo（別的帳號不送、等重試的不送、時間被調過的照送）
       report.left = todo.length;
       let serverFails = 0;
       let timeouts = 0; // 0.4.94 中3：連續逾時幾筆（2 筆就先停）
@@ -778,22 +826,21 @@
         const rd = await readVisitMedia(v, report);
         if (!rd) continue; // 讀不到、還沒到第 READ_FAIL_MAX 次：這筆晚點再試，先送下一筆
         const { media, text, mediaLost } = rd;
-        const sentAt = Date.now();
-        let data;
+        const sentAt = Date.now(); let data;
         try {
           const ask = await buildAsk(all); // R19：問後台「我手機上這幾個暫存收到了沒」（後台只回答這些）
           data = await post(cfg.gasUrl, visitPayload(cfg, v, text, mediaLost, media, ask));
         } catch (e) {
           report.error = postError(e);
+          // 0.4.94 中3（第11任第五輪）：一筆大檔（長錄音＋多張照片）在慢網路逾時，原本 break → 後面的小筆全被它卡住，每次都從它重來。
+          // 改成：這筆照一般失敗排 nextTry（退避 1、2、4…最多 30 分鐘），先送後面的；連續 2 筆都逾時多半是網路整個太慢，這輪先停（省流量）。後台用拜訪編號防重複：逾時那筆其實已收到的話，重送回成功，不會多一筆
           if (e.timeout) {
-            // 0.4.94 中3（第11任第五輪）：一筆大檔（長錄音＋多張照片）在慢網路逾時，原本 break → 後面的小筆全被它卡住，每次都從它重來。
-            // 改成：這筆照一般失敗排 nextTry（退避 1、2、4…最多 30 分鐘），先送後面的；連續 2 筆都逾時多半是網路整個太慢，這輪先停（省流量）。
-            // 後台用拜訪編號防重複：逾時那筆其實已收到的話，重送回成功，不會多一筆
-            if (await scheduleRetry(v.id, nextFail)) { report.left--; continue; }
+            if (await retryLater(v, nextFail, report)) { report.left--; continue; }
             if (++timeouts >= 2) break;
             continue;
           }
-          break; // 沒網路、伺服器回應異常：這一輪先停，下次再從這筆開始
+          if (e.badResponse) { if (await retryLater(v, nextFail, report)) report.left--; else if (++serverFails >= 2) break; continue; } // 0.5.33 P2：錯誤頁（非 JSON／HTTP 錯誤）原本跟沒網路一樣 break，同一筆每次錯誤頁就整個佇列卡住 → 比照伺服器處理失敗：排晚點再試、先送下一筆（連續 2 筆才停）
+          break; // 沒網路：這一輪先停，下次再從這筆開始
         }
         timeouts = 0; // 0.4.94 中3：有回應就重算連續逾時
         // 0.4.87 高1：送出後換了帳號就整份丟掉（拜訪本身的上傳狀態照記）
@@ -803,14 +850,14 @@
         if (!report.syncWarn && oldServer(data)) report.syncWarn = OLD_SRV_WARN; // R20（GPT 04）
         // 寫回拜訪狀態一律在同一個交易裡讀最新的再改（R7-03）：已上傳的不會被降回待上傳或被拒
         if (data && data.ok) {
-          await markUploaded(v, data, media);
+          await markSent(v, data, media, report); // 0.5.33 P1：寫不進手機不中斷，見 markSent
           report.sent++; report.left--;
         } else if (data && data.code === 'BAD_LOGIN') {
           // 0.4.87 高1：上一位的金鑰被登出停用、回「登入失效」時，現在已經換人登入 → 不回 BAD_LOGIN（不然新帳號會被踢回登入頁）
           report.error = data.message; if (await sameLogin(cfg.deviceKey)) { report.code = 'BAD_LOGIN'; await noteLoginLost(cfg, data.message); } break; // 資料留在手機，重新登入後會接著傳；0.5.19 A1 記下失效
         } else if (data && (data.code === 'BAD_ID' || data.code === 'BAD_REQUEST')) {
           // 伺服器確定收不了的（格式錯）：標成被拒、留在手機，不再重送，也不擋後面的
-          await Store.updateVisit(v.id, cur => (cur && cur.status === 'uploaded' ? null : Object.assign({}, cur || v, { status: 'rejected', rejectReason: data.message || data.code })));
+          try { await Store.updateVisit(v.id, cur => (cur && cur.status === 'uploaded' ? null : Object.assign({}, cur || v, { status: 'rejected', rejectReason: data.message || data.code }))); } catch (e) { noteStoreFull(report); } // 0.5.33 P1：寫不進去不中斷
           report.left--;
         } else if (data && data.code === 'BUSY') {
           report.error = data.message; break; // 伺服器忙，整批晚點再來
@@ -818,7 +865,7 @@
           // 其他錯誤（伺服器處理失敗）：這筆留著下次重送，先換下一筆，免得一筆壞資料卡住全部（2026-11-11 審查發現）。
           // 連續 2 筆都失敗，多半是伺服器整個出問題，就先停，省流量。
           // 別的同步（網頁或背景程式）已經傳好的，不要用舊的狀態蓋掉「已上傳」（G08）；讀和寫在同一個交易（R7-03，見 scheduleRetry）
-          if (await scheduleRetry(v.id, nextFail)) { report.left--; continue; }
+          if (await retryLater(v, nextFail, report)) { report.left--; continue; }
           report.error = (data && data.message) || '伺服器沒有回應成功，稍後自動重送／ဆာဗာ မအောင်မြင်၊ နောက်မှ အလိုအလျောက် ထပ်တင်မည်'; // 0.4.94 中2 加緬文
           if (++serverFails >= 2) break;
           continue;
