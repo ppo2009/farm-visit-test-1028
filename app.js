@@ -2126,6 +2126,7 @@
       : unk ? `結案狀態未知，請洽主管 ပိတ်သိမ်းမှု အခြေအနေ မသိ၊ မန်နေဂျာကို မေးပါ：${cropText(at.item || '（未填品項）')}` // 0518R3-2：同步後變成未知也要擋
       : `進行中 လုပ်ဆောင်ဆဲ：${cropText(at.item || '（未填品項）')}${at.start ? '，' + at.start + ' 開始 စတင်' : ''}${at.pending ? '（還沒上傳 မတင်ရသေး）' : ''}`;
     $('trialEndBtn').hidden = wait || unk;
+    $('trialStartBtn').hidden = true; // 5輪抓BUG第1輪（第24任）：有進行中的就不能再開始新的（同 refreshTrialBox 的規則）；寫「進行中」時一起收起開始鈕，不留前一步畫出來的
     if ((wait || unk) && state.trialMode === 'end' && typeof setTrialMode === 'function') setTrialMode(null);
   }
   /**
@@ -2707,6 +2708,10 @@
     state.closeTrial = null; state.closeTrialFor = null; $n('cTrialOutcome').value = ''; $n('closeTrialBox').hidden = true; // 0.4.74 換客戶：結案的試作結果也清掉、重查
     state.closeTrialSel = null; state.closeTrialUnknown = false; state.closeSeq = (Number(state.closeSeq) || 0) + 1; // R28-2（GPT）：清表單後再選同一位要重查（不能當成「正在查」卡住），還在跑的舊查詢作廢
     state.trialStartAuto = ''; // 0.5.26 換客戶：推廣／試作農民可以再自動打開一次開始表單
+    // 5輪抓BUG第1輪（第24任本機實走：離線替舊推廣農民存檔開始推廣後再打開他，說明寫「進行中」卻露出「＋ 開始新的推廣」）：
+    //   原因：這裡清 activeTrial 後 setTrialMode(null) → paintOldKindBtn 拿上一輪留下的 oldKindFor（同一位）當「沒有進行中」，先把按鈕打開、說明改掉；
+    //   之後的重查只靠 paintTrialWait 改說明，沒收回按鈕。→ 清表單時一起清 oldKindFor，交給這次 refreshTrialBox 重新判斷
+    state.oldKindFor = null;
     state.stageManual = false; $n('vStage').value = ''; $n('vStageWhy').value = ''; // 0.4.78 換客戶：生長階段重新建議
     { const cb = $n('cPlantFail'); cb.checked = false; cb.disabled = false; state.plantFailAuto = false; } // 0.4.75 結案的種植失敗勾選也清掉
     setTrialMode(null);
