@@ -67,6 +67,7 @@
   function showLogin(msg) {
     // 2號 0.4.69 清單低3（第8任）：換帳號後「我的報告」還用上一位的名字篩 → 回到登入畫面就清掉報告清單、範圍、我是誰
     state.me = ''; state.reportScope = 'all'; state.reports = null;
+    if (typeof document !== 'undefined' && document.getElementById('bossTip')) document.getElementById('bossTip').hidden = true; // 0.5.26 抓BUG 低3：登出、登入失效回登入頁，主管提示要收起來
     state.homeMonth = ''; state.homeTop = null; // 0520R4 I3（第19任）：換人登入不要停在上一位點的月份（下一位的首頁照第一次畫的規則）
     // 0.5.23 J4（第21任）：上一位沒送出的建議不留給下一位。原本只在按登出時清，登入失效等其他 4 條回登入頁的路沒清 → 換人登入後用下一位的帳號送出
     if (typeof state.resetFeedback === 'function') state.resetFeedback();
@@ -981,7 +982,8 @@
    *  → 這支手機送過「已簽約」的標「簽約待主管確認」（橘字），其他標「沒簽約」（紅字）。主管退回的，手機看不到退回，照樣標待確認（之後回訪會照常列出） */
   function dealerSignTag(f) {
     if (!f || (f.type !== '盤商' && f.type !== '種子商')) return '';
-    const sent = (state.myVisitList || []).some(v => v && (v.farmerId === f.id || (f.tempId && v.farmerId === f.tempId)) && v.closing && typeof v.closing === 'object' && v.closing.outcome === '簽約');
+    // 0.5.26 抓BUG 中2-B：後台沒收的（closingDropped，例如不是負責業務）不算送過簽約
+    const sent = (state.myVisitList || []).some(v => v && !v.closingDropped && (v.farmerId === f.id || (f.tempId && v.farmerId === f.tempId)) && v.closing && typeof v.closing === 'object' && v.closing.outcome === '簽約');
     return sent ? ' <span class="signtag wait">簽約待主管確認／စောင့်ဆဲ</span>' : ' <span class="signtag no">沒簽約／မချုပ်ရသေး</span>';
   }
   function renderTodoCust() {
@@ -2175,6 +2177,18 @@
     if (notMine) { $('trialStartBtn').hidden = true; $('trialEndBtn').hidden = true; $('trialNow').textContent += `（負責業務：${owner}，開始、結束請由負責業務處理／တာဝန်ခံ ${owner} သာ စတင်၊ ပြီးဆုံးနိုင်）`; }
     if ((state.trialMode === 'end' && (!t || unk)) || (state.trialMode === 'start' && t) || (state.trialMode === 'end' && waitC) || (notMine && state.trialMode)) setTrialMode(null);
     else if (sel === '__new' && !state.trialMode) setTrialMode('start'); // 0.5.08 試作／推廣新增農民：直接打開「開始新的」表單（一定要開始，見 trialProblem）
+    else if (sel && sel !== '__new' && !t && !notMine && !state.trialMode && state.trialStartAuto !== sel) {
+      // 0.5.26（客戶截圖 U Nga Shint：已經是推廣農民、有作物，還要先按「開始新的推廣」再選一次品項）：
+      //   這位的分類就是這一類（推廣農民在推廣、試作農民在試作）而且目前沒有進行中的 → 直接打開開始表單，品項先帶入他的作物（可以改；不想開始就再按一次收起）
+      const cust = (state.allCustomers || []).find(x => x.id === sel) || {};
+      if (cust.kind === cat + '農民') {
+        state.trialStartAuto = sel; // 同一位只自動打開一次（業務收起後不再一直打開）
+        setTrialMode('start');
+        const crop = String(cust.crop || '').trim(), it = $n('tItem');
+        if (crop && !it.value && [...(it.options || [])].some(o => o.value === crop)) { it.value = crop; if (typeof refreshTrialOther === 'function') refreshTrialOther(); }
+        refreshSave(); // 帶入品項後重新檢查存檔（不然還停在「請填推廣品項」）
+      }
+    }
     if (typeof paintNewTrial === 'function') paintNewTrial(); // 0534：新農民改寫框上方說明（不寫「目前沒有進行中」）、品項＝作物、品種那一行
   }
   function setTrialMode(m) {
@@ -2502,6 +2516,14 @@
       length: num('mLength'), lengthUnit: $n('mLenUnit').value, rows: $n('mRowsBox').hidden ? '' : num('mRows'), sowDate: $n('mSow').value, harvestDate: $n('mHarvest').value, days: isFinite(days) ? days : '' };
   }
   /** 結案（2026-11-12 手稿）：價格、產量、收購客戶必填；地區、電話可空 */
+  /** 0.5.26：這次農民結案是不是「作物死掉、沒收成」——勾了種植失敗（但進行中那件結果不是「成功」），或進行中試作／推廣結果選「失敗」
+   *  抓BUG 中2（小助手1 實走）：勾種植失敗又選結果「成功」互相矛盾 → 不算失敗，價格照樣要填 */
+  function closeFailNow() {
+    const box = typeof document !== 'undefined' && document.getElementById('closeTrialBox') && !$n('closeTrialBox').hidden;
+    const out = box ? $n('cTrialOutcome').value : '';
+    if (out === '失敗') return true;
+    return !!(typeof closePlantFailOn === 'function' && closePlantFailOn()) && out !== '成功';
+  }
   function closeProblem() {
     // 0.4.92 低5（第11任第四輪）：結案（含盤商、種子商結案／簽約）送出後在等主管確認時，同一位還能再送一次 → 後台出兩筆待確認。
     // state.closeWait 由打卡畫面的進度卡寫（renderProgress：後台最近一筆結案還「待主管確認」，或這支手機還有沒上傳的結案）
@@ -2527,8 +2549,7 @@
     if (badC.length) return `${badC.join('、')}請只填數字（用 0～9 和小數點，不要用逗號）／ဂဏန်းသာ ဖြည့်ပါ (ကော်မာ မထည့်ပါနှင့်)`;
     // 0.5.26（第23任，董事長「結案允許不填價格」）：作物死掉、沒收成——勾了種植失敗，或進行中試作／推廣的結果選「失敗」→ 價格、產量、收購客戶可以不填
     //   （打卡頁的「填結果／結束」拿掉後，失敗的只能在這裡結；後台 saveFarmerClosing_ 同樣放行）；有填的照樣要大於 0
-    const failClose = (typeof closePlantFailOn === 'function' && closePlantFailOn())
-      || (typeof document !== 'undefined' && !!document.getElementById('closeTrialBox') && !$n('closeTrialBox').hidden && $n('cTrialOutcome').value === '失敗');
+    const failClose = typeof closeFailNow === 'function' && closeFailNow();
     const miss = failClose ? [] : [['cPrice', '價格'], ['cYield', '產量'], ['cBuyer', '收購客戶']].filter(([id]) => !String($(id).value).trim()).map(([, n]) => n);
     if (miss.length) return `結案要填：${miss.join('、')}／ပိတ်သိမ်းရန် ဖြည့်ပါ`;
     // 2號 0.4.63 低#6：輸入框的 min=0 只有表單送出才擋，這裡自己檢查：價格、產量要大於 0（不能負數或 0）
@@ -2627,6 +2648,7 @@
     state.activeTrial = null;
     state.closeTrial = null; state.closeTrialFor = null; $n('cTrialOutcome').value = ''; $n('closeTrialBox').hidden = true; // 0.4.74 換客戶：結案的試作結果也清掉、重查
     state.closeTrialSel = null; state.closeTrialUnknown = false; state.closeSeq = (Number(state.closeSeq) || 0) + 1; // R28-2（GPT）：清表單後再選同一位要重查（不能當成「正在查」卡住），還在跑的舊查詢作廢
+    state.trialStartAuto = ''; // 0.5.26 換客戶：推廣／試作農民可以再自動打開一次開始表單
     state.stageManual = false; $n('vStage').value = ''; $n('vStageWhy').value = ''; // 0.4.78 換客戶：生長階段重新建議
     { const cb = $n('cPlantFail'); cb.checked = false; cb.disabled = false; state.plantFailAuto = false; } // 0.4.75 結案的種植失敗勾選也清掉
     setTrialMode(null);
@@ -2883,7 +2905,8 @@
   }
   /** 送出的生長階段：結案一律「採收」；農民拜訪看下拉（只收 7 個值）；其他空白 */
   function visitStage() {
-    if (state.cat === '結案') return '採收';
+    // 0.5.26 抓BUG 中1（小助手1 實走）：作物死掉的結案（種植失敗，或試作／推廣結果失敗）不算採收 → 送空白
+    if (state.cat === '結案') return (typeof closeFailNow === 'function' && closeFailNow()) ? '' : '採收';
     const v = $n('vStage').value;
     return !$n('stageBox').hidden && STAGES.indexOf(v) >= 0 ? v : '';
   }
@@ -3071,7 +3094,9 @@
     // 0.5.26（董事長：不能按的時候要紅字提示）：已簽約、簽約內容空白 → 簽約內容框下面紅字；存檔鈕下面的原因不能按時改紅字
     if (typeof document !== 'undefined' && document.getElementById('dcNoteWarn')) {
       $n('dcNoteWarn').hidden = !((typeof dealerSignOn === 'function' && dealerSignOn()) && !String($n('dcNote').value || '').trim());
-      const sh = $('saveHint'); if (sh && sh.style) { sh.style.color = !ok && !state.saving ? 'var(--chili)' : ''; sh.style.fontWeight = !ok && !state.saving ? '700' : ''; }
+      // 抓BUG 建議：存檔中、錄音中、照片處理中、等麥克風這種「等一下就好」的不用紅字（業務會以為出錯）
+      const waitOnly = state.saving || state.rec || state.recBusy || state.recStarting || state.busyPhotos;
+      const sh = $('saveHint'); if (sh && sh.style) { sh.style.color = !ok && !waitOnly ? 'var(--chili)' : ''; sh.style.fontWeight = !ok && !waitOnly ? '700' : ''; }
     }
     // 2號 0.4.69 低7（第8任）：存檔中按鈕停用時，提示原本落到「至少做一樣」→ 先說存檔中
     $('saveHint').textContent = !sel ? '' : state.saving ? '存檔中，請稍等…／သိမ်းနေသည်' : state.recStarting ? '等待麥克風權限，請稍候…／မိုက်ခရိုဖုန်း ခွင့်ပြုချက် စောင့်နေသည်' : !nameOk ? '請先填名字／အမည် အရင်ဖြည့်ပါ' : state.recBusy ? '錄音處理中，請稍等…／အသံ ပြင်ဆင်နေ' : state.rec ? '錄音中，先按一下結束錄音／အသံသွင်းနေသည်၊ အရင် ရပ်ပါ' : state.busyPhotos ? `照片處理中（還有 ${state.busyPhotos} 張）… ဓာတ်ပုံ ပြင်ဆင်နေ` : tp ? tp : signNeed ? '盤商、種子商結案：先按「有見到」，再寫簽約內容／ တွေ့ပြီး ကိုနှိပ်ပြီး စာချုပ် အကြောင်းအရာ ရေးပါ' : !ok ? `拍照、上傳照片、錄音、打字${state.cat === '盤商' ? '、記價格' : ''}${$('farmer').value === '__new' || SHOW_PROFILE_ON_VISIT ? '（或改客戶資料）' : ''}至少做一樣／ဓာတ်ပုံ၊ အသံ၊ စာ တစ်ခုခု လုပ်ပါ` : '';
