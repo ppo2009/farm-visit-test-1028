@@ -73,6 +73,8 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
    打卡頁試作／推廣的「填結果／結束」不再顯示，一律到「結案」分頁結束（結案會要求先填進行中那件的結果）。
    按鈕和判斷程式照舊（何時可以結束的規則沒變），只是看不到；原本「可以按結束」的時候，改顯示旁邊的提示 */
 #trialEndBtn{display:none!important}
+/* 0.5.26 快速打卡清單：盤商、種子商的簽約標示 */
+.signtag{font-weight:700;white-space:nowrap}.signtag.no{color:var(--chili)}.signtag.wait{color:#b26b00}
 #trialEndHint{display:none;margin:0}
 #trialEndBtn:not([hidden])+#trialEndHint{display:block}
 /* 0.5.07 首頁兩張卡的下拉選單：從卡片正下方展開、一項一行、蓋在下面內容上（結案分頁的 farmermenu 不受影響） */

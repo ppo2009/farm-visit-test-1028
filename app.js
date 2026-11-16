@@ -977,12 +977,19 @@
   }
   /** 0.4.82 左欄「我負責的客戶」：五類（分類同月分工作進度 mineGroupOf），列「名字｜客戶編號｜鎮・村」，點一位開那位的田間打卡（openFromList 鎖類別） */
   const TODO_GROUPS = [['一般農民', 'ပုံမှန် လယ်သမား'], ['試作農民', 'စမ်းသပ် လယ်သမား'], ['推廣農民', 'မြှင့်တင် လယ်သမား'], ['盤商', 'ကုန်သည်'], ['種子商', 'မျိုးစေ့ဆိုင်']];
+  /** 0.5.26（客戶：盤商、種子商「已簽約顯示已簽約，沒簽約用紅字寫沒簽約」）：清單裡的盤商、種子商都還在往來（主管確認簽約後客戶就結束、不在清單）
+   *  → 這支手機送過「已簽約」的標「簽約待主管確認」（橘字），其他標「沒簽約」（紅字）。主管退回的，手機看不到退回，照樣標待確認（之後回訪會照常列出） */
+  function dealerSignTag(f) {
+    if (!f || (f.type !== '盤商' && f.type !== '種子商')) return '';
+    const sent = (state.myVisitList || []).some(v => v && (v.farmerId === f.id || (f.tempId && v.farmerId === f.tempId)) && v.closing && typeof v.closing === 'object' && v.closing.outcome === '簽約');
+    return sent ? ' <span class="signtag wait">簽約待主管確認／စောင့်ဆဲ</span>' : ' <span class="signtag no">沒簽約／မချုပ်ရသေး</span>';
+  }
   function renderTodoCust() {
     const box = document.getElementById('todoCust');
     if (!box) return; // 舊頁面沒有這一塊
     const all = state.mineAll || [], gOf = state.mineGroupOf || {};
     box.innerHTML = tcGroupsHtml(TODO_GROUPS, g => all.filter(f => gOf[f.id] === g).map(f => { const tv = [f.town, f.village].filter(Boolean).join('・'); // 0.4.87：0 筆的分類合成一行
-      return `<li class="go" data-id="${esc(f.id)}" data-type="${esc(f.type || '農民')}" role="button" tabindex="0"><span><b>${esc(f.name || '（未命名）')}</b>｜${f.pending ? '（新，未上傳 မတင်ရသေး）' : esc(f.id)}${tv ? '｜' + esc(tv) : ''}</span></li>`; }));
+      return `<li class="go" data-id="${esc(f.id)}" data-type="${esc(f.type || '農民')}" role="button" tabindex="0"><span><b>${esc(f.name || '（未命名）')}</b>｜${f.pending ? '（新，未上傳 မတင်ရသေး）' : esc(f.id)}${tv ? '｜' + esc(tv) : ''}${typeof dealerSignTag === 'function' ? dealerSignTag(f) : ''}</span></li>`; }));
     box.querySelectorAll('li.go').forEach(li => {
       li.onclick = () => openFromList(li.dataset.id, li.dataset.type);
       li.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFromList(li.dataset.id, li.dataset.type); } };
