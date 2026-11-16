@@ -3076,8 +3076,9 @@
    * ② 寫入手機：拜訪、試作暫存、新客戶暫存在同一個交易（R6-02）；expectVer＝結案檢查時的資料版本，交易裡再比一次（R37-1）。
    *   回 'ok'；'stale'＝檢查之後資料剛更新、沒存；'fail'＝存不進去（例如空間不足）
    */
+  // 0523R2-2（GPT）：擋下時把「交易當下登入的是誰」留下來給提示用（不再事後重讀：換回原主人時提示會變空白）
   async function writeVisit(visit, metaFns, expectVer, expectOwner) {
-    try { await Store.saveVisit(visit, metaFns, expectVer, expectOwner); return 'ok'; } catch (e) { return e && e.code === 'STALE' ? 'stale' : e && e.code === 'OWNER' ? 'owner' : 'fail'; }
+    try { await Store.saveVisit(visit, metaFns, expectVer, expectOwner); return 'ok'; } catch (e) { if (e && e.code === 'OWNER') state.ownerClashAcct = String(e.account || ''); return e && e.code === 'STALE' ? 'stale' : e && e.code === 'OWNER' ? 'owner' : 'fail'; }
   }
 
   /** ③ 讀表單：把畫面上要存的內容讀成一般資料（之後組拜訪只用這份，不再碰畫面）；trialTempId＝開始試作要用的臨時編號 */
@@ -3194,8 +3195,8 @@
     const { visit, metaFns } = buildVisitRecord(readSaveForm(ids.trialTempId), ids, { account, clockOffset: pre.clockPre, localPre: pre.localPre });
     const res = await writeVisit(visit, metaFns, closeExpectVer, account); // 0523R1-1：寫入的同一個交易裡再比一次登入的人
     if (res === 'owner') { // 0523R1-1（GPT）：最後一次比對之後（例如確認視窗開著時）別的分頁換人登入 → 不存、表單留著
-      const nowCfg = (await getConfig()) || {};
-      saveStop(ownerClash({ account }, { account: nowCfg.account || '別人' }));
+      // 0523R2-2：用交易當下擋下的帳號組提示（一定跟主人不同）；萬一沒有，也照樣說「這次沒有存」
+      saveStop(ownerClash({ account }, { account: state.ownerClashAcct || '別人' }) || ('這次沒有存（表單留著）；請用 ' + account + ' 登入再按儲存／' + account + ' ဖြင့် ဝင်ပြီး သိမ်းပါ'));
       return;
     }
     if (res === 'stale') { // 檢查之後資料剛更新 → 不存，重新判斷結案欄，請業務確認後再按（表單留著）
@@ -3207,8 +3208,10 @@
     if (res !== 'ok') { saveStop('手機存檔失敗（可能空間不足），資料還在畫面上，請再按一次／သိမ်း၍ မရ၊ ထပ်နှိပ်ပါ'); return; }
     // 0.5.23 J5：已經存進手機（記在表單主人名下），這時沒有人登入 → 清表單、回登入頁，登入後自動上傳
     // 0523R1-1：存完再讀一次（確認視窗期間可能有人登入或登出），照存完當下決定回登入頁還是回首頁
-    const cfgAfter = await getConfig();
-    if (!cfgAfter || !cfgAfter.deviceKey) {
+    // 0523R2-1（GPT）：這時已經存好了，讀設定出錯也不能讓錯誤丟出去（表單留著，再按會多存一筆）→ 讀不到就照一般存完的路（先清表單）
+    let cfgAfter;
+    try { cfgAfter = await getConfig(); } catch (e) { cfgAfter = undefined; }
+    if (cfgAfter !== undefined && (!cfgAfter || !cfgAfter.deviceKey)) {
       resetForm();
       showLogin('登入已失效：剛剛那筆已經存在手機裡，請用 ' + account + ' 重新登入，登入後會自動上傳／မှတ်တမ်း ဖုန်းထဲ သိမ်းပြီး၊ ' + account + ' ဖြင့် ပြန်ဝင်ပါ');
       return;
