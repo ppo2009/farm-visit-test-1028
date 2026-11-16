@@ -2020,9 +2020,14 @@
     const open = show && !!state.cropOpen;
     $n('cropBox').hidden = !open; // 低#7（第8任）：0.4.44 新元件，舊頁面沒有也不當
     const sum = $n('cropSum');
-    sum.hidden = !show || open;
+    // 0536（小助手1號，客戶「目前還沒顯示品種」）：0.4.44 進度卡的作物・品種・代碼搬到這一行，0.4.48 又讓舊客戶不顯示 → 選舊農民時哪裡都看不到品種代碼。
+    //   舊農民（不是盤商、種子商）也顯示這一行，唯讀：不出現「✎ 修改」、不展開四格（改資料照舊到種植資料）
+    const ro = !!sel && sel !== '__new' && !isDealerCat() && !SHOW_PROFILE_ON_VISIT;
+    sum.hidden = !(show || ro) || open;
+    $n('cropEditBtn').hidden = ro;
     const t = $n('cropSumText');
-    t.textContent = [crop ? `作物 ${cropText(crop)}` : '', vari ? `品種 ${vari}` : '', code ? `代碼 ${code}` : ''].filter(Boolean).join('｜');
+    t.textContent = [crop ? `作物 ${cropText(crop)}` : '', vari ? `品種 ${vari}` : '', code ? `代碼 ${code}` : ''].filter(Boolean).join('｜')
+      || (ro ? '作物、品種、代碼還沒填（請到「種植資料」補）／သီးနှံ၊ မျိုး မဖြည့်ရသေး' : '');
   }
   /* ───── 「這位有沒有結案在等主管確認」：只在 closeWaitNow 一個地方判斷（0518R4，GPT 0518R3-2～4）─────
      原本進度卡、試作框、同步後、存檔前各自判斷、各存一份新舊旗標，一輪一輪補漏洞（0518R1～R3）；改成需要時用「當下」的資料重算：
