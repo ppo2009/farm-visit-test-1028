@@ -53,7 +53,7 @@
     '作物': 'သီးနှံ', '行情': 'ဈေးကွက်', '反應': 'တုံ့ပြန်မှု', '摘要': 'အနှစ်ချုပ်', '打字': 'စာ', '價格': 'ဈေးနှုန်း',
     '開通新的業務帳號': 'ဝန်ထမ်း အကောင့်သစ် ဖွင့်', '開通業務帳號': 'အကောင့် ဖွင့်', '重設密碼': 'စကားဝှက် ပြန်သတ်မှတ်', '我已經記下了': 'မှတ်ပြီးပြီ', '派給業務': 'ဝန်ထမ်းကို ပေး',
     '已拜訪': 'သွားပြီး', '預定回訪': 'သွားရန် စီစဉ်', '逾期（大圓點）': 'ရက်ကျော် (အစက်ကြီး)', '今天該去': 'ယနေ့ သွားရန်', '已排定': 'စီစဉ်ပြီး',
-    '⬇ 下載 Word': 'Word ဒေါင်းလုဒ်', '⬇ 試作報告（Word）': 'Word ဒေါင်းလုဒ်', '▶ 聽原始錄音（緬甸語）': 'မူရင်းအသံ နားထောင်', '🔊 念中文摘要': 'တရုတ် အနှစ်ချုပ် ဖတ်',
+    '⬇ 下載 Word': 'Word ဒေါင်းလုဒ်', '⬇ 試作報告（Word）': 'Word ဒေါင်းလုဒ်', '⬇ 錄音報告 PDF（中文）': 'အသံ အစီရင်ခံစာ PDF (တရုတ်)', '⬇ 錄音報告 PDF（緬文）': 'အသံ အစီရင်ခံစာ PDF (မြန်မာ)', '▶ 聽原始錄音（緬甸語）': 'မူရင်းအသံ နားထောင်', '🔊 念中文摘要': 'တရုတ် အနှစ်ချုပ် ဖတ်',
     '田區導航 ↗': 'လမ်းညွှန်', '導航 ↗': 'လမ်းညွှန်', '用 Google 地圖導航 ↗': 'Google မြေပုံ လမ်းညွှန်', '最近 30 天完成或取消的': 'ရက် ၃၀ အတွင်း ပြီး/ပယ်ဖျက်', '沒有任務': 'လုပ်ငန်း မရှိ', '還沒有': 'မရှိသေး',
     // 總經理、主管匯報、我的任務（2026-11-12）
     '任務': 'လုပ်ငန်း', '主管匯報': 'မန်နေဂျာ အစီရင်ခံစာ', '我的任務': 'ကျွန်ုပ်၏ လုပ်ငန်း', '派出任務': 'လုပ်ငန်း ပေး', '主管': 'မန်နေဂျာ', '總經理': 'အထွေထွေမန်နေဂျာ',
@@ -102,6 +102,7 @@
     prog: {},        // 各月份的工作進度（後台算好的）
     progReq: {},
     photoReq: {},    // 照片下載中的請求，同一張不重複下載
+    areq: {},        // 0526 抓BUG C1（第23任）：錄音報告每筆拜訪的狀態 { busy, msg }；記在這裡，整頁重畫後按鈕照樣停用、訊息照樣在
     cf: { q: '', staff: '', area: '', type: '', show: 'attn' }, // 客戶頁的搜尋與篩選；預設只看要注意的（2026-11-12 規劃 B）
     grpOpen: {},     // 客戶頁各業務分組有沒有展開（使用者按過才記）
     moreOpen: false, // 「更多」分頁列有沒有打開
@@ -117,10 +118,11 @@
   };
 
   // 0.4.88 中4：請求一定有時間上限（網路卡住不回應也不斷線時，不能永遠白畫面）。照片、錄音、報告檔比較大，給 90 秒
-  const API_TIMEOUT_MS = 30000, API_FILE_TIMEOUT_MS = 90000;
+  // 0.5.26 錄音報告：後台要請 Gemini 聽完錄音再做 PDF，給 170 秒（逾時的話後台照樣做完存檔，再按一次就直接拿到）
+  const API_TIMEOUT_MS = 30000, API_FILE_TIMEOUT_MS = 90000, API_AREPORT_TIMEOUT_MS = 170000;
   async function api(payload) {
     const sentKey = state.key;
-    const ms = ['photo', 'audio', 'report'].indexOf(payload.action) >= 0 ? API_FILE_TIMEOUT_MS : API_TIMEOUT_MS;
+    const ms = payload.action === 'audioReport' ? API_AREPORT_TIMEOUT_MS : ['photo', 'audio', 'report'].indexOf(payload.action) >= 0 ? API_FILE_TIMEOUT_MS : API_TIMEOUT_MS;
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     let timedOut = false;
     const timer = ctl ? setTimeout(() => { timedOut = true; ctl.abort(); }, (typeof window !== 'undefined' && window.BOSS_TEST_TIMEOUT_MS) || ms) : null;
@@ -198,7 +200,7 @@
     state.key = null; keyStore.set(null); state.data = null;
     clearMustChange();
     // 讀取中標記與快取也清掉：換人後舊請求的回應會被丟掉（S7），標記不清就永遠是「讀取中」、新的人讀不到（第二輪自行審查 T5）
-    Object.assign(state, { progReq: {}, histReq: {}, photoReq: {}, prog: {}, hist: {}, photos: {}, audios: {}, cacheGen: (state.cacheGen || 0) + 1 });
+    Object.assign(state, { progReq: {}, histReq: {}, photoReq: {}, prog: {}, hist: {}, photos: {}, audios: {}, areq: {}, cacheGen: (state.cacheGen || 0) + 1 }); // areq：登出後舊請求的回應會被丟掉，「正在做」要一起清，不然下一位登入按鈕一直停用
     Object.assign(state, { tab: 'today', trial: null, briefOpen: '', bf: null, replyDraft: {}, tf: null, af: null, newPw: null,
       taskMsg: '', briefMsg: '', acctMsg: '', moreOpen: false, cf: { q: '', staff: '', area: '', type: '', show: 'attn' },
       closeMsg: '', rf: {}, pm: '', grpOpen: {}, lastTab: '', replyRid: {}, loadedAt: 0, closeMsgSeq: 0 }); // 主管BUG#9：換人登入不留上一位的結案訊息、篩選、月份、展開狀態
@@ -351,7 +353,7 @@
 
   /** 播放錄音、朗讀摘要、下載報告的按鈕（整頁重畫和只重畫履歷都用這個；綁過的標 data-mbound 不重複綁） */
   function bindMedia(root) {
-    root.querySelectorAll('[data-play]:not([data-mbound]),[data-speak]:not([data-mbound]),[data-report]:not([data-mbound])').forEach(el => {
+    root.querySelectorAll('[data-play]:not([data-mbound]),[data-speak]:not([data-mbound]),[data-report]:not([data-mbound]),[data-areport]:not([data-mbound])').forEach(el => {
       el.dataset.mbound = '1';
       el.addEventListener('click', () => (el.dataset.play ? playAudio(el) : el.dataset.speak ? speak(el) : downloadReport(el)));
     });
@@ -383,7 +385,11 @@
   function soundBtns(v) {
     const a = v.audio ? `<button class="btn" type="button" data-play="${esc(v.audio)}">▶ 聽原始錄音（緬甸語）</button>` : '';
     const s = v.summary ? `<button class="btn" type="button" data-speak="${esc(v.id)}">🔊 念中文摘要</button>` : '';
-    return a || s ? `<div class="sounds">${a} ${s}</div>` : '';
+    // 0.5.26 董事長「錄音轉 Word 給主管看報告用」→「改成 PDF，中文跟緬甸語版本」：兩顆按鈕，各下載一種語言
+    // 0526 抓BUG C1（第23任）：正在做時（state.areq）兩顆都停用，進度訊息放在按鈕旁的小字（不改按鈕文字），重畫後照樣在
+    const q = (typeof state !== 'undefined' && state.areq && state.areq[v.id]) || {}, dis = q.busy ? ' disabled' : '';
+    const w = v.audio ? `<button class="btn" type="button" data-areport="${esc(v.id)}" data-lang="zh"${dis}>⬇ 錄音報告 PDF（中文）</button> <button class="btn" type="button" data-areport="${esc(v.id)}" data-lang="my"${dis}>⬇ 錄音報告 PDF（緬文）</button> <span class="sub" data-areqmsg="${esc(v.id)}">${esc(q.msg || '')}</span>` : '';
+    return a || s ? `<div class="sounds">${a} ${s} ${w}</div>` : '';
   }
 
   let player = null, playingId = '', playingBtn = null;
@@ -804,7 +810,44 @@
       </tbody></table></div><p class="sub">共 ${list.length} 件。Word 報告也存在該客戶的雲端硬碟資料夾。</p>`;
   }
 
+  /** base64 → 檔案下載（錄音報告用；0526 抓BUG C3：原本 Uint8Array.from(atob, 每字一個函式) 幾 MB 慢 20～40 倍，改一般迴圈） */
+  function saveB64(data, mime, name) {
+    const s = atob(data), bytes = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+    const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+  // 0526 抓BUG C2：錄音報告的進度、結果訊息附緬文（緬文示意，待校對）
+  const AREQ_MSG = {
+    busy: '正在做錄音報告，約需一兩分鐘…／အသံ အစီရင်ခံစာ ပြုလုပ်နေသည်၊ ခဏစောင့်ပါ…',
+    partial: '已下載，但報告不完整（原因在報告最後；過半小時再按會重做）／ဒေါင်းလုဒ်ပြီး၊ အစီရင်ခံစာ မပြည့်စုံပါ',
+    timeout: '報告還在做，過一兩分鐘再按一次就能下載／ပြုလုပ်ဆဲ၊ ခဏနေမှ ထပ်နှိပ်ပါ',
+    fail: '下載失敗，請再試／ဒေါင်းလုဒ် မအောင်မြင်ပါ၊ ထပ်ကြိုးစားပါ',
+    server: '／မအောင်မြင်ပါ၊ ခဏနေမှ ထပ်နှိပ်ပါ' // 接在後台的中文訊息後面
+  };
+  /** 錄音報告：一筆拜訪一個狀態（中文、緬文兩顆共用，後台按一顆就兩種一起做）；更新「現在畫面上」的按鈕和訊息，不用按下去那顆的舊參照（重畫後它已經不在畫面上） */
+  async function downloadAudioReport(btn) {
+    const id = btn.dataset.areport;
+    if (state.areq[id] && state.areq[id].busy) return;
+    const setQ = (busy, msg) => {
+      state.areq[id] = { busy, msg };
+      document.querySelectorAll('[data-areport]').forEach(b => { if (b.dataset.areport === id) b.disabled = busy; });
+      document.querySelectorAll('[data-areqmsg]').forEach(s => { if (s.dataset.areqmsg === id) s.textContent = msg; });
+    };
+    setQ(true, AREQ_MSG.busy);
+    try {
+      const r = await api({ action: 'audioReport', visitId: id, lang: btn.dataset.lang === 'my' ? 'my' : 'zh' });
+      if (!r.ok) { setQ(false, (r.message || '下載失敗') + AREQ_MSG.server); return; }
+      if (!r.data) { setQ(false, AREQ_MSG.fail); return; }
+      saveB64(r.data, r.mime, r.name);
+      setQ(false, r.complete === false ? AREQ_MSG.partial : '');
+    } catch (e) {
+      setQ(false, e && e.timeout ? AREQ_MSG.timeout : AREQ_MSG.fail);
+    }
+  }
   async function downloadReport(btn) {
+    if (btn.dataset.areport) return downloadAudioReport(btn); // 0.5.26 錄音報告
     // 0.4.75（1號主管清單低9）：存 innerHTML，緬文小字才不會黏成一串
     // 0.4.85 低4：原文字記在 data 屬性（第一次按才記）——失敗一次後按鈕變成錯誤訊息，再按時不能把錯誤訊息當原文字
     if (btn.dataset.label == null) btn.dataset.label = btn.innerHTML;
@@ -813,12 +856,16 @@
     try {
       const r = await api({ action: 'report', trialId: btn.dataset.report });
       if (!r.ok) { btn.textContent = r.message || '下載失敗'; return; }
-      const bytes = Uint8Array.from(atob(r.data), ch => ch.charCodeAt(0));
+      // 試作報告這段自己寫完整（不叫 saveB64）：舊測試 test-boss0485 只拿 downloadReport 單獨跑；解碼一樣用一般迴圈（0526 抓BUG C3）
+      const s = atob(r.data), bytes = new Uint8Array(s.length);
+      for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
       const url = URL.createObjectURL(new Blob([bytes], { type: r.mime }));
       const a = document.createElement('a'); a.href = url; a.download = r.name; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 10000);
       btn.innerHTML = label;
-    } catch (e) { btn.textContent = '下載失敗，請再試'; } finally { btn.disabled = false; }
+    } catch (e) {
+      btn.textContent = '下載失敗，請再試';
+    } finally { btn.disabled = false; }
   }
 
   /* ───── 工作進度（2C）：每位業務的數字、月計劃達成、各地區統計 ───── */

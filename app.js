@@ -2297,7 +2297,9 @@
   function refreshNoMeet() {
     const shown = noMeetShown();
     nmLabels();
-    $('noMeetBox').hidden = !shown;
+    // 0.5.26（第23任，客戶問「這已經沒功能了吧，下面還有可以填聊天的視窗」）：「沒見到」0.5.13 已拿掉、「有見到」一進來就選好，
+    // 剩下的綠色「有見到農民 → 寫聊了什麼」按了也沒變化，整塊不再顯示；選好的狀態（meetChosen）照舊，拍照、打字欄照舊出現
+    $('noMeetBox').hidden = true;
     if (!shown) state.noMeet = false;
     // 0.5.13 董事長截圖「這個功能拿掉，直接在有見到農民裡面回報就好」＋「盤商／種子商的失敗（沒見到／被拒絕）也移除」：
     // 不再有「沒見到」那顆，「有見到」直接選好（不用多按一下就出現拍照、打字；盤商、種子商的「已簽約」也直接出現）
@@ -3442,7 +3444,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.25'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.26'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
