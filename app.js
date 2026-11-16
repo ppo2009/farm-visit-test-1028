@@ -979,12 +979,17 @@
   /** 0.4.82 左欄「我負責的客戶」：五類（分類同月分工作進度 mineGroupOf），列「名字｜客戶編號｜鎮・村」，點一位開那位的田間打卡（openFromList 鎖類別） */
   const TODO_GROUPS = [['一般農民', 'ပုံမှန် လယ်သမား'], ['試作農民', 'စမ်းသပ် လယ်သမား'], ['推廣農民', 'မြှင့်တင် လယ်သမား'], ['盤商', 'ကုန်သည်'], ['種子商', 'မျိုးစေ့ဆိုင်']];
   /** 0.5.26（客戶：盤商、種子商「已簽約顯示已簽約，沒簽約用紅字寫沒簽約」）：清單裡的盤商、種子商都還在往來（主管確認簽約後客戶就結束、不在清單）
-   *  → 這支手機送過「已簽約」的標「簽約待主管確認」（橘字），其他標「沒簽約」（紅字）。主管退回的，手機看不到退回，照樣標待確認（之後回訪會照常列出） */
+   *  → 這支手機送過「已簽約」的標「簽約待主管確認」（橘字），其他標「沒簽約」（紅字）。第24任起以後台的 signWait 為準（主管退回的變回「沒簽約」） */
   function dealerSignTag(f) {
     if (!f || (f.type !== '盤商' && f.type !== '種子商')) return '';
+    // 0.5.26 第24任：後台有帶 signWait（true／false）就以後台為準——手機已上傳的拜訪 7 天後會刪掉，原本只看手機紀錄，主管 7 天沒確認就變回「沒簽約」；
+    //   主管退回的，後台回 false → 不再一直標待確認。手機紀錄只補後台還不知道的：還沒上傳、或上傳時間比這份後台資料（首頁 syncedAt，同一次寫入）晚的
+    const srv = typeof f.signWait === 'boolean', at = Number(state.homeSyncedAt) || 0;
+    const newer = v => !srv || v.status !== 'uploaded' || !(Number(v.uploadedAt) < at);
     // 0.5.26 抓BUG 中2-B：後台沒收的（closingDropped，例如不是負責業務）不算送過簽約
-    const sent = (state.myVisitList || []).some(v => v && !v.closingDropped && (v.farmerId === f.id || (f.tempId && v.farmerId === f.tempId)) && v.closing && typeof v.closing === 'object' && v.closing.outcome === '簽約');
-    return sent ? ' <span class="signtag wait">簽約待主管確認／စောင့်ဆဲ</span>' : ' <span class="signtag no">沒簽約／မချုပ်ရသေး</span>';
+    const sent = f.signWait === true || (state.myVisitList || []).some(v => v && !v.closingDropped && (v.farmerId === f.id || (f.tempId && v.farmerId === f.tempId)) && v.closing && typeof v.closing === 'object' && v.closing.outcome === '簽約' && newer(v));
+    // 第24任（董事長「已簽約顯示已簽約，沒簽約用紅字寫沒簽約」）：字改「已簽約（待主管確認）」；主管確認後客戶結束、不在清單
+    return sent ? ' <span class="signtag wait">已簽約（待主管確認）／စာချုပ်ပြီး (စောင့်ဆဲ)</span>' : ' <span class="signtag no">沒簽約／မချုပ်ရသေး</span>';
   }
   function renderTodoCust() {
     const box = document.getElementById('todoCust');
@@ -1184,6 +1189,7 @@
     const h = (await Store.getMeta('home')) || null;
     state.myVisitList = await myVisits(); // 0.4.84 低1：這支手機自己帳號的拜訪，算最後拜訪日用（下拉、快採收、日程、量測週都用 latestVisitDay）
     const today = await phoneToday(h); // 0.4.87 低3：先校正手機時間，再畫快採收
+    state.homeSyncedAt = h && h.syncedAt ? Number(h.syncedAt) || 0 : 0; // 0.5.26 第24任：簽約標示判斷「後台資料比這筆上傳舊」用（同 farmers 一次寫入）
     return { h, today };
   }
 
@@ -2188,6 +2194,14 @@
         if (crop && !it.value && [...(it.options || [])].some(o => o.value === crop)) { it.value = crop; if (typeof refreshTrialOther === 'function') refreshTrialOther(); }
         refreshSave(); // 帶入品項後重新檢查存檔（不然還停在「請填推廣品項」）
       }
+    }
+    // 0.5.26 第24任（董事長截圖 U Nga Shint「舊的農民還是出現推廣」）：上面那段表單已自動打開、品項已帶入，但說明還寫「目前沒有進行中的推廣」、
+    //   還顯示「＋ 開始新的推廣」→ 看起來像還要再開始一次。董事長選「拿掉按鈕，改一句說明」：分類就是這一類的舊農民、表單開著、沒有進行中的 → 不顯示按鈕，說明改成存檔就記成這位的推廣／試作
+    const oldKind = !!sel && sel !== '__new' && !t && !notMine && state.trialMode === 'start' && ((state.allCustomers || []).find(x => x.id === sel) || {}).kind === cat + '農民';
+    if (oldKind) {
+      const item = String($n('tItem').value || '').trim();
+      $('trialStartBtn').hidden = true;
+      $('trialNow').textContent = `舊${cat}農民：${item ? '品項已帶入他的作物（' + cropText(item) + '，可以改）' : '請選下面的品項'}，存檔就記成這位的${cat}／${CAT_MY[cat] || ''} လယ်သမားဟောင်း - သိမ်းလျှင် မှတ်တမ်းဝင်မည်`;
     }
     if (typeof paintNewTrial === 'function') paintNewTrial(); // 0534：新農民改寫框上方說明（不寫「目前沒有進行中」）、品項＝作物、品種那一行
   }
