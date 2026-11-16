@@ -985,7 +985,9 @@
     // 0.5.26 第24任：後台有帶 signWait（true／false）就以後台為準——手機已上傳的拜訪 7 天後會刪掉，原本只看手機紀錄，主管 7 天沒確認就變回「沒簽約」；
     //   主管退回的，後台回 false → 不再一直標待確認。手機紀錄只補後台還不知道的：還沒上傳、或上傳時間比這份後台資料（首頁 syncedAt，同一次寫入）晚的
     const srv = typeof f.signWait === 'boolean', at = Number(state.homeSyncedAt) || 0;
-    const newer = v => !srv || v.status !== 'uploaded' || !(Number(v.uploadedAt) < at);
+    // 抓BUG第1輪（小助手2）：後台拒收的拜訪（status rejected，格式錯等，永遠留在手機不重送）、客戶已被刪（missingCustomer，結案沒收）都不算送過簽約——
+    //   原本 rejected 不是 uploaded → 一律當「後台還不知道」→ 永遠標「已簽約（待主管確認）」，連主管退回的紅字也被蓋掉
+    const newer = v => v.status !== 'rejected' && !v.missingCustomer && (!srv || v.status !== 'uploaded' || !(Number(v.uploadedAt) < at));
     // 0.5.26 抓BUG 中2-B：後台沒收的（closingDropped，例如不是負責業務）不算送過簽約
     const sent = f.signWait === true || (state.myVisitList || []).some(v => v && !v.closingDropped && (v.farmerId === f.id || (f.tempId && v.farmerId === f.tempId)) && v.closing && typeof v.closing === 'object' && v.closing.outcome === '簽約' && newer(v));
     // 第24任（董事長「已簽約顯示已簽約，沒簽約用紅字寫沒簽約」）：字改「已簽約（待主管確認）」；主管確認後客戶結束、不在清單
@@ -2199,13 +2201,31 @@
     }
     // 0.5.26 第24任（董事長截圖 U Nga Shint「舊的農民還是出現推廣」）：上面那段表單已自動打開、品項已帶入，但說明還寫「目前沒有進行中的推廣」、
     //   還顯示「＋ 開始新的推廣」→ 看起來像還要再開始一次。董事長選「拿掉按鈕，改一句說明」：分類就是這一類的舊農民、表單開著、沒有進行中的 → 不顯示按鈕，說明改成存檔就記成這位的推廣／試作
-    const oldKind = !!sel && sel !== '__new' && !t && !notMine && state.trialMode === 'start' && ((state.allCustomers || []).find(x => x.id === sel) || {}).kind === cat + '農民';
+    // 抓BUG第2輪（小助手2）：不再要求表單開著——原本收起後只要重畫一次（同步完、換類別再換回來），oldKindFor 就被清掉，
+    //   再按「＋ 開始新的」打開表單時按鈕不會變「這次不開始（收起）」、說明也停在「目前沒有進行中」。按鈕字、說明照開／收由 paintOldKindBtn、paintOldKind 自己分
+    const oldKind = !!sel && sel !== '__new' && !t && !notMine && ((state.allCustomers || []).find(x => x.id === sel) || {}).kind === cat + '農民';
+    state.oldKindFor = oldKind ? { cid: sel, cat } : null; // 抓BUG第1輪（小助手2）：改品項時 refreshSave 用它重寫說明（paintOldKind）
     if (oldKind) {
-      const item = String($n('tItem').value || '').trim();
-      $('trialStartBtn').hidden = true;
-      $('trialNow').textContent = `舊${cat}農民：${item ? '品項已帶入他的作物（' + cropText(item) + '，可以改）' : '請選下面的品項'}，存檔就記成這位的${cat}／${CAT_MY[cat] || ''} လယ်သမားဟောင်း - သိမ်းလျှင် မှတ်တမ်းဝင်မည်`;
+      if (typeof paintOldKindBtn === 'function') paintOldKindBtn(); else $('trialStartBtn').hidden = true; // 抓BUG第1輪 4（董事長選「加小連結這次不開始」）：按鈕不藏，改「這次不開始（收起）」
+      paintOldKind();
     }
     if (typeof paintNewTrial === 'function') paintNewTrial(); // 0534：新農民改寫框上方說明（不寫「目前沒有進行中」）、品項＝作物、品種那一行
+  }
+  /**
+   * 抓BUG第1輪（小助手2）：舊試作／推廣農民的說明照「現在選的品項」寫。
+   * 原因（讀程式確認）：原本只在 refreshTrialBox 寫一次，品項下拉的 change 只叫 refreshSave → 業務把帶入的作物改掉，說明還寫「已帶入他的作物（舊的）」；
+   *   作物不在清單、說明寫「請選下面的品項」，選好後還是那句；選「其他」再碰到重畫會寫出內部代碼 __other。
+   * 跟 paintNewTrial 一樣由 refreshSave 叫（不另外加事件，不動 init 接線）；不是這位、這一類、開始表單就不動
+   */
+  function paintOldKind() {
+    const ok = state.oldKindFor, sel = $n('farmer').value;
+    if (!ok || ok.cid !== sel || ok.cat !== state.cat || state.trialMode !== 'start') return;
+    const cat = ok.cat, raw = String($n('tItem').value || '').trim();
+    const crop = String(((state.allCustomers || []).find(x => x.id === sel) || {}).crop || '').trim();
+    const other = raw === TRIAL_OTHER ? String($n('tItemOther').value || '').trim() : '';
+    const what = raw === TRIAL_OTHER ? (other ? '品項：' + other : '請在下面填品項')
+      : !raw ? '請選下面的品項' : raw === crop ? '品項已帶入他的作物（' + cropText(raw) + '，可以改）' : '品項：' + cropText(raw);
+    $('trialNow').textContent = `舊${cat}農民：${what}，存檔就記成這位的${cat}／${CAT_MY[cat] || ''} လယ်သမားဟောင်း - သိမ်းလျှင် မှတ်တမ်းဝင်မည်`;
   }
   function setTrialMode(m) {
     state.trialMode = m;
@@ -2218,6 +2238,23 @@
     placeFailBox(); // 0.4.74 失敗欄位放哪、要不要顯示統一由 placeFailBox 決定（試作結束／種植失敗／結案試作失敗）
     $('harvestBox').hidden = $('tOutcome').value === '失敗'; // 0.4.38 成功／結束 → 收成報告；失敗 → 失敗紀錄
     refreshSave();
+    if (typeof paintOldKindBtn === 'function') paintOldKindBtn(); // 抓BUG第1輪 4：舊農民按「這次不開始」收起／再打開，按鈕字和說明跟著換
+  }
+  /**
+   * 抓BUG第1輪 4（小助手2 提出，董事長 2026-11-17 選「加小連結這次不開始」）：舊推廣／試作農民開始表單自動打開後，
+   *   原本按鈕藏起來 → 只要存檔就一定開始一件，業務只是去看看也沒辦法不開始。
+   *   改成：表單開著時按鈕寫「這次不開始（收起）」（同一顆按鈕，按了 setTrialMode(null)）；收起後變回「＋ 開始新的…」、說明寫目前沒有進行中，要開始再按一次。
+   *   只管 refreshTrialBox 記下的這一位（state.oldKindFor）、沒有進行中的那一類
+   */
+  function paintOldKindBtn() {
+    const ok = state.oldKindFor, sel = $n('farmer').value, btn = $n('trialStartBtn');
+    if (!ok || ok.cid !== sel || ok.cat !== state.cat || state.activeTrial || !btn) return;
+    btn.hidden = false;
+    if (state.trialMode === 'start') btn.innerHTML = `這次不開始${ok.cat}（收起）<span class="my">ယခု မစတင်ပါ</span>`;
+    else {
+      btn.innerHTML = `＋ 開始新的${ok.cat}<span class="my">${CAT_MY[ok.cat] || ''} အသစ် စတင်</span>`;
+      $n('trialNow').textContent = `這位客戶目前沒有進行中的${ok.cat}。／လုပ်ဆောင်ဆဲ ${CAT_MY[ok.cat] || ''} မရှိ`;
+    }
   }
   /* 一般拜訪的種植失敗（0.4.33）：同一組失敗欄位（failBox）搬到一般拜訪下面用；切回試作結束時再搬回去 */
   const plantFailOn = () => state.cat === '農戶' && !!$('farmer').value && $('plantFail').checked;
@@ -2567,7 +2604,12 @@
     //   （打卡頁的「填結果／結束」拿掉後，失敗的只能在這裡結；後台 saveFarmerClosing_ 同樣放行）；有填的照樣要大於 0
     const failClose = typeof closeFailNow === 'function' && closeFailNow();
     const miss = failClose ? [] : [['cPrice', '價格'], ['cYield', '產量'], ['cBuyer', '收購客戶']].filter(([id]) => !String($(id).value).trim()).map(([, n]) => n);
-    if (miss.length) return `結案要填：${miss.join('、')}／ပိတ်သိမ်းရန် ဖြည့်ပါ`;
+    // 抓BUG第1輪（小助手1）：存檔提示裡結案只列這一句；原本沒說作物失敗（勾種植失敗或結果選失敗）就不用填 → 業務以為一定要編價格。舊頁面沒有種植失敗勾選就不加
+    // 抓BUG第2輪（小助手2 提、第24任修）：勾了種植失敗、但試作／推廣結果選「成功」＝矛盾，價格照要填 → 原本提示還說「勾種植失敗就不用填」，業務會困惑；這時改說要把結果改成失敗
+    const contra = typeof document !== 'undefined' && !!document.getElementById('cPlantFail') && typeof closePlantFailOn === 'function' && closePlantFailOn()
+      && !!document.getElementById('closeTrialBox') && !$n('closeTrialBox').hidden && $n('cTrialOutcome').value === '成功';
+    if (miss.length) return `結案要填：${miss.join('、')}／ပိတ်သိမ်းရန် ဖြည့်ပါ` + (contra ? '（勾了「種植失敗」但結果選「成功」：真的沒收成請把結果改成「失敗」就不用填／ရလဒ်ကို မအောင်မြင် ဟု ပြောင်းပါ）'
+      : typeof document !== 'undefined' && document.getElementById('cPlantFail') ? '（作物失敗沒收成：勾「種植失敗」或結果選「失敗」就不用填／သီးနှံ မအောင်မြင်လျှင် မဖြည့်ရ）' : '');
     // 2號 0.4.63 低#6：輸入框的 min=0 只有表單送出才擋，這裡自己檢查：價格、產量要大於 0（不能負數或 0）
     const bad = [['cPrice', '價格'], ['cYield', '產量']].filter(([id]) => (!failClose || String($(id).value).trim()) && !(Number($(id).value) > 0)).map(([, n]) => n);
     if (bad.length) return `${bad.join('、')}要大於 0／၀ ထက် ကြီးရမည်`;
@@ -3097,6 +3139,7 @@
   /* ───── 儲存＋自動上傳 ───── */
   function refreshSave() {
     if (typeof paintNewTrial === 'function' && state.trialMode === 'start') paintNewTrial(); // 0534：改作物、種子公司、代碼都會叫到這裡 → 品項、品種那一行跟著變（不另外加事件，免得動到 init 接線）
+    if (typeof paintOldKind === 'function' && state.trialMode === 'start') paintOldKind(); // 抓BUG第1輪（小助手2）：舊農民改品項，說明跟著變
     const sel = $('farmer').value;
     const isNew = sel === '__new';
     const nameOk = !isNew || $('pName').value.trim();
@@ -3118,17 +3161,24 @@
     $('saveHint').textContent = !sel ? '' : state.saving ? '存檔中，請稍等…／သိမ်းနေသည်' : state.recStarting ? '等待麥克風權限，請稍候…／မိုက်ခရိုဖုန်း ခွင့်ပြုချက် စောင့်နေသည်' : !nameOk ? '請先填名字／အမည် အရင်ဖြည့်ပါ' : state.recBusy ? '錄音處理中，請稍等…／အသံ ပြင်ဆင်နေ' : state.rec ? '錄音中，先按一下結束錄音／အသံသွင်းနေသည်၊ အရင် ရပ်ပါ' : state.busyPhotos ? `照片處理中（還有 ${state.busyPhotos} 張）… ဓာတ်ပုံ ပြင်ဆင်နေ` : tp ? tp : signNeed ? '盤商、種子商結案：先按「有見到」，再寫簽約內容／ တွေ့ပြီး ကိုနှိပ်ပြီး စာချုပ် အကြောင်းအရာ ရေးပါ' : !ok ? `拍照、上傳照片、錄音、打字${state.cat === '盤商' ? '、記價格' : ''}${$('farmer').value === '__new' || SHOW_PROFILE_ON_VISIT ? '（或改客戶資料）' : ''}至少做一樣／ဓာတ်ပုံ၊ အသံ၊ စာ တစ်ခုခု လုပ်ပါ` : '';
     // 第24任（原本一次只顯示一件：上面那串檢查碰到第一個問題就停，業務改好一件才看到下一件，例如種植日期 2 年下限要先選好作物才出現）
     //   → 不是「等一下就好」的狀態時，把所有問題一次列出來（編號、一行一件）；只有一件照舊一行。這些檢查函式都只讀不改畫面
-    const allP = typeof saveProblems === 'function' && sel && !ok && !(state.saving || state.rec || state.recBusy || state.recStarting || state.busyPhotos) ? saveProblems(nameOk) : []; // 抽函式跑的舊測試沒有 saveProblems
+    // 抓BUG第3輪（第24任本機實走：盤商簽約只差簽約內容，卻同時列「至少做一樣」，業務以為還要拍照）：
+    //   結案／盤商結案／已簽約這條路，結案內容填好本身就算有內容（hasContent 那串）→ 結案還有問題時不另列「至少做一樣」，等結案填好仍沒內容才會出現
+    const closeFillsContent = (state.cat === '結案' || !!state.dealerClose || (typeof dealerSignOn === 'function' && dealerSignOn())) && !!closeProblem();
+    const allP = typeof saveProblems === 'function' && sel && !ok && !(state.saving || state.rec || state.recBusy || state.recStarting || state.busyPhotos) ? saveProblems(nameOk, { signNeed, noContent: !(isNew || hasContent) && !closeFillsContent }) : []; // 抽函式跑的舊測試沒有 saveProblems
     const sh2 = $('saveHint');
     if (sh2 && sh2.style) sh2.style.whiteSpace = allP.length > 1 ? 'pre-line' : '';
     if (allP.length > 1 && sh2) sh2.textContent = allP.map((p, i) => `${i + 1}. ${p}`).join('\n');
   }
-  /** 第24任：存檔前所有沒過的檢查（順序同 refreshSave 那一串），重複的只留一次 */
-  function saveProblems(nameOk) {
+  /** 第24任：存檔前所有沒過的檢查（順序同 refreshSave 那一串），重複的只留一次
+   *  抓BUG第1輪（小助手2）：extra＝{ signNeed, noContent }：refreshSave 那串最後兩件（盤商簽約要先按「有見到」、至少做一樣），原本沒列 → 改好列出的幾件後又冒出新的一件（這次要修的就是這種情況） */
+  function saveProblems(nameOk, extra) {
     const out = [];
     const add = p => { if (p && out.indexOf(p) < 0) out.push(p); };
     if (!nameOk) add('請先填名字／အမည် အရင်ဖြည့်ပါ');
     [noMeetProblem, trialProblem, closeProblem, priceProblem, typeof stageProblem === 'function' ? stageProblem : null, profileProblem].forEach(fn => { if (typeof fn === 'function') add(fn()); });
+    // 字跟 refreshSave 那串逐字相同（那串不改：抽 refreshSave 單獨跑的舊測試沒有別的常數）
+    if (extra && extra.signNeed) add('盤商、種子商結案：先按「有見到」，再寫簽約內容／ တွေ့ပြီး ကိုနှိပ်ပြီး စာချုပ် အကြောင်းအရာ ရေးပါ');
+    if (extra && extra.noContent) add(`拍照、上傳照片、錄音、打字${state.cat === '盤商' ? '、記價格' : ''}${$('farmer').value === '__new' || SHOW_PROFILE_ON_VISIT ? '（或改客戶資料）' : ''}至少做一樣／ဓာတ်ပုံ၊ အသံ၊ စာ တစ်ခုခု လုပ်ပါ`);
     return out;
   }
 
@@ -3172,7 +3222,13 @@
   }
   /** ① 農民結案的確認視窗文字（寫出農民、價格、產量、收購客戶、試作結果） */
   function closeConfirmText(o) {
-    const tOut = o.trialOutcome ? `\n試作結果：${o.trialOutcome}` : '';
+    // 抓BUG第1輪（小助手1）：推廣農民原本也寫「試作結果」→ 照進行中那件的類別寫
+    const tOut = o.trialOutcome ? (o.trialCat === '推廣' ? `\n推廣結果：${o.trialOutcome}` : `\n試作結果：${o.trialOutcome}`) : '';
+    // 抓BUG第1輪（小助手1）：作物失敗的結案可以不填價格、產量、收購客戶，原本視窗照樣寫「價格： 緬幣／籃」「產量： 籃」→ 空的寫「沒收成，不用填」，並寫明是作物失敗
+    if (o.fail) {
+      const v = (x, u) => (String(x == null ? '' : x).trim() ? `${x} ${u}` : '（沒收成，不用填）');
+      return `確定要把這位農民結案嗎？\nလယ်သမား ပိတ်သိမ်းမှာ သေချာပါသလား\n\n農民：${o.who}\n結案原因：作物失敗、沒收成／သီးနှံ မအောင်မြင်\n價格：${v(o.price, o.priceUnit || '緬幣／籃')}\n產量：${v(o.yield, o.yieldUnit || '籃')}\n收購客戶：${String(o.buyer == null ? '' : o.buyer).trim() || '（沒收成，不用填）'}${tOut}\n\n${o.closeConfirm ? '送出後要等主管確認才算結案。' : '存檔後這位農民就結案，不再提醒回訪。'}`;
+    }
     return `確定要把這位農民結案嗎？\nလယ်သမား ပိတ်သိမ်းမှာ သေချာပါသလား\n\n農民：${o.who}\n價格：${o.price} ${o.priceUnit || '緬幣／籃'}\n產量：${o.yield} ${o.yieldUnit || '籃'}\n收購客戶：${o.buyer}${tOut}\n\n${o.closeConfirm ? '送出後要等主管確認才算結案。' : '存檔後這位農民就結案，不再提醒回訪。'}`;
   }
   /** ① 盤商、種子商已簽約的確認視窗文字 */
@@ -3322,7 +3378,8 @@
       const ou = state.options || {};
       const box = $n('closeTrialBox');
       if (!confirm(closeConfirmText({ who: optText() || $('pName').value, price: $('cPrice').value, yield: $('cYield').value, buyer: $('cBuyer').value,
-        trialOutcome: box && !box.hidden && $n('cTrialOutcome').value ? $n('cTrialOutcome').value : '', priceUnit: ou.priceUnit, yieldUnit: ou.yieldUnit, closeConfirm: !!(state.options && state.options.closeConfirm) }))) return false;
+        trialOutcome: box && !box.hidden && $n('cTrialOutcome').value ? $n('cTrialOutcome').value : '', priceUnit: ou.priceUnit, yieldUnit: ou.yieldUnit, closeConfirm: !!(state.options && state.options.closeConfirm),
+        fail: typeof closeFailNow === 'function' && closeFailNow(), trialCat: box && !box.hidden && state.closeTrial ? state.closeTrial.cat : '' }))) return false; // 抓BUG第1輪（小助手1）：作物失敗、推廣結果的字
     }
     if (dealerSignOn() && !confirm(dealerSignConfirmText(state.cat, optText(), $n('dcNote').value.trim()))) return false;
     if (state.dealerClose && !confirm(dealerCloseConfirmText(state.cat, optText(), $n('dcOutcome').value, $n('dcNote').value.trim()))) return false;
