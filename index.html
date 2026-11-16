@@ -709,6 +709,8 @@ li>.pill{flex:none}
         <select id="dcOutcome"><option value="">— 請選擇 ရွေးပါ —</option><option value="成功">成功（談成合作）／အောင်မြင်</option><option value="失敗">失敗（沒談成）／မအောင်မြင်</option></select></div>
       <div><label class="lab" for="dcNote" id="dcNoteLab">說明（必填）<span class="my">မှတ်ချက် (မဖြစ်မနေ)</span></label>
         <textarea id="dcNote" maxlength="500" placeholder="例：談成，下個月開始進 A 品牌種子／沒談成，老闆只賣自己的品牌&#10;ဥပမာ - သဘောတူပြီ / မအောင်မြင်"></textarea></div>
+      <!-- 0.5.26（董事長：不能按的時候紅字提示「還沒有填契約內容」）：已簽約、簽約內容空白時顯示 -->
+      <p class="sub" id="dcNoteWarn" hidden style="color:var(--chili);font-weight:700">還沒有填簽約內容，填好才能按最下面的「簽約送主管確認」／စာချုပ် အကြောင်းအရာ မဖြည့်ရသေးပါ</p>
       <p class="sub" id="dcHint">送出後要等主管確認才算結案；主管退回就照常往來。<br><span class="my">မန်နေဂျာ အတည်ပြုမှ ပိတ်သိမ်းမည်။</span></p><!-- 第8任：字跟著後台「結案要主管確認」設定換（app.js 跟 closeHint 同一處） -->
     </div>
 

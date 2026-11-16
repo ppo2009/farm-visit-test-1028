@@ -3056,6 +3056,11 @@
     const signNeed = !!state.signOnly && !dealerSignOn(); // 0.4.82 結案分頁的盤商、種子商結案：一定要走「已簽約」才能送（沒見到、還沒按有見到都不能存）
     const ok = sel && nameOk && !state.rec && !state.recBusy && !state.recStarting && !state.busyPhotos && !tp && (isNew || hasContent) && !signNeed && !state.saving; // 業務BUG#4：存檔途中（等定位最多 15 秒）不能再按
     $('saveBtn').disabled = !ok;
+    // 0.5.26（董事長：不能按的時候要紅字提示）：已簽約、簽約內容空白 → 簽約內容框下面紅字；存檔鈕下面的原因不能按時改紅字
+    if (typeof document !== 'undefined' && document.getElementById('dcNoteWarn')) {
+      $n('dcNoteWarn').hidden = !((typeof dealerSignOn === 'function' && dealerSignOn()) && !String($n('dcNote').value || '').trim());
+      const sh = $('saveHint'); if (sh && sh.style) { sh.style.color = !ok && !state.saving ? 'var(--chili)' : ''; sh.style.fontWeight = !ok && !state.saving ? '700' : ''; }
+    }
     // 2號 0.4.69 低7（第8任）：存檔中按鈕停用時，提示原本落到「至少做一樣」→ 先說存檔中
     $('saveHint').textContent = !sel ? '' : state.saving ? '存檔中，請稍等…／သိမ်းနေသည်' : state.recStarting ? '等待麥克風權限，請稍候…／မိုက်ခရိုဖုန်း ခွင့်ပြုချက် စောင့်နေသည်' : !nameOk ? '請先填名字／အမည် အရင်ဖြည့်ပါ' : state.recBusy ? '錄音處理中，請稍等…／အသံ ပြင်ဆင်နေ' : state.rec ? '錄音中，先按一下結束錄音／အသံသွင်းနေသည်၊ အရင် ရပ်ပါ' : state.busyPhotos ? `照片處理中（還有 ${state.busyPhotos} 張）… ဓာတ်ပုံ ပြင်ဆင်နေ` : tp ? tp : signNeed ? '盤商、種子商結案：先按「有見到」，再寫簽約內容／ တွေ့ပြီး ကိုနှိပ်ပြီး စာချုပ် အကြောင်းအရာ ရေးပါ' : !ok ? `拍照、上傳照片、錄音、打字${state.cat === '盤商' ? '、記價格' : ''}${$('farmer').value === '__new' || SHOW_PROFILE_ON_VISIT ? '（或改客戶資料）' : ''}至少做一樣／ဓာတ်ပုံ၊ အသံ၊ စာ တစ်ခုခု လုပ်ပါ` : '';
   }
