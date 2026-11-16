@@ -1,6 +1,6 @@
 /* 背景程式：讓網頁沒網路也打得開，並在 Android 手機一有網路時於背景自動上傳 */
 /* global self, caches, clients, FarmCore */
-const VERSION = 'build-20261116-191820';
+const VERSION = 'build-20261116-212035';
 const CACHE = 'farm-visit-' + VERSION;
 const NET_TIMEOUT_MS = 4000; // 0.4.87 中7：網路 4 秒還沒回，手機裡有快取就先用
 const SLOW = {};               // 逾時的記號
@@ -8,8 +8,16 @@ const SHELL = ['./', './index.html', './app.js', './core.js', './config.js', './
 
 self.importScripts('./core.js');
 
+// 0.5.25 T2（第21任抓BUG）：Cloudflare 會把 /boss.html 轉到 /boss、/index.html 轉到 /。被轉址過的回應不能直接交給整頁導覽
+//   （瀏覽器當成網路錯誤，備用網址的主管頁打不開；內建瀏覽器實測 chrome-error）→ 交出去和存進快取前，重包成一般回應
+const clean = r => (r && r.redirected ? new Response(r.body, { status: r.status, statusText: r.statusText, headers: r.headers }) : r);
+
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
+  // 0.5.25 T4：預存檔一律跟伺服器拿新的（cache:'reload'，不吃瀏覽器 HTTP 快取裡的舊檔）；轉址過的也重包（同 T2）。任何一個失敗整個安裝失敗（同 addAll）
+  e.waitUntil(caches.open(CACHE).then(c => Promise.all(SHELL.map(u => fetch(new Request(u, { cache: 'reload' })).then(r => {
+    if (!r.ok) throw new Error('預存失敗：' + u);
+    return c.put(u, clean(r));
+  })))));
 });
 
 self.addEventListener('activate', e => {
@@ -43,14 +51,18 @@ self.addEventListener('fetch', e => {
   const prev = isNav ? null : navModeFor(e);
   e.respondWith(caches.open(CACHE).then(async c => {
     const remember = mode => { if (!isNav) return; const v = { mode, t: Date.now() }; if (e.resultingClientId) NAV_MODE[e.resultingClientId] = v; NAV_MODE._last = v; };
-    const offline = () => c.match(e.request, { ignoreSearch: true }).then(hit => hit || c.match('./index.html'));
+    // 0.5.25 T10：沒網路又沒存過 → 只有業務頁（/、index.html）的導覽退回業務首頁；主管頁導覽給一頁「要有網路」，其他檔回 503（不再把首頁當成 boss.js 給）
+    const shellNav = isNav && /\/(index\.html)?$/.test(url.pathname);
+    const offline = () => c.match(e.request, { ignoreSearch: true }).then(hit => hit || (shellNav ? c.match('./index.html')
+      : new Response(isNav ? '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><p style="font:18px sans-serif;padding:24px">沒有網路，這一頁要有網路才能打開，請連上網路再重新整理。<br>အင်တာနက် ချိတ်ပြီး ပြန်ဖွင့်ပါ</p>' : '',
+        { status: 503, headers: { 'Content-Type': isNav ? 'text/html; charset=utf-8' : 'text/plain' } })));
     if (prev && prev.mode === 'cache') { // 網頁這次用的是快取：程式檔也用快取，一整套同一版（背景照樣抓新版存起來）
       const hit = await c.match(e.request, { ignoreSearch: true });
-      const net = fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then(r => { if (r.ok) c.put(e.request, r.clone()); return r; });
+      const net = fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then(r0 => { const r = clean(r0); if (r.ok) c.put(e.request, r.clone()); return r; }); // 0.5.25 T2：轉址過的重包
       if (hit) { e.waitUntil(net.catch(() => {})); return hit; }
       try { return await net; } catch (err) { return offline(); }
     }
-    const net = fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then(r => { if (r.ok) c.put(e.request, r.clone()); return r; });
+    const net = fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then(r0 => { const r = clean(r0); if (r.ok) c.put(e.request, r.clone()); return r; }); // 0.5.25 T2：轉址過的重包
     let timer = null;
     const slow = new Promise(res => { timer = setTimeout(() => res(SLOW), isNav ? NET_TIMEOUT_MS : NET_TIMEOUT_SUB_MS); });
     try {

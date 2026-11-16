@@ -141,6 +141,37 @@
      *   再讀上次寫入的後台資料版本（srvDataAt，後台讀資料前取的 serverTime）——這份比較舊（晚到的舊回應）就不寫，回 'stale'；
      *   都通過才把每一項寫進去並更新版本。比較和寫入不分開，換帳號、舊回應晚到、兩邊同時寫都不會蓋錯；任何一筆寫入失敗整個交易作廢（不會只寫一半）
      */
+    /**
+     * 0.5.25 T1（第21任抓BUG）：登入成功、但後台資料寫回手機失敗（多半是空間不足）時用。
+     * 手機上那份後台資料（客戶、首頁、試作、任務、已結案、known）是別的帳號留下的 → 同一個交易裡整組刪掉、換快取記號，
+     * 免得新登入的人看到上一位的首頁、任務，勾到上一位的任務。是同一個帳號的就不動（回 false）
+     * 0525R2（第22任，GPT 0525R1-2 中）：opts.key 有給 → 同一個交易裡先看「目前登入」是不是發起清理的那次登入（金鑰、帳號都要一樣），
+     *   不是（另一個分頁已經換人登入成功）就不動、回 'stale'，舊的登入程序不能清掉現在這個人的快取。
+     * 0525R2（GPT 0525R1-1 高）：opts.onlyKnown → 開網頁時檢查用：只清「看得出是別人的」；看不出是誰的（舊版快取沒記帳號）不清，
+     *   免得沒網路時一開網頁就把客戶清單清光
+     */
+    clearForeignCache: (account, opts) => tx('meta', 'readwrite', s => new Promise((resolve, reject) => {
+      const o = opts || {};
+      const rc = s.get('config');
+      rc.onerror = () => reject(rc.error);
+      rc.onsuccess = () => {
+        const cfg = rc.result;
+        if (o.key != null && !(cfg && cfg.deviceKey && cfg.deviceKey === o.key && String(cfg.account || '') === String(account || ''))) { resolve('stale'); return; }
+        const rv = s.get('srvDataAt');
+        rv.onerror = () => reject(rv.error);
+        rv.onsuccess = () => {
+          const pv = rv.result;
+          const owner = pv && typeof pv === 'object' && pv.a ? String(pv.a) : '';
+          if (owner && owner === String(account || '')) { resolve(false); return; }
+          if (o.onlyKnown && !owner) { resolve(false); return; }
+          try {
+            ['farmers', 'endedMine', 'home', 'trials', 'tasks', 'known', 'srvDataAt'].forEach(k => { const d = s.delete(k); d.onerror = () => reject(d.error); });
+            const wr = s.put(newCacheRev(), 'cacheRev'); wr.onerror = () => reject(wr.error);
+          } catch (e) { reject(e); return; }
+          resolve(true);
+        };
+      };
+    })),
     applyServer: (sentKey, serverTime, entries, askedTemps, sentAt) => tx('meta', 'readwrite', s => new Promise((resolve, reject) => {
       const rc = s.get('config');
       rc.onerror = () => reject(rc.error);

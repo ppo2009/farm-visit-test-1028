@@ -132,6 +132,12 @@
       const warn = (typeof FarmCore !== 'undefined' && FarmCore.SYNC_WARN) || '同步資料寫回手機失敗（可能空間不足），稍後再同步';
       let loginWarn = '';
       try { await rememberServer(data, sentAt, data.deviceKey); } catch (e) { loginWarn = warn; }
+      // 0.5.25 T1（第21任抓BUG）：寫回失敗時手機上那份後台資料可能是上一位的（首頁、任務、試作、客戶）→ 不是這個帳號的就清掉，
+      //   不讓新登入的人看到、勾到上一位的；清不掉就不進首頁（丟到下面 catch，說手機存資料失敗）
+      // 0525R2（第22任，GPT 0525R1-2）：帶這次登入的金鑰 → 另一個分頁已經換人登入成功時不清（回 'stale'），這個舊的登入程序停下、不進首頁
+      if (loginWarn && Store.clearForeignCache && (await Store.clearForeignCache(data.account, { key: data.deviceKey })) === 'stale') {
+        msg.textContent = '另一個畫面已經換人登入，這次登入作廢，請重新整理網頁／အခြား စာမျက်နှာတွင် ဝင်ထားပြီ၊ ပြန်ဖွင့်ပါ'; msg.className = 'sub err'; return;
+      }
       ['pw', 'newPw', 'newPw2'].forEach(id => { $(id).value = ''; }); // 密碼不留在畫面上
       state.mustChange = false; $('newPwBox').hidden = true;
       showHome();
@@ -190,9 +196,11 @@
     // 0.5.24（第21任抓BUG）：草稿記下是誰寫的；另一個分頁換了帳號再回來按送出 → 不用新帳號送（比照 0.5.23 拜訪存檔的表單主人）
     let author = '';
     const curCfg = async () => { try { const c = await Store.getMeta('config'); return c && c.deviceKey && c.account ? c : null; } catch (e) { return null; } };
-    const curAccount = async () => { const c = await curCfg(); return c ? String(c.account) : ''; };
+    // 0.5.25 T7（第21任抓BUG）：讀取失敗回 null（作者不明），跟「沒登入」的空字串分開；作者不明時送出前要本人確認名義
+    const curAccount = async () => { try { const c = await Store.getMeta('config'); return c && c.deviceKey && c.account ? String(c.account) : ''; } catch (e) { return null; } };
     state.resetFeedback = () => { txt.value = ''; sid = ''; sidText = null; author = ''; hint.textContent = ''; close(); }; // 0.5.16：登出時清草稿
     btn.addEventListener('click', async () => { box.hidden = false; hint.textContent = ''; hint.className = 'sub'; if (!sid) { sid = newSid(); sidText = null; } txt.focus(); if (!author || !txt.value.trim()) author = await curAccount(); }); // 框是空的＝新的一則，照現在登入的人
+    txt.addEventListener('input', () => { if (!txt.value.trim()) author = ''; }); // 0.5.25 T7：框開著時把字清光＝重新寫一則，作者改照送出時登入的人
     $n('feedbackCancel').addEventListener('click', close);
     box.addEventListener('click', e => { if (e.target === box) close(); });
     send.addEventListener('click', async () => {
@@ -202,6 +210,11 @@
       // 0524R2-2（GPT 中）：讀不到登入設定（讀取失敗、沒登入、缺帳號或金鑰）→ 不送、字留著；不退回讓 gasCall 另讀（中間可能換人）
       if (!cfgNow) { hint.textContent = '讀不到登入資料，這次沒有送出（字留著）；請確認已登入再按送出／ဝင်ရောက်မှု မတွေ့ပါ၊ ထပ်ပို့ပါ'; hint.className = 'sub err'; return; }
       const nowAcct = String(cfgNow.account);
+      // 0.5.25 T7：打開框時讀不到是誰（作者不明）→ 不自動當成現在登入的人，先問本人
+      if (author === null) {
+        if (typeof confirm !== 'function' || !confirm('這則建議會用「' + nowAcct + '」的名義送出，確定嗎？\n' + nowAcct + ' အမည်ဖြင့် ပို့မည်၊ သေချာပါသလား။')) { hint.textContent = '這次沒有送出（字留著）／မပို့ရသေးပါ'; hint.className = 'sub err'; return; }
+        author = nowAcct;
+      }
       if (!author) author = nowAcct;
       if (author && nowAcct && nowAcct !== author) { hint.textContent = '這則建議是「' + author + '」寫的，現在登入的是「' + nowAcct + '」，這次沒有送出（字留著）；請用 ' + author + ' 登入再送／' + author + ' ဖြင့် ဝင်ပြီး ပို့ပါ'; hint.className = 'sub err'; return; }
       // 0.5.19 B3（第18任抓BUG）：上次沒確定送出（逾時等）、改了字再送 → 換新代號（後台看代號擋重複，同代號只留第一版）；沒改字照用舊代號，不會多一則
@@ -608,7 +621,7 @@
     try {
       let plCfg = null; const plSent = Date.now(); // R21-07：送出時的登入與時間，回應照 rememberServer 的規則寫（讀不到登入就不寫回，不影響存檔本身）
       try { plCfg = await getConfig(); } catch (e) { plCfg = null; }
-      const r = await gasCall({ action: 'plantSave', cid, profile: ch.profile, clear: ch.clear, ask: (typeof FarmCore !== 'undefined' && FarmCore.buildAsk) ? await FarmCore.buildAsk() : undefined }); // R20：帶 ask // 業務BUG#3：改走 gasCall，有逾時；種植資料中1（第8任）：只送改過的欄位
+      const r = await gasCall({ action: 'plantSave', cid, profile: ch.profile, clear: ch.clear, ask: (typeof FarmCore !== 'undefined' && FarmCore.buildAsk) ? await FarmCore.buildAsk() : undefined }, cfg); /* 0.5.25 T6：用開頭核對過的登入設定送（中途換人不改用新金鑰） */ // R20：帶 ask // 業務BUG#3：改走 gasCall，有逾時；種植資料中1（第8任）：只送改過的欄位
       // 0.4.94 中4（第11任第五輪）：逾時不代表沒存到（後台常常其實已存好）→ 不叫業務馬上重按；記下送出的值，下次同步回來比對，已經是送出的值就說「剛才的修改已存好」
       // 0.5.00（第13任，Antigravity 第 1 輪 3／0.4.99 審查手機低 3、4）：①逾時紀錄的新增、清除也走 Store.updateMeta 同一個交易（原本先讀再寫，
       //   跟同步比對交錯時會把剛清掉的寫回去、同一位提示兩次）；②等回應期間換人登入或登出 → 只整理上一位的紀錄，不跳提示、不動現在畫面
@@ -1302,6 +1315,8 @@
 
   /* ───── 農民任務：主管派、業務打勾（離線也能勾，有網路再送） ───── */
   async function renderTasks() {
+    // 0.5.25 T5：記下這份清單是誰登入時畫的（toggleTask 比對）；讀不到設定就不記（不擋）
+    if (typeof state !== 'undefined') { try { const c = await getConfig(); state.tasksAcct = c && c.deviceKey && c.account ? String(c.account) : ''; } catch (e) { state.tasksAcct = null; } } // 抽函式跑的舊測試沒有 state；0525R2（GPT 0525R1-3）：讀不到記 null＝「不知道是誰的」，toggleTask 會擋
     const tasks = (await Store.getMeta('tasks')) || [];
     const tickList = (await Store.getMeta('taskDone')) || [];
     const ticked = new Set(tickList.map(t => t.id));
@@ -1361,10 +1376,22 @@
   }
   async function toggleTask(id, on) {
     const cfg = await getConfig();
+    // 0.5.25 T5（第21任抓BUG）：畫面上的任務清單是 renderTasks 當時登入的人的；另一個分頁登出或換人後再勾 →
+    //   不記（原本會記在現在的人或空帳號名下，送出後被後台當成別人的任務刪掉、沒有提示），重畫清單
+    const nowAcct = cfg && cfg.deviceKey && cfg.account ? String(cfg.account) : '';
+    // 0525R2（第22任，GPT 0525R1-3 中）：畫清單時讀不到帳號（null＝不知道這份清單是誰的）→ 也不記，重畫後再勾
+    if (on && (!nowAcct || state.tasksAcct === null || (typeof state.tasksAcct === 'string' && state.tasksAcct !== nowAcct))) {
+      toast(!nowAcct ? '已經登出，這次沒有打勾，請重新登入／ပြန်ဝင်ပါ'
+        : state.tasksAcct === null ? '讀不到這份任務清單是誰的，已重新整理，請再勾一次／ပြန်ကြည့်ပြီး ထပ်နှိပ်ပါ'
+          : '這份任務清單是「' + state.tasksAcct + '」的，現在登入的是「' + nowAcct + '」，這次沒有打勾／ပြန်ကြည့်ပါ');
+      await renderTasks(); return;
+    }
     const at = Date.now() + ((await Store.getMeta('clockOffset')) || 0);
     if (on) {
       // 同一任務只留最新的一次打勾；正在送出的那一次不動（R4-03、R6-05）
-      await updateTaskDone(list => (list.some(t => t.id === id && FarmCore.isLocked(t)) ? list : list.filter(t => t.id !== id).concat([{ id, at, account: (cfg && cfg.account) || '' }])));
+      // 0.5.25 T5：存不進去（空間不足）要說，勾選框跟著重畫回沒勾
+      try { await updateTaskDone(list => (list.some(t => t.id === id && FarmCore.isLocked(t)) ? list : list.filter(t => t.id !== id).concat([{ id, at, account: nowAcct }]))); }
+      catch (e) { toast('打勾沒存進手機（可能空間不足），請再勾一次／မသိမ်းနိုင်ပါ'); await renderTasks(); return; }
     } else {
       const r = await FarmCore.untickTask(id); // 送出中不能取消（R6-05）
       if (!r.ok) toast(r.message);
@@ -3415,7 +3442,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.24'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.25'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -3462,7 +3489,7 @@
   /** 背景程式：註冊、有新版時自動更新、背景同步完通知畫面；請瀏覽器別清掉手機資料 */
   function setupServiceWorker() {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').then(reg => {
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => { // 0.5.25 T4：背景程式和它載入的 core.js 都不吃瀏覽器 HTTP 快取，新版不會裝到舊核心
         // 有新版：沒在填拜訪、也沒在上傳，就更新。
         // 原本要等「手機裡沒有待上傳的資料」才更新，但一筆一直傳不上去的資料會讓這支手機永遠停在舊版、拿不到修正（第六輪自抓）；
         // 新版一定能讀舊版存的資料（有測試保護），所以不用再等
@@ -3651,7 +3678,19 @@
   async function startApp() {
     if (typeof tagOwner === 'function') await tagOwner(); // R24-1（抽函式跑的舊測試沒有它）：開網頁時先替 0.5.16 留下的版本紀錄補記帳號
     const cfg = await getConfig();
-    if (cfg && cfg.deviceKey) { await showHome(); syncNow(); } else showLogin();
+    if (cfg && cfg.deviceKey) {
+      // 0525R2（第22任，GPT 0525R1-1 高）：登入時清別人的快取失敗（登入設定已經是新的人、快取還是上一位的）→ 重開網頁不能直接進首頁。
+      //   開網頁先再清一次「看得出是別人的」快取；還是清不掉就停在登入頁說手機存資料失敗
+      if (typeof Store !== 'undefined' && Store.clearForeignCache) { // 抽函式跑的舊測試（init 行為紀錄）沒有 Store
+        // 0525R3（第22任，GPT 0525R2-1 中）：也帶這次讀到的金鑰 → 讀完設定後另一個分頁換人登入了（回 'stale'），不清新的人的快取、不進首頁
+        let cr;
+        try { cr = await Store.clearForeignCache(cfg.account, { onlyKnown: true, key: cfg.deviceKey }); } catch (e) {
+          showLogin('手機存資料失敗（可能空間不足），請先清出空間再登入／ဖုန်းထဲ သိမ်းမရပါ၊ နေရာလွတ် လုပ်ပြီး ပြန်ဝင်ပါ'); return;
+        }
+        if (cr === 'stale') { showLogin('另一個畫面已經換人登入，請重新整理網頁／အခြား စာမျက်နှာတွင် ဝင်ထားပြီ၊ ပြန်ဖွင့်ပါ'); return; }
+      }
+      await showHome(); syncNow();
+    } else showLogin();
   }
   window.__farmTest = { state, exifInfo }; // 本機測試用
   init();
