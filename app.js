@@ -68,6 +68,8 @@
     // 2號 0.4.69 清單低3（第8任）：換帳號後「我的報告」還用上一位的名字篩 → 回到登入畫面就清掉報告清單、範圍、我是誰
     state.me = ''; state.reportScope = 'all'; state.reports = null;
     state.homeMonth = ''; state.homeTop = null; // 0520R4 I3（第19任）：換人登入不要停在上一位點的月份（下一位的首頁照第一次畫的規則）
+    // 0.5.23 J4（第21任）：上一位沒送出的建議不留給下一位。原本只在按登出時清，登入失效等其他 4 條回登入頁的路沒清 → 換人登入後用下一位的帳號送出
+    if (typeof state.resetFeedback === 'function') state.resetFeedback();
     show('setup');
     $('setupMsg').textContent = msg || '只要登入一次，之後沒網路也能打卡。帳號和密碼請向主管索取（密碼不能自己改）。／တစ်ကြိမ် ဝင်ပြီးလျှင် အင်တာနက်မရှိလည်း မှတ်တမ်းတင်နိုင်သည်။ အကောင့်နှင့် စကားဝှက်ကို မန်နေဂျာထံ တောင်းပါ။';
     $('setupMsg').className = msg ? 'sub err' : 'sub';
@@ -158,8 +160,7 @@
     try { await Promise.race([gasCall({ action: 'logout' }), new Promise(r => setTimeout(r, 5000))]); } catch (e) { /* 照樣清本機、回登入頁 */ } finally { lb.disabled = false; lb.innerHTML = lbl; }
     if (typeof tagOwner === 'function') await tagOwner(); // R24-1（抽函式跑的舊測試沒有它）
     await Store.setMeta('config', null);
-    if (typeof state.resetFeedback === 'function') state.resetFeedback(); // 0.5.16 第1輪 低：上一位沒送出的建議不留給下一位（不然會用下一位的帳號送出）
-    showLogin();
+    showLogin(); // 清建議草稿在 showLogin 裡（0.5.23 J4）
   }
 
   /**
@@ -1548,6 +1549,8 @@
       if ([...$('farmer').options].some(o => o.value === customerId)) { $('farmer').value = customerId; onFarmerChange(); }
       else toast('找不到這位客戶（可能已結案，或名單還沒更新），請從選單選擇／ဖောက်သည် မတွေ့ပါ');
     }
+    // 0.5.23 J5、J6（第21任）：打開打卡畫面時記下這張表單是誰的（存檔時不再只看當下的登入：別的分頁可能已登出或換人）；沒登入記空的
+    { const oc = await getConfig(); state.formOwner = oc && oc.deviceKey && oc.account ? { key: oc.deviceKey, account: String(oc.account) } : null; }
     show('visit');
     locate();
   }
@@ -3073,8 +3076,8 @@
    * ② 寫入手機：拜訪、試作暫存、新客戶暫存在同一個交易（R6-02）；expectVer＝結案檢查時的資料版本，交易裡再比一次（R37-1）。
    *   回 'ok'；'stale'＝檢查之後資料剛更新、沒存；'fail'＝存不進去（例如空間不足）
    */
-  async function writeVisit(visit, metaFns, expectVer) {
-    try { await Store.saveVisit(visit, metaFns, expectVer); return 'ok'; } catch (e) { return e && e.code === 'STALE' ? 'stale' : 'fail'; }
+  async function writeVisit(visit, metaFns, expectVer, expectOwner) {
+    try { await Store.saveVisit(visit, metaFns, expectVer, expectOwner); return 'ok'; } catch (e) { return e && e.code === 'STALE' ? 'stale' : e && e.code === 'OWNER' ? 'owner' : 'fail'; }
   }
 
   /** ③ 讀表單：把畫面上要存的內容讀成一般資料（之後組拜訪只用這份，不再碰畫面）；trialTempId＝開始試作要用的臨時編號 */
@@ -3133,8 +3136,16 @@
     const gen0 = state.formGen, sel0 = $('farmer').value;
     const moved = () => gen0 !== state.formGen || $('farmer').value !== sel0;
     const mode0 = state.trialMode, trial0 = state.activeTrial ? state.activeTrial.id : '';
+    // 0.5.23 J5、J6（第21任）：表單主人（openVisit 記的）跟現在的登入比對——
+    //   同一個帳號 → 照存；手機上已經沒有人登入（別的分頁登入失效後清掉了）→ 照樣用主人的帳號存進手機（J5，存完回登入頁）；
+    //   現在登入的是別人 → 不存、表單留著（J6，不然會記到別人名下）
+    const own = state.formOwner;
+    // 表單主人跟現在登入的帳號不同 → 回提示字（同一人、或沒有記主人的舊表單回空字串）
+    const ownerClash = (o, c) => (!o || !c || !c.account || String(c.account) === o.account ? ''
+      : '這張表單是「' + o.account + '」開始填的，現在登入的是「' + c.account + '」，這次沒有存（表單留著）；請用 ' + o.account + ' 登入再按儲存／ဤဖောင်ကို ' + o.account + ' က စဖြည့်ခဲ့သည်၊ ' + o.account + ' ဖြင့် ဝင်ပြီး သိမ်းပါ');
     const cfg = await getConfig();
-    if (!cfg || !cfg.deviceKey) { showLogin('請先登入／အရင် ဝင်ပါ'); return; }
+    if (!cfg || !cfg.deviceKey) { if (!own) { showLogin('請先登入／အရင် ဝင်ပါ'); return; } }
+    else { const w = ownerClash(own, cfg); if (w) { saveStop(w); return; } }
     if (gpsStale()) { // 0.5.20 E2：沒有位置，或位置是 2 分鐘以前抓的 → 再抓一次（抓不到就沿用原本的）
       toast('再抓一次位置… တည်နေရာ ပြန်ရှာနေ');
       // 等定位時不能再錄音、拍照（save() 整段鎖住、結束時才解鎖，這裡不解鎖）
@@ -3164,6 +3175,13 @@
       // 0518R4-1／G1（GPT、Gemini）：重算之後農民結案再檢查一次（在等主管確認、還在查都擋）；結束試作由下面 trialProblem 檢查
       if (state.cat === '結案' && !state.dealerClose && !dealerSignOn()) { const cp2 = closeProblem(); if (cp2) { saveStop(cp2); return; } }
     }
+    // 0.5.23 J5、J6：上面等定位、讀資料時，別的分頁可能登出或換人 → 最後一次等待再比一次表單主人
+    const cfgNow = await getConfig();
+    if (moved()) { saveStop('讀資料時換了畫面或客戶，這次沒有存，請再按一次儲存／မသိမ်းရသေး၊ ထပ်နှိပ်ပါ'); return; }
+    const noLogin = !cfgNow || !cfgNow.deviceKey;
+    if (noLogin && !own) { showLogin('請先登入／အရင် ဝင်ပါ'); return; }
+    { const w = noLogin ? '' : ownerClash(own, cfgNow); if (w) { saveStop(w); return; } }
+    const account = own ? own.account : cfgNow.account;
     const closeExpectVer = state.cat === '結案' && !state.dealerClose && !dealerSignOn() && typeof Store !== 'undefined' && Store.lookupVersion && state.closeVer ? state.closeVer : undefined; // 寫入時再比一次（R37-1）
     // ── 以下是最後一次等待之後：再查一次錄音照片、試作（R30-3、0518R1-1），然後確認、組資料、寫入，中間不再等待 ──
     why = trialChangedReason(mode0, trial0, state) || saveBusyReason(state) || (state.trialMode === 'end' && typeof trialProblem === 'function' ? trialProblem() : '');
@@ -3173,8 +3191,13 @@
     const rand = Math.random().toString(36).slice(2, 7);
     const tag = randTag(); // R20（GPT 01）：前綴用隨機，不用登入金鑰片段
     const ids = newVisitIds(now, tag, rand, isNew ? Math.random().toString(36).slice(2, 6) : '', isNew, new Date(now));
-    const { visit, metaFns } = buildVisitRecord(readSaveForm(ids.trialTempId), ids, { account: cfg.account, clockOffset: pre.clockPre, localPre: pre.localPre });
-    const res = await writeVisit(visit, metaFns, closeExpectVer);
+    const { visit, metaFns } = buildVisitRecord(readSaveForm(ids.trialTempId), ids, { account, clockOffset: pre.clockPre, localPre: pre.localPre });
+    const res = await writeVisit(visit, metaFns, closeExpectVer, account); // 0523R1-1：寫入的同一個交易裡再比一次登入的人
+    if (res === 'owner') { // 0523R1-1（GPT）：最後一次比對之後（例如確認視窗開著時）別的分頁換人登入 → 不存、表單留著
+      const nowCfg = (await getConfig()) || {};
+      saveStop(ownerClash({ account }, { account: nowCfg.account || '別人' }));
+      return;
+    }
     if (res === 'stale') { // 檢查之後資料剛更新 → 不存，重新判斷結案欄，請業務確認後再按（表單留著）
       toast('確認之後這位的資料剛更新，這次沒有存；請確認試作結果後再按儲存／ဒေတာ အသစ်ပြောင်းထားသည်၊ စစ်ပြီး ထပ်နှိပ်ပါ');
       if (typeof recheckCloseTrial === 'function') await recheckCloseTrial(false);
@@ -3182,6 +3205,14 @@
       return;
     }
     if (res !== 'ok') { saveStop('手機存檔失敗（可能空間不足），資料還在畫面上，請再按一次／သိမ်း၍ မရ၊ ထပ်နှိပ်ပါ'); return; }
+    // 0.5.23 J5：已經存進手機（記在表單主人名下），這時沒有人登入 → 清表單、回登入頁，登入後自動上傳
+    // 0523R1-1：存完再讀一次（確認視窗期間可能有人登入或登出），照存完當下決定回登入頁還是回首頁
+    const cfgAfter = await getConfig();
+    if (!cfgAfter || !cfgAfter.deviceKey) {
+      resetForm();
+      showLogin('登入已失效：剛剛那筆已經存在手機裡，請用 ' + account + ' 重新登入，登入後會自動上傳／မှတ်တမ်း ဖုန်းထဲ သိမ်းပြီး၊ ' + account + ' ဖြင့် ပြန်ဝင်ပါ');
+      return;
+    }
     await afterSaved();
   }
 
@@ -3354,7 +3385,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.22'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.23'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');

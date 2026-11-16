@@ -247,7 +247,9 @@
      */
     // R37-1（GPT）：expectVer＝結案最後一次檢查時的資料版本（lookupVersion）；有給就在**同一個交易**裡重算比對，
     //   不一樣（檢查之後同步、清理改了資料）就整個不存，丟 code='STALE' 的錯，請業務確認後再存
-    saveVisit: (v, metaFns, expectVer) => txBoth((visits, meta, setOut, fail) => {
+    // 0523R1-1（GPT，第21任）：expectOwner＝這筆拜訪記在誰名下。也在**同一個交易**裡讀登入設定比對：
+    //   現在有人登入、而且不是他（最後一次比對之後、確認視窗期間別的分頁換人）→ 整個不存，丟 code='OWNER'；沒有人登入照存（0.5.23 J5）
+    saveVisit: (v, metaFns, expectVer, expectOwner) => txBoth((visits, meta, setOut, fail) => {
       const go = () => {
         visits.put(v);
         Object.keys(metaFns || {}).forEach(k => {
@@ -256,11 +258,21 @@
         });
         setOut(true);
       };
-      if (expectVer === undefined || expectVer === null) { go(); return; }
-      readLookupVer(visits, meta, ver => {
-        if (ver !== expectVer) { const e = new Error('結案檢查之後資料剛更新，這次沒有存'); e.code = 'STALE'; fail(e); return; }
-        go();
-      }, fail);
+      const verThenGo = () => {
+        if (expectVer === undefined || expectVer === null) { go(); return; }
+        readLookupVer(visits, meta, ver => {
+          if (ver !== expectVer) { const e = new Error('結案檢查之後資料剛更新，這次沒有存'); e.code = 'STALE'; fail(e); return; }
+          go();
+        }, fail);
+      };
+      if (!expectOwner) { verThenGo(); return; }
+      const rc = meta.get('config');
+      rc.onerror = () => fail(rc.error);
+      rc.onsuccess = () => {
+        const c = rc.result;
+        if (c && c.deviceKey && c.account && String(c.account) !== String(expectOwner)) { const e = new Error('換了別人登入，這次沒有存'); e.code = 'OWNER'; e.account = String(c.account); fail(e); return; }
+        verThenGo();
+      };
     }),
     /**
      * 清理暫存清單：讀待上傳的拜訪、讀清單、留下 keep(項目, 待上傳拜訪) 為真的、寫回，全部在同一個交易裡（R6-02）

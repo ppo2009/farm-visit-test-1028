@@ -707,6 +707,12 @@
       <div id="custDetail" data-cid="${esc(c ? c.id : '')}">${custDetailHtml()}</div></div>`;
   }
 
+  /** 0.5.23（第21任，客戶主管「這幾句看不到緬文」）：中文下面加一行 Gemini 同時寫的緬文版；舊紀錄沒有就不顯示 */
+  function myLine(v, k) {
+    const s = v && v.my && typeof v.my[k] === 'string' ? v.my[k].trim() : '';
+    return s ? `<div class="my-line" lang="my">${esc(s)}</div>` : '';
+  }
+
   function renderCustDetail(c) {
     const list = visitsOf(c.id), s = dueState(c);
     const dealer = c.type === '盤商' || c.type === '種子商';
@@ -725,8 +731,8 @@
         <div class="sub">${v.lat != null && v.lng != null ? `📍 <a href="${esc(v.nav)}" target="_blank" rel="noopener">${v.lat.toFixed(5)}, ${v.lng.toFixed(5)}（導航）</a>` : '📍 <span style="color:var(--chili)">無定位</span>'}
         　📷 ${v.check ? esc(v.check) : '現場拍攝'}</div>
         <div class="box"><div class="photos">${v.photos.length ? v.photos.map(id => `<div class="photo" data-photo="${esc(id)}">載入中…</div>`).join('') : '<div class="photo">沒有照片</div>'}</div>
-        <dl class="kv"><dt>${dealer ? '行情' : '作物'}</dt><dd>${esc(v.crop || '—')}</dd><dt>反應</dt><dd>${esc(v.feedback || '—')}</dd><dt>問題</dt><dd>${esc(v.issue || '—')}</dd><dt>下一步</dt><dd>${esc(v.next || '—')}</dd>
-        <dt>摘要</dt><dd>${esc(v.summary || noSummaryText(v))}</dd>
+        <dl class="kv"><dt>${dealer ? '行情' : '作物'}</dt><dd>${esc(v.crop || '—')}${myLine(v, 'crop')}</dd><dt>反應</dt><dd>${esc(v.feedback || '—')}${myLine(v, 'feedback')}</dd><dt>問題</dt><dd>${esc(v.issue || '—')}${myLine(v, 'issue')}</dd><dt>下一步</dt><dd>${esc(v.next || '—')}${myLine(v, 'next')}</dd>
+        <dt>摘要</dt><dd>${esc(v.summary || noSummaryText(v))}${myLine(v, 'summary')}</dd>
         ${v.noMeet ? `<dt>沒拜訪</dt><dd><span class="pill p-yel">沒拜訪</span> ${esc(v.noMeet)}</dd>` : ''}${v.closing ? `<dt>結案</dt><dd>${esc(v.closing)}</dd>` : ''}${v.plantFail ? `<dt>種植失敗</dt><dd>${esc(v.plantFail)}</dd>` : ''}${v.text ? `<dt>打字</dt><dd class="pre">${esc(v.text)}</dd>` : ''}${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') || '<p class="empty">這位客戶還沒有拜訪紀錄。</p>'}</div>`;
   }
 
