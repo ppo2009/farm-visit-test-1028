@@ -198,7 +198,7 @@
     state.key = null; keyStore.set(null); state.data = null;
     clearMustChange();
     // 讀取中標記與快取也清掉：換人後舊請求的回應會被丟掉（S7），標記不清就永遠是「讀取中」、新的人讀不到（第二輪自行審查 T5）
-    Object.assign(state, { progReq: {}, histReq: {}, photoReq: {}, prog: {}, hist: {}, photos: {}, audios: {} });
+    Object.assign(state, { progReq: {}, histReq: {}, photoReq: {}, prog: {}, hist: {}, photos: {}, audios: {}, cacheGen: (state.cacheGen || 0) + 1 });
     Object.assign(state, { tab: 'today', trial: null, briefOpen: '', bf: null, replyDraft: {}, tf: null, af: null, newPw: null,
       taskMsg: '', briefMsg: '', acctMsg: '', moreOpen: false, cf: { q: '', staff: '', area: '', type: '', show: 'attn' },
       closeMsg: '', rf: {}, pm: '', grpOpen: {}, lastTab: '', replyRid: {}, loadedAt: 0, closeMsgSeq: 0 }); // 主管BUG#9：換人登入不留上一位的結案訊息、篩選、月份、展開狀態
@@ -238,7 +238,8 @@
       showLogin(data.message || '讀取失敗'); return;
     }
     hideBoot();
-    state.hist = {}; state.prog = {};
+    // 0.5.24（第21任抓BUG）：連「正在拿」的標記一起換新、換世代：重讀前發出去的履歷／進度晚到就丟掉，重讀後馬上重拿（原本會被標記擋住、存進舊的）
+    Object.assign(state, { hist: {}, prog: {}, histReq: {}, progReq: {}, cacheGen: (state.cacheGen || 0) + 1 });
     state.data = data;
     state.loadedAt = Date.now(); // 0.4.88 低8：切回頁面時判斷要不要重讀
     if (seq > (state.closeMsgSeq || 0)) state.closeMsg = ''; // 0.4.88 低7：讀完新資料，上一次結案的提示清掉（按完確認緊接著那次重讀不清，才看得到「已確認結案」）
@@ -368,10 +369,11 @@
   async function loadHistory() {
     const c = custSelected();
     if (!c || state.hist[c.id] || state.histReq[c.id]) return; // 已經有、或正在拿，不重複要
-    state.histReq[c.id] = true;
+    const gen = state.cacheGen, req = state.histReq; // 0.5.24：記下出發時的世代和標記表
+    req[c.id] = true;
     let r;
-    try { r = await api({ action: 'history', cid: c.id }); } catch (e) { r = null; } finally { delete state.histReq[c.id]; }
-    if (!r || !r.ok) return;
+    try { r = await api({ action: 'history', cid: c.id }); } catch (e) { r = null; } finally { delete req[c.id]; }
+    if (gen !== state.cacheGen || !r || !r.ok) return;
     state.hist[c.id] = r.visits;
     const now = state.tab === 'trial' && custSelected();
     if (now && now.id === c.id) { if ($('custDetail')) refreshCustDetail(); else render(); } // 0.4.75 低3：只重畫履歷，不重建搜尋框
@@ -1157,11 +1159,12 @@
   async function loadProgress(m) {
     const old = state.prog[m];
     if (!m || state.progReq[m] || (old && !(old.failedAt && Date.now() - old.failedAt > PROG_RETRY_MS))) return;
-    state.progReq[m] = true;
+    const gen = state.cacheGen, req = state.progReq; // 0.5.24：同 loadHistory，重讀前發出的晚到就丟掉
+    req[m] = true;
     const key = state.key;
     let r;
-    try { r = await api({ action: 'progress', month: m }); } catch (e) { r = { ok: false, message: e && e.timeout ? '讀進度超過 30 秒沒回應，等一下會再試' : '連不上伺服器，等一下會再試' }; } finally { delete state.progReq[m]; }
-    if (key !== state.key) return;
+    try { r = await api({ action: 'progress', month: m }); } catch (e) { r = { ok: false, message: e && e.timeout ? '讀進度超過 30 秒沒回應，等一下會再試' : '連不上伺服器，等一下會再試' }; } finally { delete req[m]; }
+    if (key !== state.key || gen !== state.cacheGen) return;
     // 0.4.88 低2：登入失效、不是主管 → 回登入頁（原本只在進度那格寫錯誤，畫面其他地方照用舊資料）
     if (r && (r.code === 'BAD_LOGIN' || r.code === 'NOT_BOSS')) { logout(); showLogin(r.message || '登入已失效，請重新登入'); return; }
     state.prog[m] = r && r.ok ? r : Object.assign({}, r, { ok: false, failedAt: Date.now() });

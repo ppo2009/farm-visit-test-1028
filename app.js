@@ -108,9 +108,11 @@
     }
     msg.textContent = '確認中… စစ်ဆေးနေသည်'; msg.className = 'sub';
     $('loginBtn').disabled = true;
+    let answered = false; // 0.5.24（第21任抓BUG）：後台已經回了才出錯＝手機自己存不進去，不能說成連不上伺服器
     try {
       const sentAt = Date.now();
       const data = await post(FARM_CONFIG.gasUrl, payload);
+      answered = true;
       if (data.code === 'MUST_CHANGE') {
         state.mustChange = true; $('newPwBox').hidden = false; $('newPw').focus();
         msg.textContent = data.message; return;
@@ -118,18 +120,28 @@
       if (!data.ok) { msg.textContent = data.message || '登入失敗／ဝင်ရောက်မှု မအောင်မြင်'; msg.className = 'sub err'; return; } // 0.4.94 中2 加緬文
       // 0.4.91 高1：rememberServer 改成一定要帶金鑰、而且要等於現在登入的 → 先寫好這次登入，再存登入回應（用這次拿到的金鑰）
       if (typeof tagOwner === 'function') await tagOwner(); // R24-1（抽函式跑的舊測試沒有它）
-      await Store.setMeta('config', { gasUrl: FARM_CONFIG.gasUrl, deviceKey: data.deviceKey, name: data.name, account: data.account, role: data.role });
-      await Store.setMeta('loginLost', null); state.loginLost = null; // 0.4.91 中4：重新登入了，先前延後的登入失效作廢
-      await rememberServer(data, sentAt, data.deviceKey);
       // 第 1 期留下、沒有標帳號的待傳資料：歸給這支手機升級後第一個登入的人並標上帳號，
       // 之後換別人登入會被擋，不會記到別人名下（2026-11-11 GPT-6.1 審查 G03）
+      // 0524R1-1（GPT 中）：改在寫登入設定「之前」標。標到一半失敗（空間不足）→ 整個登入不算成功（還沒有登入設定，不會同步），
+      //   畫面說手機存資料失敗；已標好的歸這個人（換別人登入會被擋），沒標到的下次登入再標，不會被別的帳號帶走
       for (const v of await Store.allVisits()) if (v.status === 'pending' && !v.account) { v.account = data.account; await Store.putVisit(v); }
+      await Store.setMeta('config', { gasUrl: FARM_CONFIG.gasUrl, deviceKey: data.deviceKey, name: data.name, account: data.account, role: data.role });
+      await Store.setMeta('loginLost', null); state.loginLost = null; // 0.4.91 中4：重新登入了，先前延後的登入失效作廢
+      // 0.5.24（第21任抓BUG）：登入已經成功、金鑰也存好了，接著存客戶清單等資料失敗（多半是空間不足）
+      // → 照樣進首頁、跳提示，不停在登入頁讓業務一直重按（每按一次後台就多發一把金鑰）；同步時會再抓一次
+      const warn = (typeof FarmCore !== 'undefined' && FarmCore.SYNC_WARN) || '同步資料寫回手機失敗（可能空間不足），稍後再同步';
+      let loginWarn = '';
+      try { await rememberServer(data, sentAt, data.deviceKey); } catch (e) { loginWarn = warn; }
       ['pw', 'newPw', 'newPw2'].forEach(id => { $(id).value = ''; }); // 密碼不留在畫面上
       state.mustChange = false; $('newPwBox').hidden = true;
       showHome();
+      if (loginWarn) toast('已登入。' + loginWarn);
       syncNow();
     } catch (err) {
-      msg.textContent = '連不上伺服器，第一次登入需要網路／ဆာဗာနှင့် မချိတ်နိုင်ပါ၊ ပထမအကြိမ် ဝင်ရန် အင်တာနက်လိုသည်'; msg.className = 'sub err';
+      msg.textContent = answered
+        ? '手機存資料失敗（可能空間不足），請先清出空間再登入／ဖုန်းထဲ သိမ်းမရပါ၊ နေရာလွတ် လုပ်ပြီး ပြန်ဝင်ပါ'
+        : '連不上伺服器，第一次登入需要網路／ဆာဗာနှင့် မချိတ်နိုင်ပါ၊ ပထမအကြိမ် ဝင်ရန် အင်တာနက်လိုသည်';
+      msg.className = 'sub err';
     } finally {
       $('loginBtn').disabled = false;
     }
@@ -175,21 +187,31 @@
     let sid = '', sidText = null; // 0.5.19 B3：sidText＝這個送出代號上次送出的內容（沒送過是 null）
     const newSid = () => 'fb_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
     const close = () => { box.hidden = true; };
-    state.resetFeedback = () => { txt.value = ''; sid = ''; sidText = null; hint.textContent = ''; close(); }; // 0.5.16：登出時清草稿
-    btn.addEventListener('click', () => { box.hidden = false; hint.textContent = ''; hint.className = 'sub'; if (!sid) { sid = newSid(); sidText = null; } txt.focus(); });
+    // 0.5.24（第21任抓BUG）：草稿記下是誰寫的；另一個分頁換了帳號再回來按送出 → 不用新帳號送（比照 0.5.23 拜訪存檔的表單主人）
+    let author = '';
+    const curCfg = async () => { try { const c = await Store.getMeta('config'); return c && c.deviceKey && c.account ? c : null; } catch (e) { return null; } };
+    const curAccount = async () => { const c = await curCfg(); return c ? String(c.account) : ''; };
+    state.resetFeedback = () => { txt.value = ''; sid = ''; sidText = null; author = ''; hint.textContent = ''; close(); }; // 0.5.16：登出時清草稿
+    btn.addEventListener('click', async () => { box.hidden = false; hint.textContent = ''; hint.className = 'sub'; if (!sid) { sid = newSid(); sidText = null; } txt.focus(); if (!author || !txt.value.trim()) author = await curAccount(); }); // 框是空的＝新的一則，照現在登入的人
     $n('feedbackCancel').addEventListener('click', close);
     box.addEventListener('click', e => { if (e.target === box) close(); });
     send.addEventListener('click', async () => {
       const text = txt.value.trim();
       if (!text) { hint.textContent = '請先寫建議內容／အကြံပြုချက် ရေးပါ'; hint.className = 'sub err'; return; }
+      const cfgNow = await curCfg(); // 0524R1-2（GPT 中）：比對和送出用同一份登入設定（同一把金鑰）
+      // 0524R2-2（GPT 中）：讀不到登入設定（讀取失敗、沒登入、缺帳號或金鑰）→ 不送、字留著；不退回讓 gasCall 另讀（中間可能換人）
+      if (!cfgNow) { hint.textContent = '讀不到登入資料，這次沒有送出（字留著）；請確認已登入再按送出／ဝင်ရောက်မှု မတွေ့ပါ၊ ထပ်ပို့ပါ'; hint.className = 'sub err'; return; }
+      const nowAcct = String(cfgNow.account);
+      if (!author) author = nowAcct;
+      if (author && nowAcct && nowAcct !== author) { hint.textContent = '這則建議是「' + author + '」寫的，現在登入的是「' + nowAcct + '」，這次沒有送出（字留著）；請用 ' + author + ' 登入再送／' + author + ' ဖြင့် ဝင်ပြီး ပို့ပါ'; hint.className = 'sub err'; return; }
       // 0.5.19 B3（第18任抓BUG）：上次沒確定送出（逾時等）、改了字再送 → 換新代號（後台看代號擋重複，同代號只留第一版）；沒改字照用舊代號，不會多一則
       if (!sid || (sidText !== null && sidText !== text)) sid = newSid();
       sidText = text;
       send.disabled = true; hint.className = 'sub'; hint.textContent = '送出中…／ပို့နေသည်';
       let r = null;
-      try { r = await gasCall({ action: 'feedback', text, sid, appVersion: String((typeof FARM_CONFIG !== 'undefined' && FARM_CONFIG.appVersion) || '') }); } catch (e) { r = null; }
+      try { r = await gasCall({ action: 'feedback', text, sid, appVersion: String((typeof FARM_CONFIG !== 'undefined' && FARM_CONFIG.appVersion) || '') }, cfgNow); } catch (e) { r = null; }
       send.disabled = false;
-      if (r && r.ok) { txt.value = ''; sid = ''; sidText = null; close(); toast('已送出，謝謝你的建議／ပို့ပြီးပါပြီ၊ ကျေးဇူးတင်ပါသည်'); return; }
+      if (r && r.ok) { txt.value = ''; sid = ''; sidText = null; author = ''; close(); toast('已送出，謝謝你的建議／ပို့ပြီးပါပြီ၊ ကျေးဇူးတင်ပါသည်'); return; }
       hint.className = 'sub err';
       hint.textContent = r && r.offline ? '沒有網路，連上網路再按一次送出（字會留著）／အင်တာနက် ချိတ်ပြီး ထပ်ပို့ပါ'
         : (r && r.message) || '沒有送出去，請再按一次（字會留著）／ထပ်နှိပ်ပါ';
@@ -628,7 +650,10 @@
      「我的進度」按「看試作報告」才向後台拿清單（要有網路；不在每次畫首頁時自動拿，省流量）；有 Word 的按一下下載
      業務BUG#3（2號小助手 2026-11-12）：原本直接 fetch 沒上限，緬甸網路「不回也不斷」時按鈕一直停在「存檔中…」→ 加逾時 20 秒（Word 檔 60 秒） */
   async function gasCall(payload) {
-    const cfg = await getConfig();
+    // 0524R1-2：第二個參數（可不給）＝呼叫的人已經核對過的登入設定（提供建議比對作者）→ 用那一份的金鑰，不再另讀（中間換人會錯送）。
+    //   函式開頭那行不改：很多舊測試照這一行抓函式
+    const useCfg = arguments.length > 1 ? arguments[1] : undefined;
+    const cfg = useCfg || await getConfig();
     if (!cfg || !cfg.deviceKey || (typeof navigator !== 'undefined' && navigator.onLine === false)) return { ok: false, offline: true };
     // 1號第2任 0.4.73 讀碼中1（第8任）：照片、錄音（myFile）用 base64 傳，長錄音在緬甸網路 20 秒常傳不完 → 跟報告檔一樣給 60 秒
     const ms = payload && payload.action === 'farmerReport' ? 150000 : payload && (payload.action === 'trialReportFile' || payload.action === 'myFile' || payload.action === 'plantSave') ? 60000 : 20000; // 0.4.94 中4：種植資料存檔 20 秒不夠，改 60 秒 // 0.4.77 種植紀錄 Word 含全部照片，給 120 秒
@@ -2789,11 +2814,13 @@
     state.recStarting = true;
     if (typeof refreshSave === 'function') refreshSave(); // R32 待確認 1（GPT）：錄音啟動中儲存鈕馬上停用
     let stream, rec;
-    const gen = state.formGen;
+    const gen = state.formGen, view0 = state.view; // 0.5.24：也記下按錄音時在哪個畫面
     try {
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
       catch (e) { toast('沒有麥克風權限，請到瀏覽器設定允許麥克風／မိုက်ခရိုဖုန်း ခွင့်ပြုချက် ပေးပါ'); return; }
       if (gen !== state.formGen) { stream.getTracks().forEach(t => t.stop()); return; } // 等權限的途中已經換客戶、回首頁：不開
+      // 0.5.24（第21任抓BUG）：等權限的途中登入失效跳到登入頁（表單沒換世代）→ 畫面已經不是按錄音時那頁，不開、把麥克風放掉
+      if (state.view !== view0) { stream.getTracks().forEach(t => t.stop()); return; }
       // R31 待確認 1（GPT）：等麥克風權限的途中按了儲存（存檔中鎖住拍照、錄音）→ 權限回來也不開錄音、把麥克風放掉，免得錄到一半表單被存走、清掉
       if (state.mediaLocked) { stream.getTracks().forEach(t => t.stop()); toast('正在存檔，這次沒有開始錄音；存好後再按錄音／သိမ်းနေသည်'); return; }
       try { rec = new MediaRecorder(stream); }
@@ -3388,7 +3415,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.23'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = '0.5.24'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
