@@ -119,10 +119,12 @@
       b.addEventListener('pointerenter', () => { if (drawing) add(Number(b.dataset.i)); });
       b.addEventListener('click', e => { if (e.detail === 0) add(Number(b.dataset.i)); }); // 鍵盤（Enter／空白鍵）
     });
-    const up = () => { if (drawing && stroke >= 2 && seq.length >= MIN_POINTS) finish(); else drawing = false; };
+    // 第26任：滑了 2 點以上卻不到 4 點就放開＝畫失敗的一筆 → 清掉重來（原本點留在格子上，下一次畫變成「殘點＋新圖形」被判錯、錯誤次數 +1）。一顆一顆點（每筆 1 點）不受影響
+    const up = () => { if (drawing && stroke >= 2 && seq.length >= MIN_POINTS) finish(); else { if (drawing && stroke >= 2) { seq = []; paint(); } drawing = false; } };
     // 第25任 審查②：box 每次上鎖都是同一個元素，原本每畫一次就多掛一組 pointerup → 只綁一次，換成呼叫這一次的處理函式
+    // 第26任：放開、取消改掛在整頁 document——按下時已放掉指標鎖定，手指在九宮格外面放開，九宮格收不到放開（畫面沒反應、再畫一次也一樣）
     box._up = up; box._cancel = () => { drawing = false; };
-    if (!box._bound) { box._bound = true; box.addEventListener('pointerup', () => box._up()); box.addEventListener('pointercancel', () => box._cancel()); }
+    if (!box._bound) { box._bound = true; document.addEventListener('pointerup', () => box._up()); document.addEventListener('pointercancel', () => box._cancel()); }
     box.querySelector('[data-ok]').addEventListener('click', finish);
     return { reset() { seq = []; drawing = false; paint(); } };
   }
