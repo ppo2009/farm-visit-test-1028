@@ -60,14 +60,25 @@
     return {
       getConfig,
       getMinutes: async () => { const h = await Store.getMeta('home'); return h && h.unlockMin; }, // 後台「解鎖逾時分鐘」隨首頁資料同步下來；沒有用 10
+      getEnabled: async () => { const h = await Store.getMeta('home'); return !(h && h.unlockOn === false); }, // 第24任 第六批：設定分頁「解鎖功能」總開關（沒同步過當開）
       toast: m => toast(m),
       // 九宮格錯 5 次、或按「用密碼重新登入」：跟登入失效一樣只清掉金鑰回登入頁，沒上傳的拜訪留在手機裡，同一人登入後再送
-      lockout: async msg => { const c = await getConfig(); if (typeof tagOwner === 'function') await tagOwner(); await Store.setMeta('config', { gasUrl: (c || {}).gasUrl }); showLogin(msg); }
+      lockout: async msg => {
+        const c = await getConfig();
+        // 第24任 第六批（老闆問：錯 5 次會不會丟資料）：正在填、還沒儲存的表單比照「登入失效」——先讓業務存進手機，離開打卡畫面才回登入頁（已儲存的本來就不會丟）
+        if (state.view === 'visit' && typeof formDirty === 'function' && formDirty() && c && c.deviceKey) {
+          state.loginLost = { key: c.deviceKey, msg }; await Store.setMeta('loginLost', { key: c.deviceKey, msg });
+          toast(msg + '。正在填的這一筆請先儲存，回首頁後要用密碼重新登入'); return;
+        }
+        if (typeof tagOwner === 'function') await tagOwner(); await Store.setMeta('config', { gasUrl: (c || {}).gasUrl }); showLogin(msg);
+      }
     };
   }
 
   function show(view) {
     state.view = view;
+    if (document.body && document.body.dataset) document.body.dataset.view = view; // 第24任 第六批①⑱
+    const hh = document.getElementById('homeHdr'); if (hh) { hh.classList.remove('open'); const mb = document.getElementById('menuBtn'); if (mb) mb.setAttribute('aria-expanded', 'false'); }
     ['setup', 'home', 'visit'].forEach(v => { $(v).hidden = v !== view; });
     $('logoutBtn').hidden = view === 'setup';
     const fb = document.getElementById('feedbackBtn'); if (fb) fb.hidden = view === 'setup'; // 0.5.03 舊頁面沒有這個鈕就不管
@@ -98,6 +109,7 @@
   async function onLoginInner() {
     const msg = $('setupMsg');
     const account = $('acct').value.trim(), password = $('pw').value;
+    if (!account || !password) { msg.innerHTML = (!account ? '請輸入帳號 အကောင့်' : '請輸入密碼 စကားဝှက်') + '<span class="my" data-tr="待譯"></span>'; msg.className = 'sub err'; $(!account ? 'acct' : 'pw').focus(); return; } // 第24任 第六批⑲（「帳號」「密碼」緬文沿用欄位標籤；句子緬文等譯者）
     const payload = { action: 'login', account, password, deviceId: deviceId(), ask: (typeof FarmCore !== 'undefined' && FarmCore.buildAsk) ? await FarmCore.buildAsk() : undefined }; // R20：登入回應的客戶、試作也只帶這支手機問過的臨時編號
     if (state.mustChange) {
       const np = $('newPw').value, np2 = $('newPw2').value;
@@ -1263,6 +1275,12 @@
   }
 
   async function renderHome(inner) {
+    // 第24任 第六批：首頁重畫（開首頁、同步完成）時看總開關、環境（原本掛在 showHome，但同步完只呼叫 renderHome，瀏覽器流程抓到）
+    if (inner !== HOME_INNER) {
+      if (typeof FarmLock === 'object' && FarmLock.refresh) FarmLock.refresh(lockHooks()).catch(() => {}); // 第24任 第六批：總開關（同步到「關」就自動解開）
+      if (typeof paintEnvFoot === 'function') paintEnvFoot().catch(() => {}); // 第24任 第六批⑳
+      if (typeof paintRejected === 'function') paintRejected().catch(() => {}); // 第24任 第七批 C：主管退回的結案
+    }
     // R13-03（GPT 中）：同一時間只跑一次首頁重畫——正在畫時又被叫（連點月份、返回、同步通知），記「畫完再畫一次」，畫完照最新狀態重畫一次；
     // 不會再有較舊的重畫在等待後蓋掉較新的（R12-02 的序號只在後段檢查，前段日程、目標仍可能被舊的蓋掉）
     // R14-03（GPT 中）：外層排隊、內層（inner＝HOME_INNER）才真的畫。所有呼叫拿到同一個「整段排隊」的承諾——包含自己要求的補畫，
@@ -1616,6 +1634,11 @@
       if (locked) { b.disabled = true; b.classList.add('locked'); b.title = '從首頁選的類別，不能切換'; }
       b.addEventListener('click', () => { if (locked) return; state.catManual = true; setCat(b.dataset.setcat); });
     });
+    // 第24任 第六批⑦（tomtom 實測：鎖住的「試作／推廣」看起來可以按）：其他類別都不能切時，鎖住的不顯示，選中的那一個改成標題樣子，下面寫怎麼換
+    const sw = $('catSwitch'), others = [...sw.querySelectorAll('[data-setcat]')].filter(b => b.getAttribute('aria-pressed') !== 'true');
+    const allLocked = others.length > 0 && others.every(b => b.classList.contains('locked'));
+    sw.classList.toggle('alllocked', allLocked);
+    if (allLocked && typeof document !== 'undefined' && document.createElement) { const h = document.createElement('small'); h.className = 'sub cathint'; h.innerHTML = '要換類別，請回首頁重新選<span class="my" data-tr="待譯"></span>'; sw.appendChild(h); }
   }
   /** 換類別：同一組農民（一般／試作／推廣）客戶清單一樣，只重算試作區；盤商↔種子商客戶清單不同，要重讀 */
   async function setCat(cat) {
@@ -1726,6 +1749,9 @@
       (closing ? '' : `<option value="__new">${isDealerCat() ? `＋ 新增${state.cat}（${CAT_MY[state.cat]} အသစ်）` : '＋ 新增農民（ လယ်သမား အသစ် ）'}</option>`);
     if (keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
     state.allCustomers = all;
+    // 第24任 第六批④：搜尋用的資料（名字、代碼、村、鎮、地區）；「＋新增」按鈕跟著選單有沒有新增那一項
+    state.farmerPick = mine.map(f => ({ id: String(f.id), name: String(f.name || ''), sub: [f.id, f.village, f.town, f.area ? regionEn(String(f.area).trim()) : ''].filter(Boolean).join('｜'), key: [f.name, f.id, f.village, f.town, f.area].join(' ').toLowerCase() }));
+    if (typeof paintFarmerPick === 'function') paintFarmerPick();
   }
 
   // 0.4.71 董事長截圖：地區旁加「鎮」「村」（業務手打；0.4.75 原本叫「鄉」改叫「村」、鎮在前）；「使用肥料」改叫「其他」（資料照存使用肥料欄）；一般／試作／推廣農民、盤商、種子商都要有
@@ -2309,6 +2335,7 @@
     const slot = plantFailOn() ? $('plantFailSlot') : closeFailOn() ? $n('closeFailSlot') : $('trialEndForm');
     if (box.parentElement !== slot) slot.appendChild(box);
     box.hidden = !(plantFailOn() || closeFailOn() || (state.trialMode === 'end' && $('tOutcome').value === '失敗'));
+    const cbx = typeof document !== 'undefined' && document.getElementById && document.getElementById('closeBox'); if (cbx && cbx.classList) cbx.classList.toggle('failed', !!closeFailOn()); // 第24任 第六批⑪
   }
   /** 結案畫面：查這位農民有沒有進行中的試作（先）或推廣，有就顯示結果欄（必填） */
   async function refreshCloseTrial() {
@@ -2426,6 +2453,7 @@
     const lab = $n('dcSignedLab'), cb = $n('dcSigned');
     lab.hidden = !dealerSignShown();
     $n('dcSignNote').hidden = !(dealerSignBase() && !dealerIsMine()); // 0.4.80 別人負責的：說清楚為什麼沒有「已簽約」
+    const sh = typeof document !== 'undefined' && document.getElementById ? document.getElementById('signHint') : null; if (sh) sh.hidden = !state.signOnly; // 第24任 第六批⑫
     if (state.signOnly) { cb.checked = !lab.hidden; cb.disabled = true; } else cb.disabled = false; // 0.4.82 結案分頁進來：有見到就自動勾「已簽約」、不能取消（一定走簽約）
     if (lab.hidden) cb.checked = false; // 換成農民、沒見到、換人：勾選一起取消
     if (state.dealerClose) return; // 舊的結案模式自己管結案框
@@ -2653,6 +2681,7 @@
     }
     state.closeGroup = ''; state.closeNext = true; state.signNext = true; state.lockNext = true;
     await openVisit(cat);
+    const vt = typeof document !== 'undefined' && document.getElementById ? document.getElementById('visitTitle') : null; if (vt) vt.textContent = `${cat}結案（簽約） ပိတ်သိမ်း`; // 第24任 第六批⑫：不再像一般拜訪頁（抽函式跑的舊測試沒有 $）
     refreshDealerSign(); refreshSave();
   }
   function collectClosing() {
@@ -2805,16 +2834,24 @@
       // 0526 H4（第21任）：拍照的背景補抓還沒回來、又按「重新定位」——①較早那次先失敗：較晚那次還在抓，不能先寫「抓不到」（等最後一次決定）；
       //   ②較早那次先抓到、最後一次失敗：手上已經有位置（存檔會帶這個座標），畫面不能改成「抓不到、會標記無定位」
       if (state.gps || seq < (Number(state.gpsSeq) || 0)) { done(); return; }
-      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
       box.innerHTML = err.code === 1
-        ? '📍 <b style="color:var(--chili)">定位被關掉了 တည်နေရာ ပိတ်ထားသည်</b>，打卡會標記「無定位」。' + (isIOS
-          ? '請到 iPhone「設定 → 隱私權與安全性 → 定位服務」打開，並把「Safari 網站」（或 Chrome）設成「使用 App 期間」，再回來按「重新定位」。'
-          : '請按網址列左邊的圖示 →「權限」→ 允許「位置」，並確認手機的定位服務是開的，再按「重新定位」。')
+        ? '📍 <b style="color:var(--chili)">定位被關掉了 တည်နေရာ ပိတ်ထားသည်</b>，打卡會標記「無定位」。' + (typeof geoHelp === 'function' ? geoHelp(navigator.userAgent, typeof isStandalone === 'function' && isStandalone()) : '請到手機設定允許「位置」，再按「重新定位」。') + '<span class="my" data-tr="待譯"></span>' // 第24任 第六批②：依手機、開法給步驟（緬文等譯者）
         : '📍 抓不到位置（可能訊號不好），仍可儲存，會標記「無定位」。可以到空曠處按「重新定位」。／တည်နေရာ မရပါ၊ သိမ်းနိုင်သည်။ ကွင်းပြင်တွင် ပြန်ရှာပါ။';
       done();
     }, { enableHighAccuracy: true, timeout: keep ? 15000 : 30000, maximumAge: keep ? 0 : 60000 })); // 0.5.20 E2：補抓不收快取的舊位置
   }
 
+  /** 第24任 第六批②：主畫面 App（沒有網址列）還是瀏覽器 */
+  function isStandalone() { try { return !!((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone); } catch (e) { return false; } }
+  /** 第24任 第六批②（tomtom 實測：說明只有一種、寫「網址列」但主畫面 App 沒有網址列）：定位被關時，依 iPhone／Android、瀏覽器／主畫面 App 給步驟 */
+  function geoHelp(ua, standalone) {
+    const ios = /iphone|ipad|ipod/i.test(ua || ''), android = /android/i.test(ua || ''), chrome = /CriOS|Chrome\//.test(ua || '');
+    if (ios) return '請到 iPhone「設定」→「隱私權與安全性」→「定位服務」打開，往下找到' + (standalone ? '「Safari 網站」' : chrome ? '「Chrome」' : '「Safari 網站」') + '設成「使用 App 期間」' + (standalone ? '，再把田間打卡關掉重開' : '') + '，回來按「重新定位」。';
+    if (android) return standalone
+      ? '請長按手機主畫面上的「田間打卡」圖示 →「應用程式資訊」（或「網站設定」）→「權限」→「位置」改成允許；也確認手機上方下拉的「定位」是開的，再回來按「重新定位」。'
+      : '請按網址列左邊的圖示（鎖頭或調整圖示）→「權限」→「位置」改成允許；也確認手機上方下拉的「定位」是開的，再按「重新定位」。';
+    return '請到瀏覽器的網站設定，把這個網站的「位置」改成允許，並確認手機的定位服務是開的，再按「重新定位」。';
+  }
   /* ───── 照片：讀拍攝時間與照片定位、壓縮、印浮水印 ───── */
   /** 讀 JPEG 的拍攝時間（0x9003）和 GPS；讀不到的欄位就是 null */
   function exifInfo(buf) {
@@ -2995,6 +3032,7 @@
     $('thumbs').innerHTML = state.photos.map((p, i) => `<div class="thumb"><img src="${state.thumbUrls[i]}" alt="照片 ${i + 1}"><span class="tag">${p.source === '相簿' ? '相簿 ဓာတ်ပုံ' : '相機 ကင်မရာ'}</span><button type="button" class="del" data-i="${i}" aria-label="刪掉這張">×</button></div>`).join('');
     $('thumbs').querySelectorAll('.del').forEach(b => b.addEventListener('click', () => { state.photos.splice(Number(b.dataset.i), 1); renderThumbs(); refreshSave(); }));
     $('photoBtn').classList.toggle('done', state.photos.some(p => p.source === '相機'));
+    const ag = typeof document !== 'undefined' && document.getElementById && document.getElementById('againBtn'); if (ag) ag.hidden = !state.photos.some(p => p.source === '相機'); // 第24任 第六批⑮
     $('albumBtn').classList.toggle('done', state.photos.some(p => p.source === '相簿'));
     if (typeof refreshStage === 'function') refreshStage(); // 0.4.78 有照片才出現生長階段（舊測試只抽 renderThumbs，沒有這個函式時略過）
   }
@@ -3167,6 +3205,7 @@
     $('note').placeholder = noteExample().join('\n'); // 範例跟著農民進度換
     // 0.5.26 生長階段：放在 profileProblem 前面（舊測試 test-073fix1112 檢查這行以 profileProblem() 結尾）；抽函式跑的舊測試沒有 stageProblem
     const tp = noMeetProblem() || trialProblem() || closeProblem() || priceProblem() || (typeof stageProblem === 'function' ? stageProblem() : '') || profileProblem();
+    if (tp && /面積|種植日期/.test(tp) && typeof document !== 'undefined' && document.getElementById) { const pm = document.getElementById('profileMore'); if (pm) pm.open = true; } // 第24任 第六批③：問題在收起來的欄位 → 自動打開
     const signNeed = !!state.signOnly && !dealerSignOn(); // 0.4.82 結案分頁的盤商、種子商結案：一定要走「已簽約」才能送（沒見到、還沒按有見到都不能存）
     const ok = sel && nameOk && !state.rec && !state.recBusy && !state.recStarting && !state.busyPhotos && !tp && (isNew || hasContent) && !signNeed && !state.saving; // 業務BUG#4：存檔途中（等定位最多 15 秒）不能再按
     $('saveBtn').disabled = !ok;
@@ -3662,6 +3701,7 @@
     $('syncBadge').hidden = false;
     $('syncBadge').className = 'syncbadge ' + (left || rejected ? 'wait' : 'ok');
     $('syncBadge').textContent = left ? `⏳ ${pending.length + ticks} 筆沒上傳 မတင်ရသေး` : rejected ? `⚠ ${rejected} 筆被拒 ပယ်ခံရ` : '✓ 都上傳了 တင်ပြီး';
+    const hw = typeof document !== 'undefined' && document.getElementById ? document.getElementById('hdrWait') : null; if (hw) { hw.hidden = !(left || rejected); hw.textContent = left ? `⏳ ${pending.length + ticks} 筆沒上傳` : rejected ? `⚠ ${rejected} 筆被拒` : ''; } // 第24任 第六批①
     $('queueList').innerHTML = all.slice(0, 12).map(v => {
       const d = new Date(Number(v.deviceTime) + 390 * 60000); // 0.5.16 第2輪 低：緬甸時間（下面用 getUTC*），手機時區不是緬甸也不會差一天
       const tag = v.status === 'uploaded' ? '<span class="pill ok">已上傳 တင်ပြီး</span>'
@@ -3732,16 +3772,25 @@
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints) > 1);
     const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
     let iosClosed = false; try { iosClosed = localStorage.getItem('farm-ios-tip') === 'off'; } catch (e) { /* 記不了就每次顯示 */ }
-    $('iosTip').hidden = !(isIOS && !standalone && !iosClosed);
-    const ic = $n('iosTipClose'); if (ic) ic.addEventListener('click', () => { $('iosTip').hidden = true; try { localStorage.setItem('farm-ios-tip', 'off'); } catch (e) { /* 記不了：這次先關 */ } });
+    // 第24任 第六批①：說明預設收起，頂端只留一個 📱 圖示，按了才打開（舊頁面沒有圖示就照舊直接顯示）
+    const icon = typeof document !== 'undefined' && document.getElementById ? document.getElementById('tipIcon') : null; // 抽函式跑的舊測試沒有 document
+    const showTip = (el, want) => { if (!icon) { el.hidden = !want; return; } el.hidden = true; if (want) { icon.hidden = false; icon.dataset.tip = el.id; } };
+    showTip($('iosTip'), isIOS && !standalone && !iosClosed);
+    const ic = $n('iosTipClose'); if (ic) ic.addEventListener('click', () => { $('iosTip').hidden = true; if (icon) icon.hidden = true; try { localStorage.setItem('farm-ios-tip', 'off'); } catch (e) { /* 記不了：這次先關 */ } });
     // 0.4.94 低3（第11任第五輪）：Android 也說明「加到主畫面」（比照 iPhone）；LINE 等 App 內建瀏覽器不顯示（inapp.js 已叫他換 Chrome）；可關閉，記住不再顯示
     {
       const ua = navigator.userAgent || '';
       const inApp = /\bLine\/|FBAN|FBAV|FB_IAB|Messenger|Instagram|MicroMessenger|Zalo|Viber|Telegram|; wv\)/i.test(ua);
       let closed = false; try { closed = localStorage.getItem('farm-android-tip') === 'off'; } catch (e) { /* 記不了就每次顯示 */ }
       const at = $n('androidTip');
-      at.hidden = !(/android/i.test(ua) && !inApp && !standalone && !closed);
-      $n('androidTipClose').addEventListener('click', () => { at.hidden = true; try { localStorage.setItem('farm-android-tip', 'off'); } catch (e) { /* 記不了：這次先關 */ } });
+      const hide = !(/android/i.test(ua) && !inApp && !standalone && !closed);
+      const ti = typeof document !== 'undefined' && document.getElementById ? document.getElementById('tipIcon') : null; // 第24任 第六批①：有 📱 圖示就收起來，按圖示才打開
+      if (ti) { at.hidden = true; if (!hide) { ti.hidden = false; ti.dataset.tip = 'androidTip'; } } else at.hidden = hide;
+      $n('androidTipClose').addEventListener('click', () => { at.hidden = true; if (ti) ti.hidden = true; try { localStorage.setItem('farm-android-tip', 'off'); } catch (e) { /* 記不了：這次先關 */ } });
+    }
+    if (icon && !icon.dataset.bound) {
+      icon.dataset.bound = '1';
+      icon.addEventListener('click', () => { const t = document.getElementById(icon.dataset.tip || ''); if (!t) return; t.hidden = !t.hidden; icon.setAttribute('aria-expanded', t.hidden ? 'false' : 'true'); if (!t.hidden && t.scrollIntoView) t.scrollIntoView({ block: 'start' }); });
     }
   }
   /** 背景程式：註冊、有新版時自動更新、背景同步完通知畫面；請瀏覽器別清掉手機資料 */
@@ -3809,12 +3858,87 @@
     el.hidden = !(risky && left > 0);
     const zh = $n('storeWarnZh'); if (zh && !el.hidden) zh.textContent = '⚠ 這支手機的瀏覽器沒有答應長期保存資料，還有 ' + left + ' 筆沒上傳：請盡快連上網路上傳' + (/iphone|ipad|ipod/i.test(navigator.userAgent || '') ? '；iPhone 請把網頁加到主畫面、只從主畫面圖示打開' : '') + '，上傳前不要清除瀏覽器資料。';
   }
+  /** 第24任 第六批⑧：執行任務分頁的區塊可收合（標題當開關，鍵盤 Enter／空白鍵也行），收合狀態存在 localStorage farm-todo-fold */
+  const TODO_FOLD_DEFAULT = { todoPlanGrow: true, mineFarmers: true };
+  function initTodoFold() {
+    if (typeof document === 'undefined' || !document.querySelectorAll) return;
+    let saved = {}; try { saved = JSON.parse(localStorage.getItem('farm-todo-fold') || '{}') || {}; } catch (e) { saved = {}; }
+    document.querySelectorAll('#hp-todo #todoLeft, #hp-todo .msec').forEach(sec => {
+      const head = sec.querySelector('h2, h3'); if (!head || !sec.id) return;
+      sec.classList.add('foldable'); head.classList.add('foldhead'); head.setAttribute('role', 'button'); head.tabIndex = 0;
+      const set = f => { sec.classList.toggle('folded', f); head.setAttribute('aria-expanded', f ? 'false' : 'true'); };
+      set(sec.id in saved ? !!saved[sec.id] : !!TODO_FOLD_DEFAULT[sec.id]);
+      const flip = () => { const f = !sec.classList.contains('folded'); set(f); saved[sec.id] = f; try { localStorage.setItem('farm-todo-fold', JSON.stringify(saved)); } catch (e) { /* 記不了：這次有效 */ } };
+      head.addEventListener('click', e => { if (e.target.closest && e.target.closest('a,button,input,select')) return; flip(); });
+      head.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
+    });
+  }
+  /** 第24任 第六批④：選客戶的搜尋結果與「＋新增」按鈕。搜尋只在選單裡有的客戶中找（結案只列可結案的） */
+  function paintFarmerPick() {
+    if (typeof document === 'undefined' || !document.getElementById) return;
+    const sel = document.getElementById('farmer'), inp = document.getElementById('farmerSearch'), hits = document.getElementById('farmerHits'), nb = document.getElementById('farmerNewBtn');
+    if (!sel || !inp || !hits) return;
+    const has = new Set([...sel.options].map(o => o.value));
+    if (nb) { nb.hidden = !has.has('__new'); nb.firstChild.textContent = isDealerCat() ? '＋ 新增' + state.cat : '＋ 新增農民'; }
+    const q = inp.value.trim().toLowerCase();
+    if (!q) { hits.hidden = true; hits.innerHTML = ''; return; }
+    const list = (state.farmerPick || []).filter(f => has.has(f.id) && f.key.indexOf(q) >= 0).slice(0, 30);
+    hits.hidden = false;
+    hits.innerHTML = list.length ? list.map(f => `<li><button type="button" data-fid="${esc(f.id)}">${esc(f.name)}<span class="sub">${esc(f.sub)}</span></button></li>`).join('')
+      : '<li class="none">找不到「' + esc(inp.value.trim()) + '」' + (has.has('__new') ? '，可以按「＋ 新增」' : '') + '<span class="my" data-tr="待譯"></span></li>';
+  }
+  function bindFarmerPick() {
+    const sel = document.getElementById('farmer'), inp = document.getElementById('farmerSearch'), hits = document.getElementById('farmerHits'), nb = document.getElementById('farmerNewBtn');
+    if (!sel || !inp || !hits) return;
+    const pick = v => { sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true })); inp.value = ''; paintFarmerPick(); };
+    inp.addEventListener('input', paintFarmerPick);
+    hits.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-fid]'); if (b) pick(b.dataset.fid); });
+    if (nb) nb.addEventListener('click', () => pick('__new'));
+  }
+  /** 第24任 第六批⑳（tomtom 實測：正式版頁尾也寫「第 2 期測試版・緬文待校對」）：設定「環境」＝測試才顯示，正式只顯示版本號；沒同步過照舊顯示（看不出是正式） */
+  async function paintEnvFoot() {
+    const t = typeof document !== 'undefined' && document.getElementById ? document.getElementById('testTag') : null; if (!t) return;
+    const h = await Store.getMeta('home'); t.hidden = !!(h && h.env === '正式');
+  }
+  /** 第24任 第七批設計版 C：主管退回的結案（後台 home.rejected）放首頁最上面紅框；點了直接打開那筆結案、帶入上次填的內容 */
+  async function paintRejected() {
+    const box = typeof document !== 'undefined' && document.getElementById ? document.getElementById('rejBox') : null; if (!box) return;
+    const h = await Store.getMeta('home'), list = (h && Array.isArray(h.rejected)) ? h.rejected : [];
+    box.hidden = !list.length; if (!list.length) { box.innerHTML = ''; return; }
+    box.innerHTML = '<h2>主管退回，請修改後重送（' + list.length + '）<span class="my" data-tr="待譯"></span></h2>' + list.map((x, i) => `<button type="button" data-rej="${i}"><b>${esc(x.name || x.cid)}</b>（${esc(String(x.date || '').slice(5))} 送出${x.by ? '，' + esc(x.by) + ' 退回' : ''}）<span class="sub">原因：${esc(x.reason || '主管沒有寫原因')}</span></button>`).join('');
+    box.querySelectorAll('[data-rej]').forEach(b => b.addEventListener('click', () => openRejectedClose(list[Number(b.dataset.rej)])));
+  }
+  async function openRejectedClose(x) {
+    if (!x) return;
+    const all = ((await Store.getMeta('farmers')) || []).concat((await myLocal('localCustomers')) || []);
+    const c = all.find(f => String(f.id) === String(x.cid)) || {};
+    if (x.result || c.type === '盤商' || c.type === '種子商') { // 盤商、種子商：簽約結案
+      await signCloseOpen(c.type === '種子商' ? '種子商' : '盤商');
+    } else { state.closeGroup = ['一般農民', '試作農民', '推廣農民'].indexOf(x.group) >= 0 ? x.group : '一般農民'; state.closeNext = true; await openVisit('結案'); }
+    if (state.view !== 'visit') return;
+    const sel = $('farmer'); if (![...sel.options].some(o => o.value === String(x.cid))) { toast('找不到這位客戶（可能已結束），請聯絡主管'); return; }
+    sel.value = String(x.cid); await onFarmerChange();
+    const put = (id, v) => { const el = $n(id); if (el && v !== '' && v != null && !el.value) el.value = String(v); };
+    if (x.result) put('dcNote', x.closeReason); else { put('cPrice', x.price); put('cYield', x.yield); put('cBuyer', x.buyer); put('cPhone', x.phone); put('cReason', x.closeReason); put('cProgress', x.progress); }
+    refreshSave(); toast('已帶入上次填的內容，照主管說的改好再送：' + (x.reason || ''));
+  }
   /** 首頁：登入登出、建議、拜訪類別卡片與下拉選單、首頁分頁、上傳狀態 */
   function bindHomeMenus() {
     $('loginForm').addEventListener('submit', onLogin);
+    // 第24任 第六批⑨：密碼欄的「👁 顯示」（按一下顯示、再按隱藏）
+    document.querySelectorAll('.pweye').forEach(b => b.addEventListener('click', () => { const i = document.getElementById(b.dataset.for); if (!i) return; const show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.setAttribute('aria-pressed', show ? 'true' : 'false'); b.firstChild.textContent = show ? '🙈 隱藏' : '👁 顯示'; }));
     $('logoutBtn').addEventListener('click', logout);
+    // 第24任 第六批①：☰ 選單（上傳狀態、名字、提供建議、登出、解鎖方式）；點選單外面收起
+    const mb = document.getElementById('menuBtn'), hh = document.getElementById('homeHdr');
+    if (mb && hh) {
+      mb.addEventListener('click', e => { e.stopPropagation(); const open = !hh.classList.contains('open'); hh.classList.toggle('open', open); mb.setAttribute('aria-expanded', open ? 'true' : 'false'); });
+      document.addEventListener('click', e => { if (hh.classList.contains('open') && !hh.contains(e.target)) { hh.classList.remove('open'); mb.setAttribute('aria-expanded', 'false'); } });
+      const hw = document.getElementById('hdrWait'); if (hw) hw.addEventListener('click', () => $('syncBadge').click());
+    }
     const ub = document.getElementById('unlockBtn'); if (ub) ub.addEventListener('click', () => { if (typeof FarmLock === 'object') FarmLock.openSettings(lockHooks()); }); // 第24任 第四批
     initFeedback(); // 0.5.03 提供建議
+    // 第24任 第六批⑧（tomtom 實測：執行任務 6 個區塊、3 個螢幕）：每個區塊按標題可以收合，記在手機；預設收起「主管訂的目標／種植進度」「我負責的客戶」
+    initTodoFold();
     // 第24任 必改第五批：主要文字欄旁加 🎤 語音輸入（瀏覽器不支援就不顯示）。欄位：跟農民聊了什麼、盤商簽約內容、種植失敗原因、提供建議
     if (typeof FarmVoice === 'object') FarmVoice.init({ toast: m => toast(m), isRecording: () => !!(state.rec || state.recStarting || state.recBusy), fields: ['note', 'dcNote', 'fReason', 'feedbackText'] });
     document.querySelectorAll('.cat[data-cat]').forEach(b => b.addEventListener('click', () => openVisit(b.dataset.cat)));
@@ -3877,6 +4001,7 @@
       resetForm(); showHome();
     });
     $('farmer').addEventListener('change', onFarmerChange);
+    bindFarmerPick(); // 第24任 第六批④
     Object.values(PROFILE_INPUTS).forEach(id => $n(id).addEventListener('input', refreshSave)); // 0.4.71 $n：舊頁面沒有新欄位時初始化不中斷
     $n('quickFill').addEventListener('change', applyQuickFill); // 0.4.82 新增時從已結案的舊客戶帶入基本資料
     $('pArea').addEventListener('change', refreshSave);
@@ -3891,6 +4016,7 @@
     ['dcOutcome', 'dcNote'].forEach(id => { $n(id).addEventListener('input', refreshSave); $n(id).addEventListener('change', refreshSave); }); // 0.4.42；低#7（第8任）改 $n：舊頁面沒有這兩格時初始化不中斷
     ['cRegion', 'cPrice', 'cYield', 'cBuyer', 'cPhone'].forEach(id => { $(id).addEventListener('input', refreshSave); $(id).addEventListener('change', refreshSave); });
     $('photoInput').addEventListener('change', e => addPhotos(e.target.files, '相機', $('photoBtn')).finally(() => { e.target.value = ''; }));
+    const again = document.getElementById('againBtn'); if (again) again.addEventListener('click', () => $('photoInput').click()); // 第24任 第六批⑮：再拍一張
     $('albumInput').addEventListener('change', e => addPhotos(e.target.files, '相簿', $('albumBtn')).finally(() => { e.target.value = ''; }));
     $('recBtn').addEventListener('click', toggleRec);
     $('saveBtn').addEventListener('click', save);
@@ -3905,6 +4031,12 @@
       if (cat !== '結案') state.lockNext = true; // 盤商、種子商結案：另一種也鎖
       // 0.4.64（2號 0.4.63 清單中#1）：結案已經是獨立分頁，不再自動帶「我的進度」看過的農民，免得結錯人；進結案畫面再自己選
       await openVisit(cat);
+      // 第24任 第六批⑫（tomtom 實測：沒有可結案的農民仍打開空表單；盤商、種子商卻是提示）：統一——沒有可結案的就回結案分頁、跳同樣的提示
+      if (cat === '結案' && state.closeGroup && ![...$('farmer').options].some(o => o.value && o.value !== '__new' && !o.disabled)) {
+        const g = state.closeGroup; // 清表單會把 closeGroup 清掉，先記下
+        resetForm(); await showHome(); if (typeof setHomeTab === 'function') setHomeTab('close');
+        toast(`你沒有可結案的${g}／မရှိပါ`); return;
+      }
       if (cat !== '結案') { // 0.4.42 盤商、種子商：不換類別，打開結案模式（洽談成功或失敗都送主管審核）
         state.dealerClose = true; state.noMeet = false; $n('dcOutcome').value = ''; $n('dcNote').value = '';
         applyCatLabels(); refreshNoMeet(); refreshSave();

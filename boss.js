@@ -31,7 +31,7 @@
   const md = s => { const d = s2d(s); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
 
   const KEY_NAME = 'farm-boss-key';
-  const MORE_TABS = ['progress', 'map', 'table', 'accounts', 'errors']; // 第24任 必改第二批⑦：錯誤紀錄 // 收在「更多」底下的分頁（2026-11-12 規劃 C）
+  const MORE_TABS = ['progress', 'accounts', 'errors']; // 第24任 第七批：地圖、紀錄表、日曆改在「客戶」「拜訪」裡切換 // 第24任 必改第二批⑦：錯誤紀錄 // 收在「更多」底下的分頁（2026-11-12 規劃 C）
 
   /* ───── 主管網頁中文＋緬文（2026-11-12 董事長；緬文是示意，待校對）─────
      畫面畫好後掃一遍：文字剛好是下表的詞，就在後面補緬文（小字）；輸入框提示也補。不用改每一段畫面程式 */
@@ -281,11 +281,12 @@
     const late = cs.filter(c => dueState(c) === 'late'), due = cs.filter(c => dueState(c) === 'due');
     const weekAgo = addDays(state.data.today, -6);
     const week = state.data.visits.filter(v => v.time.slice(0, 10) >= weekAgo);
+    $('stats').hidden = state.tab !== 'progress'; // 第24任 第七批升級版一-5：「0 逾期」這種統計卡不在首頁佔位置，放到工作進度
     $('stats').innerHTML = [
       ['red', late.length, '逾期未回訪'], ['yel', due.length, '今天該回訪'],
       ['grn', week.length, '近 7 天拜訪次數'], ['', cs.length, '追蹤中的客戶']
     ].map(([k, n, t]) => `<div class="card stat ${k}"><b>${n}</b><span class="sub">${t}</span></div>`).join('');
-    document.querySelectorAll('.tab[data-tab]').forEach(t => t.setAttribute('aria-selected', t.dataset.tab === state.tab));
+    document.querySelectorAll('.tab[data-tab]').forEach(t => t.setAttribute('aria-selected', t.dataset.tab === state.tab || ({ today: 'today', latest: 'visits', trial: 'customers' }[t.dataset.tab] === navGroup(state.tab) && navGroup(state.tab) !== 'more'))); // 第七批：拜訪（卡片／表格／日曆）、客戶（清單／地圖）同一顆亮
     // 「更多」裡的分頁（地圖、紀錄表、進度明細、業務帳號）：選到其中一個時，第二列保持打開
     const inMore = MORE_TABS.indexOf(state.tab) >= 0;
     $('moreTabs').hidden = !(state.moreOpen || inMore);
@@ -301,7 +302,7 @@
     const unread = state.data.role === '總經理' ? Math.max((state.data.briefs || []).filter(b => !b.read).length, Number(state.data.briefUnread) || 0)
       : (state.data.briefs || []).filter(newReply).length;
     $('briefBadge').hidden = !unread; $('briefBadge').textContent = unread ? String(unread) : '';
-    $('panel').innerHTML = ({ today: renderToday, latest: renderLatest, cal: renderCal, trial: renderTrial, map: renderMap, table: renderTable, reports: renderReports, progress: renderProgress, tasks: renderTasks, accounts: renderAccounts, briefs: renderBriefs, errors: renderErrors })[state.tab]();
+    $('panel').innerHTML = segBar() + ({ today: renderToday, overdue: renderOverdue, review: renderReview, moremenu: renderMoreMenu, latest: renderLatest, cal: renderCal, trial: renderTrial, map: renderMap, table: renderTable, reports: renderReports, progress: () => staffCards() + renderProgress(), tasks: renderTasks, accounts: renderAccounts, briefs: renderBriefs, errors: renderErrors })[state.tab](); // 第24任 第七批：今天、逾期、審核、更多（手機）；本月目標、每位業務卡片搬到工作進度
     if (state.tab === 'tasks') bindTasks();
     if (state.tab === 'briefs') bindBriefs();
     if (state.tab === 'accounts') bindAccounts();
@@ -343,7 +344,8 @@
     $('panel').querySelectorAll('[data-filter]').forEach(el => el.addEventListener('change', () => { state.rf[el.dataset.filter] = el.value; render(); }));
     $('panel').querySelectorAll('[data-month]').forEach(el => el.addEventListener('change', () => { state.pm = el.value; render(); }));
     if (state.tab === 'progress') loadProgress(state.pm);
-    if (state.tab === 'today') loadProgress(monthsBack(1)[0]); // 業務卡片的月計劃用本月進度
+    if (state.tab === 'progress') loadProgress(monthsBack(1)[0]); // 業務卡片的月計劃用本月進度（第七批：卡片搬到工作進度）
+    bindNav7(); paintNav7(); // 第24任 第七批
     if (state.tab === 'trial') { loadPhotos(); loadHistory(); }
     // 0.5.18（抓BUG C4）：日曆最少 770 寬，手機上打開只看到上週一到週三 → 橫向捲到「今天」那格
     if (state.tab === 'cal') {
@@ -545,8 +547,279 @@
     return `<h3>每位業務 <span class="sub">（點卡片看這位業務要注意的客戶）</span></h3><div class="staffcards">${staff.map(card).join('')}</div>`;
   }
 
+  /* ───── 第24任 第七批（老闆核准「設計版」＋「升級版」）：主管頁改成「今天」待辦頁、連續審核、精簡拜訪卡片、手機 4 個導覽 ───── */
+  // 導覽分組：手機底部「今天｜拜訪｜客戶｜更多」；電腦頂部 7 個（今天、拜訪、客戶、任務、試作報告、主管匯報、更多）
+  const NAV = { today: ['today', 'overdue', 'review'], visits: ['latest', 'table', 'cal'], customers: ['trial', 'map'], more: ['moremenu', 'tasks', 'reports', 'briefs', 'progress', 'accounts', 'errors'] };
+  const navGroup = t => Object.keys(NAV).find(g => NAV[g].indexOf(t) >= 0) || 'today';
+  const SEGS = { visits: [['latest', '卡片'], ['table', '表格'], ['cal', '日曆']], customers: [['trial', '清單'], ['map', '地圖']] };
+  const MORE_ITEMS = [['tasks', '任務'], ['reports', '試作報告'], ['briefs', '主管匯報'], ['progress', '工作進度'], ['accounts', '業務帳號'], ['errors', '錯誤紀錄']];
+  /** 主管頁設定（後台設定分頁：主管頁還早時間、沒拜訪提醒天數、測試帳號）；舊後台沒送就用預設 */
+  function cfg7() {
+    const c = (state.data && state.data.bossCfg) || {};
+    const idle = Math.round(Number(c.idleDays));
+    return { earlyUntil: /^\d\d:\d\d$/.test(String(c.earlyUntil || '')) ? c.earlyUntil : '10:00', idleDays: idle >= 1 && idle <= 60 ? idle : 3,
+      testAccounts: (Array.isArray(c.testAccounts) ? c.testAccounts : []).map(x => String(x).toLowerCase()) };
+  }
+  /** E：測試帳號（設定分頁「測試帳號」）的業務名字。主管頁預設隱藏他們的拜訪、客戶、結案（右上「顯示測試資料」打開才看） */
+  function testNames() {
+    const t = cfg7().testAccounts; if (!t.length) return {};
+    const m = {}; (state.data.staffList || []).concat(state.data.bossList || []).forEach(s => { if (t.indexOf(String(s.account).toLowerCase()) >= 0) m[s.name] = true; });
+    return m;
+  }
+  const isTestStaff = name => !!testNames()[name];
+  const hideTest = list => (state.showTest ? list : (list || []).filter(x => !isTestStaff(x.staff)));
+  /** D：一筆拜訪的警示標籤（防作弊資訊一個都不少，只是整理成標籤；照片明細在「展開」裡） */
+  function flagsOf(v) {
+    const ck = String(v.check || ''), out = [];
+    const old = (ck.match(/非當下拍攝|非現場即時拍攝/g) || []).length;
+    const m = ck.match(/位置不符（(\d+(?:\.\d+)?) 公尺）/);
+    if (m) { const n = Number(m[1]); out.push({ k: 'loc', txt: '📍 位置不符 ' + (n >= 1000 ? (n / 1000).toFixed(1) + ' 公里' : n + ' 公尺') }); }
+    if (/無定位/.test(ck)) out.push({ k: 'nogps', txt: '📍 無定位' });
+    if (old) out.push({ k: 'old', txt: '📷 ' + old + ' 張非當下拍攝' });
+    if (/照片.{0,8}(無關|不相關)|與田間無關/.test(String(v.issue || '') + String(v.summary || ''))) out.push({ k: 'ai', txt: '🤖 AI：照片與田間無關' });
+    if (/^【簡易翻譯】/.test(String(v.summary || ''))) out.push({ k: 'simple', txt: '🔤 簡易翻譯' });
+    ck.split('｜').map(p => p.trim()).filter(p => p && !/非當下拍攝|非現場即時拍攝|位置不符|無定位|^現場拍攝$|^第\d+張（[^）]*）：/.test(p)).forEach(p => out.push({ k: 'other', txt: '⚠ ' + p.slice(0, 40) }));
+    return out;
+  }
+  const isSuspicious = v => flagsOf(v).some(f => f.k === 'loc' || f.k === 'old' || f.k === 'ai');
+  const SEEN_KEY = 'boss-seen-visits';
+  function seenSet() { try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}') || {}; } catch (e) { return {}; } }
+  function markSeen(id) { const s = seenSet(); s[id] = Date.now(); const keys = Object.keys(s); if (keys.length > 500) keys.sort((a, b) => s[a] - s[b]).slice(0, keys.length - 500).forEach(k => delete s[k]); try { localStorage.setItem(SEEN_KEY, JSON.stringify(s)); } catch (e) { /* 記不了：這次有效 */ } }
+  /** 可疑拜訪：最近 7 天、有位置不符／非當下拍攝／AI 判斷無關、這台電腦還沒按「已看過」的 */
+  function suspiciousList() { const from = addDays(state.data.today, -6), seen = seenSet(); return hideTest(state.data.visits).filter(v => v.time.slice(0, 10) >= from && isSuspicious(v) && !seen[v.id]).sort((a, b) => b.time.localeCompare(a.time)); }
+  function briefUnreadCount() {
+    const d = state.data;
+    return d.role === '總經理' ? Math.max((d.briefs || []).filter(b => !b.read).length, Number(d.briefUnread) || 0) : (d.briefs || []).filter(newReply).length;
+  }
+  const mmNowHM = () => { const t = new Date(Date.now() + 390 * 60000); return String(t.getUTCHours()).padStart(2, '0') + ':' + String(t.getUTCMinutes()).padStart(2, '0'); };
+  const WEEKDAY = '日一二三四五六';
+  /** 升級版一-4「團隊今天」：每位業務今天幾筆、最後拜訪時間；超過 N 天沒拜訪黃底。今天有拜訪的排前面，黃底的排最後 */
+  function teamToday() {
+    const d = state.data, c = cfg7();
+    return (d.staffList || []).filter(s => state.showTest || !isTestStaff(s.name)).map(s => {
+      const vs = d.visits.filter(v => v.staff === s.name), last = vs.map(v => v.time).sort().pop() || '';
+      const idle = last ? daysBetween(last.slice(0, 10), d.today) : null;
+      return { name: s.name, today: vs.filter(v => v.time.slice(0, 10) === d.today).length, last, idle, warn: idle == null || idle >= c.idleDays };
+    }).sort((a, b) => ((b.today > 0) - (a.today > 0)) || (a.warn - b.warn) || (b.today - a.today) || String(b.last).localeCompare(String(a.last)));
+  }
+  /** 升級版一-3「需要你處理」：每列一個數字，點了直接進處理畫面 */
+  function needList() {
+    const d = state.data;
+    const late = active().filter(c => dueState(c) === 'late' && (state.showTest || !isTestStaff(c.staff)));
+    return [
+      { go: 'review:close', n: hideTest(d.closings || []).length, t: '待確認結案' },
+      { go: 'review:sus', n: suspiciousList().length, t: '可疑拜訪', sub: '位置不符／非當下拍攝／AI 判斷照片無關' },
+      { go: 'overdue', n: late.length, t: '逾期沒回訪' },
+      { go: 'overdue', n: Array.isArray(d.harvestSoon) ? hideTest(d.harvestSoon).length : 0, t: '快採收待盯' },
+      { go: 'briefs', n: briefUnreadCount(), t: '未讀主管匯報' }
+    ];
+  }
   function renderToday() {
-    return renderClosings() + renderHarvestSoon() + staffCards() + renderTodayLists();
+    const d = state.data, c = cfg7(), hm = mmNowHM(), dt = s2d(d.today);
+    const greet = hm < '11:00' ? '早安' : hm < '18:00' ? '午安' : '晚安';
+    const team = teamToday(), out = team.filter(x => x.today > 0), idle = team.filter(x => !x.today);
+    const early = hm < c.earlyUntil;
+    const need = needList(), total = need.reduce((s, x) => s + x.n, 0);
+    const staffLink = x => `<a href="javascript:void 0" data-staffv="${esc(x.name)}">${esc(x.name)}</a>`;
+    const hello = `<div class="hello"><b>${greet}，${esc(d.name || '')}</b><span class="sub">${esc(d.today)}（星期${WEEKDAY[dt.getUTCDay()]}）・緬甸時間 ${hm}</span></div>`;
+    const one = `<div class="card oneline"><b>今天 ${out.length}／${team.length} 位業務已出門</b><span class="sub">${!team.length ? '還沒有業務帳號'
+      : early && idle.length ? `還早（緬甸 ${esc(c.earlyUntil)} 前不算沒動）` : idle.length ? '還沒動：' + idle.map(staffLink).join('、') : '大家都出門了'}</span></div>`;
+    const needH = `<section class="need"><h3>需要你處理 <span class="pill ${total ? 'p-red' : 'p-grn'}">${total}</span></h3>${total
+      ? `<ul class="needlist">${need.map(x => `<li${x.n ? '' : ' class="zero"'}><button type="button" data-need="${esc(x.go)}"${x.n ? '' : ' disabled'}><span class="nt">${esc(x.t)}${x.sub ? `<small class="sub">${esc(x.sub)}</small>` : ''}</span><b>${x.n}</b><span class="arr" aria-hidden="true">＞</span></button></li>`).join('')}</ul>`
+      : '<p class="sub allclear">今天沒有要你處理的事</p>'}</section>`;
+    const teamH = `<section class="team"><h3>團隊今天</h3><ul class="teamlist">${team.map(x => `<li${x.warn ? ' class="warn"' : ''}><button type="button" data-staffv="${esc(x.name)}"><span class="nm">${esc(x.name)}${isTestStaff(x.name) ? ' <span class="pill">測試</span>' : ''}</span><span class="nv">${x.today ? `今天 <b>${x.today}</b> 筆・最後 ${esc(x.last.slice(11, 16))}` : x.last ? '最後 ' + esc(x.last.slice(5, 16)) : '還沒有拜訪'}${x.warn ? ` <span class="pill p-yel">${x.idle == null ? '沒有拜訪紀錄' : x.idle + ' 天沒拜訪'}</span>` : ''}</span></button></li>`).join('') || '<li class="empty">還沒有業務帳號</li>'}</ul></section>`;
+    return hello + one + (state.closeMsg ? `<p class="sub" id="closeMsg" aria-live="polite">${esc(state.closeMsg)}</p>` : '') + `<div class="today2">${needH}${teamH}</div>`;
+  }
+  /** 逾期沒回訪、快採收待盯（從「需要你處理」點進來） */
+  function renderOverdue() { return `<p><button class="btn" type="button" data-nav="today">← 回今天</button></p>` + renderHarvestSoon() + renderTodayLists(); }
+  /** 更多（手機）：任務、試作報告、主管匯報、工作進度、帳號、錯誤紀錄；有未讀或待辦顯示紅點數字 */
+  function renderMoreMenu() {
+    const d = state.data, badge = { briefs: briefUnreadCount(), tasks: (d.tasks || []).filter(t => t.status === '待辦' && t.account === d.account).length, errors: (d.errors || []).filter(e => !e.done).length };
+    return `<ul class="moremenu">${MORE_ITEMS.map(([t, n]) => `<li><button type="button" data-nav="${t}"><span>${n}</span>${badge[t] ? `<b class="badge">${badge[t]}</b>` : ''}<span class="arr" aria-hidden="true">＞</span></button></li>`).join('')}</ul>`;
+  }
+  /** 拜訪、客戶分頁上方的切換（卡片／表格／日曆、清單／地圖） */
+  function segBar() {
+    const g = navGroup(state.tab), s = SEGS[g]; if (!s) return '';
+    return `<div class="segs" role="group" aria-label="切換顯示方式">${s.map(([t, n]) => `<button type="button" data-nav="${t}" aria-pressed="${state.tab === t}">${n}</button>`).join('')}</div>`;
+  }
+  /* ───── 升級版二：連續審核（待確認結案、可疑拜訪） ───── */
+  const nfmt = x => (x === '' || x == null ? '' : isFinite(Number(x)) ? Number(x).toLocaleString('en-US') : String(x));
+  const msum7 = m => (m ? [m.variety, m.sampleCount !== '' && m.sampleCount != null ? m.sampleCount + (m.sampleUnit || '') : '', m.weightKg !== '' && m.weightKg != null ? m.weightKg + 'kg' : '', m.husk]
+    .filter(x => x !== '' && x != null).join(' ') + (m.days !== '' && m.days != null ? '・' + m.days + ' 天' : '') : '');
+  /** 結案的分類＋試作／推廣結果（例：推廣農民・推廣成功） */
+  const closeGroupTxt = c => (c.group ? c.group + (c.trialOutcome ? '・' + (c.trialCat || (c.group === '推廣農民' ? '推廣' : '試作')) + c.trialOutcome : '') : '');
+  /** 審核卡上的提醒標籤：客戶已結束、採收量測、分類、結案後還有拜訪（跟舊的待確認清單同一套字） */
+  function closeTags(c) {
+    return (c.custEnded ? ' <span class="pill p-yel">客戶已經是「已結束」：確認＝維持結束，退回＝不記這筆結案（客戶仍是已結束）</span>' : '')
+      + (msum7(c.measure) ? ' <span class="pill p-grn">' + esc(msum7(c.measure)) + '</span>' : '')
+      + (c.after && (c.after.visits || c.after.trials) ? ' <span class="pill p-red">結案之後還有 ' + (c.after.visits || 0) + ' 筆拜訪' + (c.after.trials ? '、' + c.after.trials + ' 件新開始的試作（確認後新試作不會跟著結束）' : '') + '，請先看客戶履歷再決定</span>' : '');
+  }
+  function closeExtra(c) { return [c.result ? esc(c.result) + (c.result === '已簽約' && c.reason ? '｜說明 ' + esc(c.reason) : '') : '', c.region ? '賣到 ' + esc(c.region) : '', c.phone ? '電話 ' + esc(c.phone) : '', c.reason && !c.result ? '原因 ' + esc(c.reason) : '', c.progress ? '進度 ' + esc(c.progress) : ''].filter(Boolean).join('｜'); }
+  /** 確認結案的二次確認：沿用舊清單的後果說明（防按錯的最後一道關），有缺資料再列出缺項（設計版 B） */
+  function confirmText(c, miss) {
+    const signed = c.result === '已簽約', dealer = !!c.result;
+    return '【' + [c.name, c.staff, c.date].filter(Boolean).join('｜') + '】\n' + (signed ? '確認這家店已簽約、結案？' + (c.reason ? '（' + String(c.reason).slice(0, 40) + '）' : '') + '確認後這家店改「已結束」，業務選單不再出現、不能再拜訪。'
+      : dealer ? '確認這家店結案（' + String(c.result).slice(0, 40) + '）？確認後這家店改「已結束」，業務選單不再出現、不能再拜訪。' : '確認這位農民結案？確認後不再提醒回訪，結案前就在進行的試作也會結束。')
+      + (miss.length ? '\n⚠ 這筆缺：' + miss.join('、') : '') + '\n\nပိတ်သိမ်းမှုကို အတည်ပြုမလား။ အတည်ပြုပြီးနောက် ဤဖောက်သည် ပိတ်သိမ်းပြီး ဖြစ်မည်';
+  }
+  function closeMissing(c, v) {
+    const miss = [];
+    const failed = /失敗/.test(String(c.trialOutcome || '')) || /種植失敗/.test(String(c.reason || '')) || (v && v.plantFail);
+    if (c.result) { if (!c.reason) miss.push('簽約內容'); }
+    else if (!failed) { if (c.price === '' || c.price == null) miss.push('價格'); if (c.yield === '' || c.yield == null) miss.push('產量'); if (!c.buyer) miss.push('收購客戶'); }
+    if (!reviewPhotos(c.cid, v).length) miss.push('照片');
+    return miss;
+  }
+  /** 審核卡的照片：這筆的照片；沒有就用這位客戶最近一筆有照片的拜訪（最多 3 張） */
+  function reviewPhotos(cid, v) {
+    if (v && v.photos && v.photos.length) return v.photos.slice(0, 3);
+    const w = visitsOf(cid).find(x => x.photos && x.photos.length); return w ? w.photos.slice(0, 3) : [];
+  }
+  function reviewItems() {
+    const R = state.review; if (!R) return [];
+    return R.kind === 'close' ? R.ids.map(id => (state.data.closings || []).find(c => c.visitId === id)).filter(Boolean)
+      : R.ids.map(id => state.data.visits.find(v => v.id === id)).filter(v => v && !seenSet()[v.id]);
+  }
+  function startReview(kind) {
+    const ids = kind === 'close' ? hideTest(state.data.closings || []).map(c => c.visitId) : suspiciousList().map(v => v.id);
+    state.review = { kind, ids, i: 0, total: ids.length, done: 0, rej: null }; state.tab = 'review'; render();
+  }
+  function renderReview() {
+    const R = state.review, items = reviewItems();
+    if (!R || !items.length) { state.review = null; state.tab = 'today'; return renderToday(); }
+    if (R.i >= items.length) R.i = items.length - 1;
+    const x = items[R.i], close = R.kind === 'close';
+    const v = close ? state.data.visits.find(y => y.id === x.visitId) : x;
+    const cu = custOf(close ? x.cid : x.cid), photos = close ? reviewPhotos(x.cid, v) : (x.photos || []).slice(0, 3);
+    const flags = v ? flagsOf(v) : [];
+    const pos = `${close ? '待確認結案' : '可疑拜訪'} ${R.i + 1}／${items.length}`;
+    const head = close ? `<h2 class="rh">${esc(x.name || '客戶 ' + x.cid)}・${esc(cu.type || x.group || '')}${cu.crop ? '・' + esc(cropText(cu.crop)) : ''}</h2><p class="sub">${esc(x.staff || '業務未填')}・送出 ${esc(x.date || '')}${isTestStaff(x.staff) ? ' <span class="pill">測試</span>' : ''}</p>`
+      : `<h2 class="rh">${esc(x.cat || '')}・${esc(x.name)}</h2><p class="sub">${esc(x.staff)}・${esc(x.time)}</p>`;
+    const cells = close ? `<div class="r4">
+        <div><span class="sub">價格</span><b>${x.price === '' || x.price == null ? '—' : esc(nfmt(x.price)) + ' ' + esc(x.priceUnit || '')}</b></div>
+        <div><span class="sub">產量</span><b>${x.yield === '' || x.yield == null ? '—' : esc(nfmt(x.yield)) + ' ' + esc(x.yieldUnit || '')}</b></div>
+        <div><span class="sub">收購客戶</span><b>${esc(x.buyer || '—')}</b></div>
+        <div><span class="sub">結果</span><b>${esc(x.result || closeGroupTxt(x) || ((v && v.plantFail) ? '種植失敗' : '收成結案'))}</b></div></div>
+      ${closeTags(x) ? `<p class="rtags">${closeTags(x)}</p>` : ''}${closeExtra(x) ? `<p class="sub">${closeExtra(x)}</p>` : ''}` : '';
+    const ph = photos.length ? `<div class="rphotos">${photos.map(id => `<button type="button" class="rthumb" data-photo="${esc(id)}" data-big="${esc(id)}" aria-label="看大圖">讀取中…</button>`).join('')}</div>` : '<p class="sub">（沒有照片）</p>';
+    const fl = flags.length ? `<div class="flags big">${flags.map(f => `<span class="flag f-${f.k}">${esc(f.txt)}</span>`).join('')}</div>` : '';
+    const sum = v && v.summary ? `<p class="rsum"><button class="btn" type="button" data-speak="${esc(v.id)}" aria-label="念中文摘要">🔊</button> ${esc(v.summary)}</p>` : v ? `<p class="sub">${esc(noSummaryText(v))}</p>` : '';
+    const miss = close ? closeMissing(x, v) : [];
+    const missH = miss.length ? `<p class="rmiss">⚠ 缺：${miss.map(esc).join('、')}</p>` : '';
+    const rej = R.rej === (close ? x.visitId : x.id) ? rejectPanel() : '';
+    const btns = close ? `<div class="rbtns"><button class="btn" type="button" data-rv="reject"${state.closeSending ? ' disabled' : ''}>退回（寫原因）</button><button class="btn primary" type="button" data-rv="confirm"${state.closeSending ? ' disabled' : ''}>確認結案</button></div>`
+      : `<div class="rbtns"><button class="btn" type="button" data-rv="ask">派任務追問</button><button class="btn primary" type="button" data-rv="seen">已看過</button></div>`;
+    return `<div class="review" id="reviewCard"><div class="rtop"><button class="btn" type="button" data-rv="exit">← 回今天</button><b>${pos}</b><span><button class="btn" type="button" data-rv="prev" aria-label="上一筆"${R.i ? '' : ' disabled'}>‹</button><button class="btn" type="button" data-rv="next" aria-label="下一筆"${R.i < items.length - 1 ? '' : ' disabled'}>›</button></span></div>
+      <div class="rcard">${head}${cells}${ph}${fl}${sum}${missH}${close ? `<p class="sub"><a href="javascript:void 0" data-go="${esc(x.cid)}">看這位客戶的完整紀錄</a></p>` : `<p class="sub"><a href="javascript:void 0" data-go="${esc(x.cid)}">看這位客戶的完整紀錄</a></p>`}${rej}</div>
+      <p class="sub" id="closeMsg" aria-live="polite">${esc(state.closeMsg || '')}</p>${btns}</div>`;
+  }
+  /** 設計版 C：退回原因面板（常用原因可複選＋自己寫，至少一項） */
+  const REJ_REASONS = ['價格不合理', '缺照片', '照片非現場', '位置不符', '資料不完整', '其他'];
+  function rejectPanel() {
+    return `<fieldset class="rejpanel"><legend>退回原因（至少選一項或寫說明）</legend>${REJ_REASONS.map(r => `<label class="rjc"><input type="checkbox" name="rj" value="${esc(r)}"> ${esc(r)}</label>`).join('')}
+      <textarea id="rejNote" maxlength="300" placeholder="寫給業務看的說明（例：價格比市價低一半，請確認單位）"></textarea>
+      <div class="rbtns"><button class="btn" type="button" data-rv="rejcancel">取消</button><button class="btn primary" type="button" data-rv="rejsend" disabled>送出退回</button></div></fieldset>`;
+  }
+  function bindReview() {
+    const box = $('panel').querySelector ? $('panel').querySelector('#reviewCard') : null; if (!box) return; // 舊測試的假畫面沒有 querySelector
+    const R = state.review, items = reviewItems(), x = items[R.i], close = R.kind === 'close';
+    const go = d => { R.i = Math.max(0, Math.min(items.length - 1, R.i + d)); R.rej = null; state.closeMsg = ''; render(); window.scrollTo(0, 0); };
+    let sx = null; // 左右滑動切換
+    box.addEventListener('touchstart', e => { sx = e.touches[0].clientX; }, { passive: true });
+    box.addEventListener('touchend', e => { if (sx == null) return; const dx = e.changedTouches[0].clientX - sx; sx = null; if (Math.abs(dx) > 60 && !R.rej) go(dx < 0 ? 1 : -1); });
+    const rp = box.querySelector('.rejpanel');
+    if (rp) {
+      const upd = () => { rp.querySelector('[data-rv="rejsend"]').disabled = !(rp.querySelectorAll('input[name=rj]:checked').length || $('rejNote').value.trim()); };
+      rp.addEventListener('change', upd); $('rejNote').addEventListener('input', upd);
+    }
+    box.querySelectorAll('[data-big]').forEach(b => b.addEventListener('click', () => { const src = state.photos[b.dataset.big]; if (src) showBig(src); }));
+    box.querySelectorAll('[data-rv]').forEach(b => b.addEventListener('click', async () => {
+      const a = b.dataset.rv;
+      if (a === 'exit') { state.review = null; state.tab = 'today'; state.closeMsg = ''; render(); return; }
+      if (a === 'prev') return go(-1);
+      if (a === 'next') return go(1);
+      if (a === 'seen') { markSeen(x.id); R.done++; state.closeMsg = '已標「看過」'; render(); return; }
+      if (a === 'ask') { const s = (state.data.staffList || []).find(y => y.name === x.staff); state.tf = { staff: s ? s.account : '', cid: x.cid, text: `請說明 ${x.time.slice(5, 16)} 這筆拜訪：${flagsOf(x).map(f => f.txt.replace(/^\S+ /, '')).join('、')}` }; markSeen(x.id); state.review = null; state.tab = 'tasks'; render(); return; }
+      if (a === 'reject') { R.rej = x.visitId; render(); return; }
+      if (a === 'rejcancel') { R.rej = null; render(); return; }
+      if (a === 'confirm' || a === 'rejsend') {
+        const ok = a === 'confirm', v = state.data.visits.find(y => y.id === x.visitId), miss = ok ? closeMissing(x, v) : [];
+        if (ok && !confirm(confirmText(x, miss))) return;
+        const reasons = ok ? [] : [...box.querySelectorAll('input[name=rj]:checked')].map(i => i.value), note = ok ? '' : $('rejNote').value.trim();
+        box.querySelectorAll('[data-rv]').forEach(y => { y.disabled = true; });
+        state.closeSending = x.visitId;
+        let r;
+        try { r = await api(Object.assign({ action: 'closeDecide', visitId: x.visitId, decision: ok ? 'confirm' : 'reject' }, ok ? {} : { reasons, note })); } catch (e) { r = { ok: false, message: '連不上伺服器' }; } finally { state.closeSending = null; }
+        if (r && r.code === 'DONE_ALREADY') r = Object.assign({}, r, { ok: true, already: true });
+        if (r.closings) setData({ closings: r.closings });
+        R.rej = null;
+        if (r.ok) { R.done++; state.closeMsg = r.already ? '這筆別人已經處理過了，跳下一筆' : ok ? `已確認結案：${x.name}` : `已退回：${x.name}（原因已傳給業務）`; state.closeMsgSeq = state.loadSeq + 1; render(); load(); return; } // closeMsgSeq：緊接著的重讀不清掉訊息（同舊清單 0.4.88 低7）
+        state.closeMsg = '⚠ ' + (r.message || '處理失敗'); render();
+      }
+    }));
+  }
+  function showBig(src) {
+    let d = document.getElementById('bigPhoto');
+    if (!d) { d = document.createElement('div'); d.id = 'bigPhoto'; d.className = 'bigphoto'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', '照片大圖'); d.addEventListener('click', () => { d.hidden = true; }); document.body.appendChild(d); }
+    d.innerHTML = `<img src="${src}" alt="照片大圖"><span class="sub">點一下關閉</span>`; d.hidden = false;
+  }
+  /* ───── 設計版 D：最新拜訪改精簡卡片（一行標題、有問題才出現警示、縮圖一列、摘要 3 行、展開看全部） ───── */
+  function vcard(v) {
+    const f = flagsOf(v), ph = (v.photos || []).slice(0, 4);
+    const chk = String(v.check || '').split('｜').map(s => s.trim()).filter(Boolean);
+    const more = [
+      v.summary ? `<p>${esc(v.summary)}</p>` : '',
+      v.issue ? `<p class="sub">問題：${esc(v.issue)}</p>` : '', v.next ? `<p class="sub">下一步：${esc(v.next)}</p>` : '',
+      chk.length ? `<ul class="sub chk">${chk.map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : '',
+      v.closing ? `<p class="sub">${esc(v.closing)}</p>` : '', v.prices ? `<p class="sub pre">價格：${esc(v.prices)}</p>` : '',
+      v.plantFail ? `<p><span class="pill p-red">種植失敗</span> <span class="sub">${esc(v.plantFail)}</span></p>` : '',
+      v.noMeet ? `<p><span class="pill p-yel">沒拜訪</span> <span class="sub">${esc(v.noMeet)}</span></p>` : '',
+      v.summary ? '' : errDetail(v),
+      v.nav ? `<p><a href="${esc(v.nav)}" target="_blank" rel="noopener">導航 ↗</a></p>` : '', soundBtns(v)].join('');
+    return `<li class="vcard${f.length ? ' hasflag' : ''}"><div class="vh">${catPill(v)}<b><a href="javascript:void 0" data-go="${esc(v.cid)}">${esc(v.name)}</a></b><span class="sub">・${esc(v.staff)}${isTestStaff(v.staff) ? '（測試）' : ''}・${esc(v.time.slice(5, 16))}</span></div>
+      ${f.length ? `<div class="flags">${f.map(x => `<span class="flag f-${x.k}">${esc(x.txt)}</span>`).join('')}</div>` : ''}
+      ${ph.length ? `<div class="vthumbs">${ph.map(id => `<span class="vthumb lazy" data-lazyphoto="${esc(id)}"></span>`).join('')}</div>` : ''}
+      <details class="vmore" data-vid="${esc(v.id)}"${state.openCards && state.openCards[v.id] ? ' open' : ''}><summary class="vsum">${v.summary ? esc(v.summary) : `<span class="sub">${esc(noSummaryText(v))}</span>`} <span class="vexp">展開</span></summary>${more}</details></li>`; // 點摘要本身就展開（不另佔一行）
+  }
+  function renderLatest() {
+    let list = hideTest(state.data.visits).slice().sort((a, b) => b.time.localeCompare(a.time));
+    if (state.vstaff) list = list.filter(v => v.staff === state.vstaff);
+    const nFlag = list.slice(0, 15).filter(v => flagsOf(v).length).length;
+    if (state.onlyFlag) list = list.filter(v => flagsOf(v).length);
+    list = list.slice(0, 15);
+    const tools = `<div class="vtools"><button type="button" class="btn" data-onlyflag aria-pressed="${!!state.onlyFlag}">${state.onlyFlag ? '✓ ' : ''}只看有警示的（${nFlag}）</button>${state.vstaff ? `<button type="button" class="btn" data-vstaffclear>只看 ${esc(state.vstaff)} ✕</button>` : ''}</div>`;
+    return `<section><h3><span class="pill p-grn">最新拜訪</span> <span class="sub">最近 15 筆</span></h3>${tools}<ul class="list vcards">${list.map(vcard).join('') || '<li class="empty">' + (state.onlyFlag ? '最近 15 筆沒有警示' : '還沒有拜訪紀錄。業務用打卡網頁上傳後，這裡就會出現') + '</li>'}</ul></section>`;
+  }
+  /** 縮圖：捲到看得到才下載（15 筆 × 照片一次全抓太慢、太耗流量） */
+  function lazyPhotos(root) {
+    const els = [...root.querySelectorAll('[data-lazyphoto]')]; if (!els.length) return;
+    const fill = async el => { const id = el.dataset.lazyphoto; el.removeAttribute('data-lazyphoto'); const r = await getPhoto(id); if (!el.isConnected) return; if (state.photos[id]) { el.innerHTML = `<img src="${state.photos[id]}" alt="田間照片" loading="lazy">`; el.addEventListener('click', () => showBig(state.photos[id])); } else el.textContent = (r && r.message) || '讀取失敗'; };
+    if (typeof IntersectionObserver === 'undefined') { els.slice(0, 8).forEach(fill); return; }
+    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { io.unobserve(e.target); fill(e.target); } }), { rootMargin: '200px' });
+    els.forEach(el => io.observe(el));
+  }
+  /** 新導覽、今天頁、審核、拜訪卡片的按鈕（render 最後呼叫） */
+  function bindNav7() {
+    const P = $('panel');
+    P.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => { state.tab = b.dataset.nav; state.moreOpen = false; render(); window.scrollTo(0, 0); }));
+    P.querySelectorAll('[data-need]').forEach(b => b.addEventListener('click', () => { const g = b.dataset.need; if (g.indexOf('review:') === 0) startReview(g.slice(7)); else { state.tab = g; render(); window.scrollTo(0, 0); } }));
+    P.querySelectorAll('[data-staffv]').forEach(b => b.addEventListener('click', () => { state.vstaff = b.dataset.staffv; state.onlyFlag = false; state.tab = 'latest'; render(); window.scrollTo(0, 0); }));
+    // 展開的卡片記住（重畫後照樣打開：正在聽錄音、看照片明細時不會被收回去）
+    P.querySelectorAll('details.vmore[data-vid]').forEach(d => d.addEventListener('toggle', () => { state.openCards = state.openCards || {}; if (d.open) state.openCards[d.dataset.vid] = true; else delete state.openCards[d.dataset.vid]; }));
+    P.querySelectorAll('[data-onlyflag]').forEach(b => b.addEventListener('click', () => { state.onlyFlag = !state.onlyFlag; render(); }));
+    P.querySelectorAll('[data-vstaffclear]').forEach(b => b.addEventListener('click', () => { state.vstaff = ''; render(); }));
+    if (state.tab === 'review') { bindReview(); loadPhotos(); }
+    // 設計版 I：表格在窄螢幕變一列一張卡片，每格前面要有欄名 → 沒寫 data-label 的照表頭補上
+    if (P.querySelectorAll) P.querySelectorAll('.tbl table').forEach(t => { const hs = [...t.querySelectorAll('thead th')].map(h => h.textContent.trim()); t.querySelectorAll('tbody tr').forEach(r => [...r.children].forEach((td, i) => { if (!td.dataset.label && hs[i]) td.dataset.label = hs[i]; })); });
+    lazyPhotos(P);
+  }
+  /** 底部（手機）／頂部（電腦）導覽的選取狀態、紅點 */
+  function paintNav7() {
+    const g = navGroup(state.tab), need = state.data ? needList().reduce((s, x) => s + x.n, 0) : 0;
+    document.querySelectorAll('#bnav [data-bnav]').forEach(b => b.setAttribute('aria-current', b.dataset.bnav === g ? 'page' : 'false'));
+    const tb = $('todayBadge'); if (tb) { tb.hidden = !need; tb.textContent = need ? String(need) : ''; }
+    const mb = $('moreBadge'); if (mb) { const n = state.data ? briefUnreadCount() : 0; mb.hidden = !n; mb.textContent = n ? String(n) : ''; }
+    const st = $('showTest'); if (st) { st.hidden = !cfg7().testAccounts.length; st.setAttribute('aria-pressed', String(!!state.showTest)); st.textContent = state.showTest ? '隱藏測試資料' : '顯示測試資料'; }
   }
   /** 0.4.82 董事長「蔬菜快採收前 10 天要提醒業務到現場、通知主管盯業務」：預計採收日（種植日期＋作物生長天數）0～10 天內，或已過還沒結案（紅字）。舊後台沒送就不顯示 */
   function renderHarvestSoon() {
@@ -578,11 +851,7 @@
     return `<section><h3><span class="pill p-red">逾期</span></h3><ul class="list">${late.map(li).join('') || '<li class="empty">沒有</li>'}</ul></section>
       <section><h3><span class="pill p-yel">今天該回訪</span></h3><ul class="list">${due.map(li).join('') || '<li class="empty">沒有</li>'}</ul></section>`;
   }
-  /** 最新拜訪（0.4.28 董事長：總覽一頁不要放太多東西 → 從總覽拆出來成獨立分頁） */
-  function renderLatest() {
-    const recent = state.data.visits.slice().sort((a, b) => b.time.localeCompare(a.time)).slice(0, 15);
-    return `<section><h3><span class="pill p-grn">最新拜訪</span> <span class="sub">最近 15 筆</span></h3><ul class="list">${recent.map(visitItem).join('') || '<li class="empty">還沒有拜訪紀錄。業務用打卡網頁上傳後，這裡就會出現。</li>'}</ul></section>`;
-  }
+  /* 舊的最新拜訪（一筆一大段）第24任第七批 D 改成精簡卡片，見 vcard／renderLatest */
 
   function renderCal() {
     const t = s2d(state.data.today);
@@ -892,8 +1161,16 @@
     const planHtml = list => list.length ? `<div class="plans">${list.map(x => `<span>${esc(x.label)}（${esc(x.period)}）<span class="bar"><i style="width:${Math.max(0, Math.min(100, x.pct))}%"></i></span>${x.done}／${x.target}${x.done >= x.target ? ' <span class="pill p-grn">達成</span>' : ''}${planParts(x)}</span>`).join('')}</div>` : '<span class="sub">沒有目標</span>';
     const cats = ['試作', '推廣', '農戶', '盤商', '種子商']; // 「農戶」顯示成「一般拜訪」；盤商、種子商分開算（2026-11-11 董事長）
     // 0.4.85 中5：各地區表選過去月份時只有拜訪數照月份，客戶數、進行中試作是今天的 → 表頭寫所選月份、那幾欄標（目前）
-    return sel + `<h3>每位業務（${esc(p.label)}）</h3><div class="tbl"><table><thead><tr><th>業務</th><th>拜訪</th>${cats.map(c => `<th>${c === '農戶' ? '一般拜訪' : c}</th>`).join('')}<th>拜訪過的客戶</th><th>新增客戶</th><th>試作 開始／完成</th><th>計劃達成</th></tr></thead><tbody>
-      ${p.staff.map(s => `<tr><td><b>${esc(s.name)}</b></td><td>${s.visits}</td>${cats.map(c => `<td>${s.byCategory[c] || 0}</td>`).join('')}<td>${s.customersVisited}</td><td>${s.newCustomers}</td><td>${s.trialsStarted}／${s.trialsEnded}</td><td>${planHtml(s.plan)}</td></tr>`).join('') || '<tr><td colspan="11" class="empty">沒有業務帳號</td></tr>'}
+    // 第24任 第七批設計版 K：一張全員對照表（一列一人：拜訪、新客戶、試作、三個目標達成率）；全部是 0 的人收到表格下面一行；測試帳號預設不列
+    const ppl = p.staff.filter(x => state.showTest || !isTestStaff(x.name));
+    const zero = x => !x.visits && !x.newCustomers && !x.trialsStarted && !x.trialsEnded && !(x.plan || []).some(y => y.done);
+    const goal = (x, i) => { const g = (x.plan || [])[i]; return g ? `${esc(g.label)} <b>${Math.round(Math.max(0, Number(g.pct) || 0))}%</b>（${g.done}／${g.target}）` : '—'; };
+    const live = ppl.filter(x => !zero(x)), idle = ppl.filter(zero);
+    return sel + `<h3>全員對照（${esc(p.label)}）</h3><div class="tbl"><table><thead><tr><th>業務</th><th>拜訪</th>${cats.map(c => `<th>${c === '農戶' ? '一般拜訪' : c}</th>`).join('')}<th>拜訪過的客戶</th><th>新增客戶</th><th>試作 開始／完成</th><th>目標 1</th><th>目標 2</th><th>目標 3</th></tr></thead><tbody>
+      ${live.map(x => `<tr><td data-label="業務"><b>${esc(x.name)}</b></td><td data-label="拜訪">${x.visits}</td>${cats.map(c => `<td data-label="${c === '農戶' ? '一般拜訪' : c}">${(x.byCategory || {})[c] || 0}</td>`).join('')}<td data-label="拜訪過的客戶">${x.customersVisited}</td><td data-label="新增客戶">${x.newCustomers}</td><td data-label="試作 開始／完成">${x.trialsStarted}／${x.trialsEnded}</td><td data-label="目標 1">${goal(x, 0)}</td><td data-label="目標 2">${goal(x, 1)}</td><td data-label="目標 3">${goal(x, 2)}</td></tr>`).join('') || `<tr><td colspan="13" class="empty">${ppl.length ? '本月大家都還沒有紀錄' : '沒有業務帳號'}</td></tr>`}
+      </tbody></table></div>${idle.length ? `<p class="sub notask">本月尚無紀錄：${idle.map(x => esc(x.name)).join('、')}</p>` : ''}
+      <details class="plandet"><summary>每位業務的目標明細</summary><ul class="list">${ppl.map(x => `<li><b>${esc(x.name)}</b> ${planHtml(x.plan)}</li>`).join('')}</ul></details>
+      <div class="tbl" hidden><table><tbody>
       </tbody></table></div>
       <h3>各地區（${esc(p.label)}）</h3><div class="tbl"><table><thead><tr><th>地區</th><th>農民（目前）</th><th>盤商（目前）</th><th>種子商（目前）</th><th>${Number(state.pm.slice(5))} 月拜訪</th><th>進行中的試作（目前）</th></tr></thead><tbody>      ${p.regions.map(r => `<tr><td>${esc(r.area)}</td><td>${r.customers}</td><td>${r.dealers}</td><td>${r.seeds || 0}</td><td>${r.visits}</td><td>${r.trialsActive}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">還沒有客戶</td></tr>'}
       </tbody></table></div><p class="sub">目標在試算表「計劃」分頁設定：月份空白＝每個月都適用；業務空白＝每位業務各自的目標；指標有拜訪次數、拜訪客戶數、新增客戶、開始試作、完成試作、簽約（盤商、種子商結案「已簽約」；還在等主管確認、被退回的不算；類別空白＝兩種都算）。新增客戶的類別填「農戶」時，會另外列出試作、推廣、一般農民各幾位。</p>`;
@@ -942,9 +1219,9 @@
         // 0.4.94（第11任第五輪 7）：選了業務後，他自己負責的農民排前面（分兩組）
         const selName = ((staff.find(s => s.account === f.staff) || {}).name) || '';
         const fo = c => `<option value="${esc(c.id)}"${f.cid === c.id ? ' selected' : ''}>${esc(c.name)}${c.area ? '｜' + esc(c.area) : ''}${c.staff ? '（' + esc(c.staff) + '）' : ''}</option>`;
-        const own = selName ? farmers.filter(c => c.staff === selName) : [], rest = selName ? farmers.filter(c => c.staff !== selName) : farmers;
-        return `<select id="tFarmer" aria-label="哪一位農民"><option value="">— 選擇農民／လယ်သမား ရွေးပါ —</option>` +
-          (own.length ? `<optgroup label="${esc(selName)} 負責的">${own.map(fo).join('')}</optgroup>${rest.length ? `<optgroup label="其他農民">${rest.map(fo).join('')}</optgroup>` : ''}` : rest.map(fo).join('')) + '</select>';
+        // 第24任 第七批設計版 J：選了業務後只列他負責的農民（原本其他人的也列在後面，名單太長）
+        const own = selName ? farmers.filter(c => c.staff === selName) : farmers;
+        return `<select id="tFarmer" aria-label="哪一位農民"><option value="">${own.length ? '— 選擇農民／လယ်သမား ရွေးပါ —' : '（這位業務沒有負責的農民）'}</option>` + own.map(fo).join('') + '</select>';
       })();
     const form = staff.length || bosses.length ? `<h3>派出任務</h3><form class="taskform" id="taskForm">
         <select id="tStaff" aria-label="派給誰">${bosses.length ? `<optgroup label="業務">${staff.map(opt).join('')}</optgroup><optgroup label="主管">${bosses.map(opt).join('')}</optgroup>` : staff.map(opt).join('')}</select>
@@ -955,14 +1232,16 @@
       : '<p class="empty">還沒有啟用的業務帳號，先在「更多 → 業務帳號」開通。</p>';
     const block = (s, canCancel) => {
       const list = openOf(s.account);
-      return `<h3>${esc(s.name)}（${esc(s.account)}）　<span class="sub">${list.length}／${max} 條沒完成</span></h3><ol class="tasks">${list.map(t => taskLine(t, canCancel)).join('') || '<li class="empty">沒有任務</li>'}</ol>`;
+      if (!list.length) return ''; // 第24任 第七批設計版 J：沒任務的人合成一行（見 noTask）
+      return `<h3>${esc(s.name)}（${esc(s.account)}）　<span class="sub">還有 ${list.length} 件沒做完（每人最多 ${max} 件）</span></h3><ol class="tasks">${list.map(t => taskLine(t, canCancel)).join('')}</ol>`;
     };
     // 收任務的帳號查不到（被改名、刪掉）：只有總經理看得到、能取消（R8-07）
     // 主管BUG#5（1號 0.4.63）：帳號停用的人不在 staffList／bossList，他沒做完的任務原本整條消失、取消不了，卻還佔 10 條上限
     // → 不在名單裡的待辦都列出來：總經理看全部；主管看派給業務的（後台 taskCancel_ 本來就允許主管取消業務的任務）
     const listed = new Set(staff.concat(bosses).map(s => String(s.account)));
     const orphan = tasks.filter(t => t.status === '待辦' && !listed.has(String(t.account)) && (isGM() || t.role === '業務'));
-    const open = staff.map(s => block(s, true)).join('') + (bosses.length ? '<h3>派給主管的任務</h3>' + bosses.map(s => block(s, true)).join('') : '')
+    const noTask = arr => { const z = arr.filter(s => !openOf(s.account).length); return z.length ? `<p class="sub notask">沒有任務：${z.map(s => esc(s.name)).join('、')}</p>` : ''; };
+    const open = staff.map(s => block(s, true)).join('') + noTask(staff) + (bosses.length ? '<h3>派給主管的任務</h3>' + bosses.map(s => block(s, true)).join('') + noTask(bosses) : '')
       + (orphan.length ? `<h3>帳號停用或查不到的人沒做完的任務 <span class="sub">（帳號停用、改名或刪掉；可以按取消，免得佔掉 10 條上限）</span></h3><ol class="tasks">${orphan.map(t => taskLine(t, true).replace('</li>', ` <span class="sub">｜${esc(t.staff)}（${esc(t.account)}）</span></li>`)).join('')}</ol>` : '');
     // 完成清單：主管看不到總經理派給別的主管的任務
     const done = tasks.filter(t => t.status !== '待辦' && (t.role !== '主管' || isGM() || t.account === d.account)).sort((a, b) => String(b.doneAt).localeCompare(String(a.doneAt)));
@@ -1286,11 +1565,11 @@
 
   const VISIT_TABLE_MAX = 500; // 後台 bossData_ 的 visits 只回最近 500 筆（Code.gs slice(-500)），兩邊要一起改
   function renderTable() {
-    const rows = state.data.visits.slice().sort((a, b) => b.time.localeCompare(a.time));
+    const rows = (typeof hideTest === 'function' ? hideTest(state.data.visits) : state.data.visits).slice().sort((a, b) => b.time.localeCompare(a.time)); // 第24任 第七批 E：測試帳號預設不列
     // 0.4.85 中6：後台只給最近 500 筆（slice(-500)）→ 滿 500 筆時說清楚，不讓主管以為全部都在這裡
     const capNote = rows.length >= VISIT_TABLE_MAX ? `<p class="sub">只顯示最近 ${VISIT_TABLE_MAX} 筆，更早的請看客戶履歷或開試算表</p>` : '';
     return capNote + `<div class="tbl"><table><thead><tr><th>拜訪時間</th><th>客戶</th><th>業務</th><th>作物狀況</th><th>問題</th><th>下一步</th><th>狀態</th></tr></thead><tbody>
-      ${rows.map(v => `<tr><td>${esc(v.time)}</td><td><a href="javascript:void 0" data-go="${esc(v.cid)}">${esc(v.name)}</a></td><td>${esc(v.staff)}</td><td>${esc(v.crop || v.summary || '—')}</td><td>${esc(v.issue || '—')}</td><td>${esc(v.next || '—')}</td><td>${esc(v.status)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">還沒有拜訪紀錄</td></tr>'}
+      ${rows.map(v => `<tr><td data-label="拜訪時間">${esc(v.time)}</td><td data-label="客戶"><a href="javascript:void 0" data-go="${esc(v.cid)}">${esc(v.name)}</a></td><td data-label="業務">${esc(v.staff)}</td><td data-label="作物狀況">${esc(v.crop || v.summary || '—')}</td><td data-label="問題">${esc(v.issue || '—')}</td><td data-label="下一步">${esc(v.next || '—')}</td><td data-label="狀態">${esc(v.status)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">還沒有拜訪紀錄</td></tr>'}
       </tbody></table></div>`;
   }
 
@@ -1302,6 +1581,10 @@
     if (state.data) render(); else $('moreTabs').hidden = !state.moreOpen;
   });
   $('reload').addEventListener('click', load);
+  // 第24任 第七批：手機底部導覽（今天｜拜訪｜客戶｜更多）；記住拜訪、客戶上次看的是哪一種顯示方式
+  const lastOf = { visits: 'latest', customers: 'trial' };
+  document.querySelectorAll('#bnav [data-bnav]').forEach(b => b.addEventListener('click', () => { const g = b.dataset.bnav; const cur = navGroup(state.tab); if (cur === 'visits' || cur === 'customers') lastOf[cur] = state.tab; state.tab = g === 'today' ? 'today' : g === 'more' ? 'moremenu' : lastOf[g]; state.review = null; if (state.data) { render(); window.scrollTo(0, 0); } }));
+  if ($('showTest')) $('showTest').addEventListener('click', () => { state.showTest = !state.showTest; if (state.data) render(); });
   $('logout').addEventListener('click', logout);
   // 0.4.88 中4：開頁自動讀取失敗時的「重試」「改用帳號登入」
   if ($('bootRetry')) $('bootRetry').addEventListener('click', load);
@@ -1313,11 +1596,12 @@
     if (Date.now() - (state.loadedAt || 0) > STALE_MS || state.data.today !== mmToday()) load();
   });
   $('loginForm').addEventListener('submit', onLogin);
+  document.querySelectorAll('.pweye').forEach(b => b.addEventListener('click', () => { const i = $(b.dataset.for); if (!i) return; const show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.setAttribute('aria-pressed', String(show)); b.textContent = show ? '🙈 隱藏' : '👁 顯示'; })); // 第24任 第七批 L
   // 總經理BUG(2號)低6：帳號欄改成別人＝不是剛剛被要求改密碼的那位，收起改密碼欄
   $('acct').addEventListener('input', () => { if (state.mustChange && $('acct').value.trim().toLowerCase() !== state.mustChangeAcct) clearMustChange(); });
   biDom(document.body); // 登入頁、標題列、分頁名稱補緬文
   renderMirrors();
   state.key = keyStore.get();
   if (state.key) load(); else showLogin();
-  window.__bossTest = { state, render, load, logout, measureDue, weekCompare, syncPlayer, stopAudio, mmToday }; // 本機測試用（0.4.88 多開幾個給測試）
+  window.__bossTest = { state, startReview, flagsOf, render, load, logout, measureDue, weekCompare, syncPlayer, stopAudio, mmToday }; // 本機測試用（0.4.88 多開幾個給測試）
 })();

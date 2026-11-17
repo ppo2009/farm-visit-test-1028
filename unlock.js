@@ -148,7 +148,9 @@
   }
   function unlock() { locked = false; if (el('lockScreen')) el('lockScreen').hidden = true; try { localStorage.removeItem(HID); } catch (e) { /* 記不了沒關係 */ } }
   async function lockout(msg) { save(null); unlock(); await H.lockout(msg); }
+  const enabled = async () => { try { return !H.getEnabled || (await H.getEnabled()) !== false; } catch (e) { return true; } }; // 第24任 第六批：設定分頁「解鎖功能」總開關
   async function maybeLock(force) {
+    if (!(await enabled())) { unlock(); return false; }
     const cfg = await H.getConfig();
     const c = await activeFor(cfg);
     if (!c) { unlock(); return false; }
@@ -163,6 +165,7 @@
   async function openSettings(intro) {
     ensureDom();
     const cfg = await H.getConfig(); if (!cfg || !cfg.deviceKey) return;
+    if (!(await enabled())) { H.toast('主管已關閉解鎖功能'); return; }
     const cur = await activeFor(cfg), bio = await bioAvailable();
     el('unlockSetIntro').textContent = intro || (cur ? '目前用' + (cur.method === 'bio' ? '人臉／指紋' : '九宮格') + '解鎖。可以換成另一種，或關閉。' : '以後打開 App、或離開一段時間再回來，用人臉／指紋或九宮格解鎖，不用再打密碼。');
     el('setBio').hidden = !bio; el('setOff').hidden = !cur; el('setPatBox').hidden = true; el('unlockSetMsg').textContent = '';
@@ -199,8 +202,10 @@
     H = hooks; hookPage();
     const cfg = await H.getConfig(); const c = load();
     if (c && !(await activeFor(cfg))) save(null);
-    if (!(await activeFor(cfg))) await openSettings('要用人臉／指紋或九宮格解鎖這支手機嗎？以後打開 App 不用再打密碼。');
+    if (!(await activeFor(cfg)) && (await enabled())) await openSettings('要用人臉／指紋或九宮格解鎖這支手機嗎？以後打開 App 不用再打密碼。');
   }
-  g.FarmLock = { start, afterLogin, openSettings: hooks => { H = hooks || H; return openSettings(); }, isLocked: () => locked,
+  /** 第24任 第六批：同步後重畫首頁時呼叫——總開關關了就解開鎖畫面、藏起「解鎖方式」入口 */
+  async function refresh(hooks) { H = hooks || H; if (!H) return; const on = await enabled(); const b = el('unlockBtn'); if (b) b.hidden = !on || b.hidden; if (!on && locked) unlock(); }
+  g.FarmLock = { start, afterLogin, refresh, openSettings: hooks => { H = hooks || H; return openSettings(); }, isLocked: () => locked,
     _t: { load, save, keyTag, activeFor, patternHash, validPattern, setPattern, checkPattern, needLockAfterHidden, b64u, unb64u, MAX_FAILS, MIN_POINTS, KEY, HID } };
 })(typeof self !== 'undefined' ? self : this);

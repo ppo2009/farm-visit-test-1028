@@ -161,6 +161,83 @@ footer.wrap{margin-top:24px}
 .mirrors li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--line)}
 .mirrors li a{word-break:break-all}
 .planparts{display:block;font-size:.78rem;margin-top:1px} /* 0.5.15 新增農民目標三類各幾位 */
+/* ───── 第24任 第七批（主管頁設計版＋升級版） ───── */
+/* 導覽：電腦頂部 7 個；手機（<768px）底部固定 4 個，頂部分頁藏起來 */
+.tab.segonly{display:none}
+.bnav{display:none}
+@media (max-width:767px){
+  #app .tabs{display:none}
+  .bnav{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -2px 10px rgba(0,0,0,.08);padding:0 0 env(safe-area-inset-bottom)}
+  .bnav button{position:relative;min-height:58px;border:0;border-top:3px solid transparent;background:none;font:inherit;font-weight:700;font-size:.9rem;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer}
+  .bnav button span{font-size:1.25rem;line-height:1}
+  .bnav button[aria-current="page"]{color:var(--paddy);border-top-color:var(--paddy);background:var(--paddy-soft)}
+  .bnav .badge{position:absolute;top:4px;right:calc(50% - 26px);margin:0}
+  #app{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+}
+.segs{display:flex;gap:6px;margin:0 0 12px} .segs button{flex:1;min-height:44px;border:1.5px solid var(--paddy);background:var(--surface);color:var(--paddy);border-radius:10px;font:inherit;font-weight:700;cursor:pointer}
+.segs button[aria-pressed="true"]{background:var(--paddy);color:var(--surface)}
+/* 今天 */
+.hello{display:flex;flex-direction:column;gap:2px;margin:0 0 10px} .hello b{font-size:1.2rem}
+.oneline{display:flex;flex-direction:column;gap:4px;margin-bottom:14px;padding:14px} .oneline b{font-size:1.15rem} .oneline a{font-weight:700}
+.today2{display:grid;gap:14px} @media (min-width:900px){.today2{grid-template-columns:1fr 1fr;align-items:start}}
+.today2 h3{margin:0 0 8px}
+.needlist,.teamlist,.moremenu{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.needlist li+li,.teamlist li+li,.moremenu li+li{border-top:1px solid var(--line)}
+.needlist button,.teamlist button,.moremenu button{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:8px 14px;border:0;background:none;font:inherit;text-align:left;cursor:pointer;color:inherit}
+.needlist .nt{flex:1;display:flex;flex-direction:column} .needlist .nt small{font-size:.8rem}
+.needlist b{font-size:1.3rem;color:var(--chili);min-width:1.5em;text-align:right} .needlist .arr,.moremenu .arr{color:var(--muted)}
+.needlist li.zero{opacity:.45} .needlist li.zero b{color:var(--muted)}
+.allclear{background:var(--paddy-soft);border-radius:12px;padding:14px;color:var(--paddy);font-weight:700}
+.teamlist .nm{flex:1;font-weight:700} .teamlist .nv{text-align:right;font-size:.9rem} .teamlist li.warn{background:var(--turmeric-soft)}
+.moremenu button span:first-child{flex:1;font-weight:700} .moremenu .badge{margin:0}
+/* 連續審核（全螢幕卡片） */
+.review{position:fixed;inset:0;z-index:40;background:var(--bg);overflow:auto;padding:12px 16px calc(84px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px}
+.rtop{display:flex;align-items:center;justify-content:space-between;gap:8px} .rtop .btn{min-height:44px;min-width:44px} .rtop span{display:flex;gap:6px}
+.rcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;max-width:760px;width:100%;margin:0 auto}
+.rh{margin:0;font-size:1.2rem}
+.r4{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0} .r4>div{background:var(--bg);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column} .r4 b{font-size:1.05rem;overflow-wrap:anywhere}
+@media (min-width:768px){.r4{grid-template-columns:repeat(4,1fr)}}
+.rphotos{display:grid;grid-template-columns:repeat(3,1fr);gap:6px} .rthumb{aspect-ratio:1;border:1px solid var(--line);border-radius:10px;background:var(--bg);overflow:hidden;padding:0;cursor:zoom-in;font-size:.8rem;color:var(--muted)} .rthumb img{width:100%;height:100%;object-fit:cover;display:block}
+.flags{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0} .flag{display:inline-block;border-radius:99px;padding:3px 10px;font-size:.85rem;font-weight:700;background:var(--turmeric-soft);color:#6b4a07}
+.flag.f-loc,.flag.f-old,.flag.f-ai{background:var(--chili-soft);color:var(--chili)} .flags.big .flag{font-size:1rem;padding:6px 12px}
+.rsum{display:flex;gap:8px;align-items:flex-start;margin:8px 0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+.rmiss{background:#fff4c4;border:1.5px solid #e0b100;border-radius:10px;padding:8px 12px;font-weight:700;margin:8px 0}
+.rbtns{display:flex;gap:12px;max-width:760px;width:100%;margin:0 auto} .rbtns .btn{flex:1;min-height:48px;font-size:1rem;font-weight:700}
+.review>.rbtns{position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--line);max-width:none}
+.rejpanel{border:1.5px solid var(--chili);border-radius:12px;margin:10px 0 0;padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px} .rejpanel legend{font-weight:700;color:var(--chili)}
+.rjc{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 10px;border:1px solid var(--line);border-radius:99px;cursor:pointer} .rjc input{width:20px;height:20px}
+.rejpanel textarea{width:100%;min-height:70px;font:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:8px} .rejpanel .rbtns{flex-basis:100%}
+.bigphoto{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:12px;cursor:zoom-out} .bigphoto img{max-width:100%;max-height:88vh;object-fit:contain} .bigphoto .sub{color:#ddd}
+/* 最新拜訪卡片 */
+.vtools{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px} .vtools .btn{min-height:44px} .vtools [aria-pressed="true"]{background:var(--chili-soft);color:var(--chili)}
+.vcard .vh{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px} .vcard.hasflag{border-left:4px solid var(--chili)}
+.vthumbs{display:flex;gap:6px;margin:6px 0;overflow-x:auto} .vthumb{flex:none;width:64px;height:64px;border-radius:8px;background:var(--bg);overflow:hidden;cursor:zoom-in} .vthumb img{width:100%;height:100%;object-fit:cover;display:block}
+.vsum{overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;margin:4px 0}
+.vmore>summary{min-height:40px;display:flex;align-items:center;color:var(--paddy);font-weight:700;cursor:pointer} .vmore .chk{margin:4px 0;padding-left:18px}
+/* 設計版 H：手機尺寸規則（可點 ≥40px、主要動作 ≥44px、正文 ≥14px、次要 ≥12px、輸入框 16px 防 iPhone 放大） */
+input,select,textarea{font-size:16px}
+.btn,#app a[data-go],#app a[data-staffv],.tab,summary{min-height:40px}
+#app a[data-go],#app a[data-staffv]{display:inline-flex;align-items:center}
+.pill{font-size:.8rem} .badge{font-size:.75rem}
+#app .sub{font-size:max(12px,.85rem)}
+/* 設計版 I：窄螢幕（<600px）表格改成一列一張卡片；電腦保留表格、第一欄固定 */
+.tbl th:first-child,.tbl td:first-child{position:sticky;left:0;background:var(--surface);z-index:1}
+@media (max-width:599px){
+  .tbl{overflow:visible} .tbl table,.tbl tbody,.tbl tr,.tbl td{display:block;width:100%} .tbl thead{display:none}
+  .tbl tr{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 10px;padding:8px 12px}
+  .tbl td{border:0;padding:3px 0;display:flex;gap:10px;position:static} .tbl td::before{content:attr(data-label);flex:none;min-width:5.5em;font-weight:700;color:var(--muted)}
+  .tbl td:first-child{font-weight:700}
+}
+@media (max-width:767px){#app>header{gap:2px;margin-bottom:8px} #app>header h1{font-size:1.05rem;line-height:1.3} #app>header h1 .my{display:inline;font-size:.7rem;margin-left:4px} #app>header>.sub{font-size:.8rem} #app>header .btn{min-height:40px;padding:4px 10px}} /* 第24任 第七批：手機頂端標題列縮小 */
+.vmore>summary.vsum{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;color:inherit;font-weight:400;min-height:40px;list-style:none} .vmore>summary.vsum::-webkit-details-marker{display:none} .vexp{color:var(--paddy);font-weight:700;font-size:.85rem}
+.vmore[open]>summary.vsum{-webkit-line-clamp:2} .vcards>li.vcard{padding:10px 12px}
+@media (max-width:767px){.vmore>summary.vsum{-webkit-line-clamp:2} .vcard .vh{font-size:.95rem;line-height:1.35} .vcard .vh .sub{font-size:.8rem} .vcard .flags{margin:4px 0} .vcards>li.vcard{margin-bottom:8px}}
+@media (max-width:767px){.vcard .vh{flex-wrap:nowrap;white-space:nowrap;overflow:hidden;align-items:center} .vcard .vh>b{overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto} .vcard .vh>.sub{flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;min-width:0} .vcard .vh .pill .my{display:none} .vcards>li.vcard{padding:8px 12px}} /* 標題一行（太長用…） */
+@media (max-width:767px){.vcards>li.vcard{margin-bottom:6px} .vmore>summary.vsum{line-height:1.45;font-size:.95rem} .vcard .flags .flag{padding:2px 8px;font-size:.8rem}}
+/* 第24任 第七批 L */ .flab{display:block;font-weight:700;margin:8px 0 4px;text-align:left} .pwrow{display:flex;gap:8px} .pwrow input{flex:1;min-width:0} .pweye{flex:none;min-height:44px} #mirrorList a{display:inline-block;padding:8px 0}
+@media (max-width:599px){.tbl table,.tbl tr,.tbl td,.tbl th{min-width:0!important;max-width:100%} .tbl td{white-space:normal;overflow-wrap:anywhere}} /* 第七批 I：原本表格有最小寬度，卡片化時一起取消 */
+/* 第七批 H：登入框 16px（登入表單原本自己的樣式比較小）；緬文小字、標籤至少 12px */ #loginForm input{font-size:16px} #app .my,#login .my,.pill .my,.tab .my{font-size:max(12px,.75em)} .badge{font-size:12px}
+.my{font-size:max(12px,.75em)!important} /* 第七批 H：所有緬文小字至少 12px（含標題、頁尾） */
 </style>
 </head>
 <body>
@@ -178,12 +255,13 @@ footer.wrap{margin-top:24px}
     <h1>農戶拜訪總覽</h1>
     <p class="sub">主管、總經理專用。帳號和密碼請向總經理索取（主管不能自己改密碼）。<br>မန်နေဂျာ / အထွေထွေမန်နေဂျာ သီးသန့်။ အကောင့်နှင့် စကားဝှက်ကို အထွေထွေမန်နေဂျာထံ တောင်းပါ။</p>
     <form id="loginForm" class="lform" autocomplete="on">
-      <input type="text" id="acct" placeholder="帳號" autocomplete="username" autocapitalize="none" spellcheck="false" required>
-      <input type="password" id="pw" placeholder="密碼" autocomplete="current-password" required>
+      <!-- 第24任 第七批設計版 L：上方永久標籤（不只 placeholder）、輸入框 16px（iPhone 不放大）、👁 顯示密碼 -->
+      <label class="flab" for="acct">帳號</label><input type="text" id="acct" placeholder="帳號" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      <label class="flab" for="pw">密碼</label><div class="pwrow"><input type="password" id="pw" placeholder="密碼" autocomplete="current-password" required><button type="button" class="btn pweye" data-for="pw" aria-pressed="false" aria-label="顯示密碼">👁 顯示</button></div>
       <div id="newPwBox" hidden class="lform">
         <span class="sub">第一次登入，請設定你自己的新密碼（至少 6 個字）／စကားဝှက်အသစ် သတ်မှတ်ပါ (၆ လုံးအထက်)</span>
-        <input type="password" id="newPw" placeholder="新密碼" autocomplete="new-password">
-        <input type="password" id="newPw2" placeholder="新密碼再輸入一次" autocomplete="new-password">
+        <label class="flab" for="newPw">新密碼</label><div class="pwrow"><input type="password" id="newPw" placeholder="新密碼" autocomplete="new-password"><button type="button" class="btn pweye" data-for="newPw" aria-pressed="false" aria-label="顯示新密碼">👁 顯示</button></div>
+        <label class="flab" for="newPw2">新密碼再輸入一次</label><div class="pwrow"><input type="password" id="newPw2" placeholder="新密碼再輸入一次" autocomplete="new-password"><button type="button" class="btn pweye" data-for="newPw2" aria-pressed="false" aria-label="顯示新密碼">👁 顯示</button></div>
       </div>
       <button class="btn primary" type="submit" id="loginBtn">登入</button>
     </form>
@@ -194,28 +272,36 @@ footer.wrap{margin-top:24px}
 <div class="wrap" id="app" hidden>
   <header>
     <h1>農戶拜訪總覽</h1>
-    <span class="sub"><span id="who"></span>・<span id="updated"></span>　<button class="btn" id="reload" type="button">重新整理</button> <a id="sheetLink" target="_blank" rel="noopener">開啟試算表</a> <button class="btn" id="logout" type="button">登出</button></span>
+    <span class="sub"><span id="who"></span>・<span id="updated"></span>　<button class="btn" id="reload" type="button">重新整理</button> <button class="btn" id="showTest" type="button" hidden aria-pressed="false">顯示測試資料</button> <a id="sheetLink" target="_blank" rel="noopener">開啟試算表</a> <button class="btn" id="logout" type="button">登出</button></span>
   </header>
   <div class="stats" id="stats"></div>
   <div class="tabs" role="tablist">
     <!-- 分頁精簡：常用 5 個＋「更多」（2026-11-12 董事長同意介面規劃 C） -->
-    <button class="tab" role="tab" data-tab="today" aria-selected="true">總覽</button>
-    <button class="tab" role="tab" data-tab="latest" aria-selected="false">最新拜訪</button>
+    <!-- 第24任 第七批升級版三：電腦頂部 7 個（今天｜拜訪｜客戶｜任務｜試作報告｜主管匯報｜更多）；日曆在「拜訪」裡切換、地圖在「客戶」裡切換 -->
+    <button class="tab" role="tab" data-tab="today" aria-selected="true">今天</button>
+    <button class="tab" role="tab" data-tab="latest" aria-selected="false">拜訪</button>
     <button class="tab" role="tab" data-tab="trial" aria-selected="false">客戶</button>
-    <button class="tab" role="tab" data-tab="cal" aria-selected="false">日曆</button>
-    <button class="tab" role="tab" data-tab="reports" aria-selected="false">試作報告</button>
     <button class="tab" role="tab" data-tab="tasks" aria-selected="false">任務</button>
+    <button class="tab" role="tab" data-tab="reports" aria-selected="false">試作報告</button>
     <button class="tab" role="tab" data-tab="briefs" aria-selected="false">主管匯報<b class="badge" id="briefBadge" hidden></b></button>
     <button class="tab" type="button" id="moreBtn" aria-expanded="false" aria-controls="moreTabs">更多 ▾</button>
   </div>
   <div class="tabs subtabs" role="tablist" id="moreTabs" hidden>
-    <button class="tab" role="tab" data-tab="progress" aria-selected="false">工作進度明細</button>
-    <button class="tab" role="tab" data-tab="map" aria-selected="false">田區地圖</button>
-    <button class="tab" role="tab" data-tab="table" aria-selected="false">拜訪紀錄表</button>
+    <button class="tab" role="tab" data-tab="progress" aria-selected="false">工作進度</button>
+    <button class="tab segonly" role="tab" data-tab="cal" aria-selected="false">日曆</button>
+    <button class="tab segonly" role="tab" data-tab="map" aria-selected="false">田區地圖</button>
+    <button class="tab segonly" role="tab" data-tab="table" aria-selected="false">拜訪紀錄表</button>
     <button class="tab" role="tab" data-tab="accounts" aria-selected="false">業務帳號</button>
     <button class="tab" role="tab" data-tab="errors" aria-selected="false">錯誤紀錄</button><!-- 第24任 必改第二批⑦ -->
   </div>
   <main id="panel"></main>
+  <!-- 第24任 第七批升級版三：手機寬度底部固定 4 個（今天｜拜訪｜客戶｜更多），有待辦／未讀顯示紅點數字 -->
+  <nav class="bnav" id="bnav" aria-label="主要分頁">
+    <button type="button" data-bnav="today"><span aria-hidden="true">🏠</span>今天<b class="badge" id="todayBadge" hidden></b></button>
+    <button type="button" data-bnav="visits"><span aria-hidden="true">📋</span>拜訪</button>
+    <button type="button" data-bnav="customers"><span aria-hidden="true">👥</span>客戶</button>
+    <button type="button" data-bnav="more"><span aria-hidden="true">☰</span>更多<b class="badge" id="moreBadge" hidden></b></button>
+  </nav>
 </div>
 
 <!-- 0.4.30 董事長 2026-11-12：主管頁也放備用網址（緬甸網路常擋網站主機；登入畫面和主畫面都看得到） -->

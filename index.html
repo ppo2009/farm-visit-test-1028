@@ -323,6 +323,54 @@ textarea#note{min-height:8.2em}
 .lockscreen{position:fixed;inset:0;z-index:40;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto} .lockscreen[hidden]{display:none} #unlockSet{background:rgba(0,0,0,.45)} .lockcard{background:var(--bg);border-radius:14px;padding:16px;width:100%;max-width:420px;display:flex;flex-direction:column;gap:12px;text-align:center} .lockcard .btn{min-height:48px} .patgrid{display:grid;grid-template-columns:repeat(3,64px);gap:22px;justify-content:center;touch-action:none;user-select:none;-webkit-user-select:none;padding:8px 0} .patdot{width:64px;height:64px;border-radius:50%;border:3px solid var(--paddy);background:var(--surface);cursor:pointer} .patdot.on{background:var(--paddy)} .patok{grid-column:1/-1}
 /* 第24任 必改第五批：語音輸入（按鈕 44px；聽的時候紅底、明顯） */
 .voicebar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0} .voicebtn{min-height:44px;padding:4px 14px;border:1px solid var(--paddy);border-radius:99px;background:var(--surface);color:var(--paddy);font:inherit;font-weight:700;cursor:pointer} .voicebtn .my{display:block;font-size:.75rem;font-weight:400} .voicebtn.on{background:#c0392b;border-color:#c0392b;color:#fff} .voicebtn.off{opacity:.45} .voicelang{min-height:44px} .voicestat{flex-basis:100%;margin:0;color:#c0392b;font-weight:700}
+/* 第24任 第六批①⑱（tomtom 360 寬實測：頂端佔半個螢幕）：頂端縮成一列（📱 加到主畫面圖示＋標題＋沒上傳提醒＋☰），上傳狀態、名字、提供建議、登出收進 ☰；五個分頁搬到畫面底部固定；加到主畫面的說明登入前不顯示、登入後預設收成 📱 */
+body:not([data-view="home"]) #iosTip,body:not([data-view="home"]) #androidTip{display:none!important}
+header.homehdr{flex-direction:row;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;text-align:left}
+header.homehdr h1{flex:1;min-width:0;font-size:1.1rem;line-height:1.25} header.homehdr h1 .my{display:inline;margin-left:6px;font-size:.72rem}
+.hdricon{flex:none;min-width:44px;min-height:44px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:inherit;font-size:1.25rem;line-height:1;cursor:pointer}
+.hdricon[aria-expanded="true"]{background:var(--paddy-soft);border-color:var(--paddy)}
+#hdrWait{flex:none;min-height:44px;font-size:.85rem;padding:2px 10px;line-height:1.2;max-width:9.5em}
+#hdrMenu{display:none} header.homehdr.open #hdrMenu{display:flex;position:absolute;top:100%;right:0;z-index:35;flex-direction:column;align-items:stretch;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:0 6px 18px rgba(0,0,0,.18);min-width:min(260px,calc(100vw - 32px))}
+header.homehdr.open #hdrMenu .syncbadge{min-height:44px} header.homehdr.open .hdracts{flex-direction:column}
+#home .htabs{position:fixed;left:0;right:0;bottom:0;z-index:30;margin:0;background:var(--bg);border-top:1px solid var(--line);padding:0 2px env(safe-area-inset-bottom);box-shadow:0 -2px 10px rgba(0,0,0,.08)}
+#home .htabs button{border:0;border-top:3px solid transparent;border-radius:0;min-height:58px}
+#home .htabs button[aria-selected="true"]{border-top-color:var(--paddy);background:var(--paddy-soft)}
+#home .htabs .tbadge{top:2px}
+body[data-view="home"]{padding-bottom:calc(80px + env(safe-area-inset-bottom))}
+body[data-view="home"] #toast{bottom:calc(84px + env(safe-area-inset-bottom))}
+#iosTip,#androidTip{position:relative}
+/* 第24任 第六批⑨⑭⑯⑰ */
+.pwrow{display:flex;gap:8px;align-items:stretch} .pwrow input{flex:1} .pweye{flex:none;min-width:72px;min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--surface);cursor:pointer;font-size:.9rem;line-height:1.2} .pweye .my{display:block;font-size:.7rem}
+#iosTipClose,#androidTipClose,.syncbadge{min-height:44px}
+.price-row .del,.thumb .del{min-width:44px;min-height:44px}
+#mirrorList .btn2.small{min-height:44px} #mirrorList a{display:inline-block;padding:10px 0}
+select{line-height:1.9;padding-top:8px;padding-bottom:8px} /* 緬文字上下的符號不被切 */
+.mirrornote{display:block;font-weight:400;font-size:.85rem;margin-top:2px}
+/* 第24任 第六批⑦：類別鎖住時只顯示目前的類別（標題樣子，不像按鈕） */
+.catswitch.alllocked{display:block!important} .catswitch.alllocked button.locked:not([aria-pressed="true"]){display:none}
+.catswitch.alllocked button[aria-pressed="true"]{display:block;width:100%;min-height:0;border:0;border-left:5px solid var(--paddy);border-radius:0;background:none;color:var(--fg);text-align:left;padding:2px 10px;font-size:1.15rem;cursor:default;pointer-events:none;opacity:1}
+.catswitch .cathint{display:block;padding-left:15px;font-size:.85rem}
+/* 第24任 第六批⑩：「已簽約」「種植失敗」的小勾選框改成大開關（整列都能按，≥48px） */
+label.chk{display:flex;align-items:center;gap:12px;min-height:52px;border:1.5px solid var(--line);border-radius:12px;padding:8px 12px;cursor:pointer;background:var(--bg)}
+label.chk input[type=checkbox]{-webkit-appearance:none;appearance:none;flex:none;width:56px;height:32px;margin:0;border-radius:16px;background:#c9c9c0;position:relative;cursor:pointer;transition:background .15s}
+label.chk input[type=checkbox]::before{content:"";position:absolute;top:3px;left:3px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .15s}
+label.chk input[type=checkbox]:checked{background:var(--chili)} label.chk input[type=checkbox]:checked::before{left:27px}
+#dcSignedLab input[type=checkbox]:checked{background:var(--paddy)}
+label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbox]:focus-visible{outline:3px solid var(--paddy);outline-offset:2px}
+/* 第24任 第六批⑮ */ .again{width:100%;min-height:48px;margin-top:8px;font-weight:700}
+/* 第24任 第六批⑧ */ .quickpunch{margin-bottom:14px} .quickpunch h2{margin-top:0}
+#hp-todo .foldable>.foldhead{cursor:pointer;display:flex;align-items:flex-start;gap:6px;min-height:44px} #hp-todo .foldable>.foldhead::before{content:"▾";flex:none;width:1em;color:var(--paddy)}
+#hp-todo .foldable.folded>.foldhead::before{content:"▸"} #hp-todo .foldable.folded>:not(.foldhead){display:none!important}
+/* 第24任 第六批④ */ .fpick{display:flex;gap:8px;margin-bottom:8px} .fpick input{flex:1} #farmerNewBtn{flex:none;min-height:48px;padding:4px 14px;font-weight:700;border:1.5px solid var(--paddy);color:var(--paddy);background:var(--bg);border-radius:10px} #farmerNewBtn .my{display:block;font-size:.7rem}
+.fhits{list-style:none;margin:0 0 8px;padding:0;border:1px solid var(--line);border-radius:10px;max-height:50vh;overflow:auto} .fhits li+li{border-top:1px solid var(--line)} .fhits button{display:block;width:100%;min-height:48px;text-align:left;background:var(--bg);border:0;padding:8px 12px;cursor:pointer} .fhits .sub{font-size:.85rem} .fhits .none{padding:10px 12px;color:var(--muted)}
+/* 第24任 第六批⑪：結案先問結果；失敗時藏起價格、產量、收購客戶、採收量測 */
+.closefirst{margin:0 0 4px} #closeBox.failed #closeRow>div:has(#cPrice),#closeBox.failed #closeRow>div:has(#cYield),#closeBox.failed #closeRow>div:has(#cBuyer),#closeBox.failed #measureBox{display:none}
+#closeTrialBox,#cPlantFailLab{margin-bottom:10px}
+#testTag[hidden]+#appVer+#testTag2{display:none}
+/* 第24任 第六批③ */ #profileMore>summary{min-height:48px;display:flex;align-items:center;font-weight:700;color:var(--paddy);cursor:pointer} #profileMore>summary .my{display:inline;margin-left:6px}
+#farmerNewBtn{width:auto;max-width:42%;white-space:normal;overflow-wrap:anywhere} .fpick input{min-width:0}
+/* 第24任 第六批⑭ */ #unlockBtn{min-height:44px} #profileTitle{min-height:44px;display:flex;align-items:center;flex-wrap:wrap}
+/* 第24任 第七批 C */ .rejbox{border:2px solid var(--chili);background:var(--chili-soft);border-radius:12px;padding:10px 12px;margin-bottom:14px} .rejbox h2{margin:0 0 6px;color:var(--chili);font-size:1.05rem} .rejbox button{display:block;width:100%;min-height:48px;text-align:left;border:1px solid var(--chili);background:var(--bg);border-radius:10px;padding:8px 12px;margin-top:6px;cursor:pointer} .rejbox .sub{display:block;font-size:.9rem}
 </style>
 </head>
 <body>
@@ -334,19 +382,19 @@ textarea#note{min-height:8.2em}
 <!-- 登入 -->
 <section id="setup" hidden>
   <header><h1>田間打卡<span class="my">လယ်ကွင်း မှတ်တမ်း</span></h1></header>
-  <form class="card" id="loginForm" autocomplete="on">
+  <form class="card" id="loginForm" autocomplete="on" novalidate><!-- 第24任 第六批⑲：空白不用瀏覽器內建提示，app.js 自己說 -->
     <div><label class="lab" for="acct">帳號<span class="my">အကောင့်</span></label>
       <input type="text" id="acct" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>
     <div><label class="lab" for="pw">密碼<span class="my">စကားဝှက်</span></label>
-      <input type="password" id="pw" autocomplete="current-password" required></div>
+      <div class="pwrow"><input type="password" id="pw" autocomplete="current-password" required><button type="button" class="pweye" data-for="pw" aria-pressed="false" aria-label="顯示密碼">👁 顯示<span class="my" data-tr="待譯"></span></button></div></div>
     <div id="newPwBox" hidden>
       <label class="lab" for="newPw">設定你自己的新密碼（至少 6 個字）<span class="my">စကားဝှက် အသစ်</span></label>
-      <input type="password" id="newPw" autocomplete="new-password">
+      <div class="pwrow"><input type="password" id="newPw" autocomplete="new-password"><button type="button" class="pweye" data-for="newPw" aria-pressed="false" aria-label="顯示新密碼">👁 顯示<span class="my" data-tr="待譯"></span></button></div>
       <label class="lab" for="newPw2" style="margin-top:8px">新密碼再輸入一次<span class="my">စကားဝှက် အသစ် ထပ်ရိုက်ပါ</span></label><!-- 0.4.92 中2 加緬文 -->
-      <input type="password" id="newPw2" autocomplete="new-password">
+      <div class="pwrow"><input type="password" id="newPw2" autocomplete="new-password"><button type="button" class="pweye" data-for="newPw2" aria-pressed="false" aria-label="顯示新密碼">👁 顯示<span class="my" data-tr="待譯"></span></button></div>
     </div>
     <button type="submit" class="save" id="loginBtn">登入<span class="my">ဝင်မည်</span></button>
-    <p class="sub" id="setupMsg" aria-live="polite">只要登入一次，之後沒網路也能打卡。帳號和密碼請向主管索取（密碼不能自己改）。</p>
+    <p class="sub" id="setupMsg" aria-live="polite">帳號、密碼向主管索取。登入一次後，沒網路也能打卡。</p>
   </form>
 </section>
 
@@ -360,7 +408,7 @@ textarea#note{min-height:8.2em}
     <button type="button" class="save" id="feedbackSend">送出<span class="my">ပို့မည်</span></button>
     <button type="button" class="btn2" id="feedbackCancel">取消<span class="my">မလုပ်တော့</span></button>
   </div></div>
-  <header class="homehdr"><h1>田間打卡<span class="my">လယ်ကွင်း မှတ်တမ်း</span></h1><span class="hdr"><button type="button" class="syncbadge" id="syncBadge" hidden></button><span class="sub" id="who"></span><span class="hdracts"><button type="button" id="feedbackBtn">提供建議<span class="my">အကြံပြုရန်</span></button><button type="button" id="logoutBtn">登出<span class="my">ထွက်ရန်</span></button></span></span><!-- 0.5.03 董事長：登出上面加「提供建議」，送到後台「使用者建議」分頁 --><!-- 0.4.75 董事長：登出搬到首頁右上角、看得清楚，按了也通知後台停用這支手機 -->
+  <header class="homehdr" id="homeHdr"><button type="button" class="hdricon" id="tipIcon" hidden aria-label="加到主畫面的說明" aria-expanded="false">📱</button><h1>田間打卡<span class="my">လယ်ကွင်း မှတ်တမ်း</span></h1><button type="button" class="syncbadge wait" id="hdrWait" hidden></button><button type="button" class="hdricon" id="menuBtn" aria-expanded="false" aria-controls="hdrMenu" aria-label="選單：上傳狀態、提供建議、登出">☰</button><span class="hdr" id="hdrMenu"><button type="button" class="syncbadge" id="syncBadge" hidden></button><span class="sub" id="who"></span><span class="hdracts"><button type="button" id="feedbackBtn">提供建議<span class="my">အကြံပြုရန်</span></button><button type="button" id="logoutBtn">登出<span class="my">ထွက်ရန်</span></button></span></span><!-- 0.5.03 董事長：登出上面加「提供建議」，送到後台「使用者建議」分頁 --><!-- 0.4.75 董事長：登出搬到首頁右上角、看得清楚，按了也通知後台停用這支手機 -->
     <!-- 0.4.73 董事長「試作報告拿掉」：0.4.69 右上角「分享我的報告／觀看其他業務報告」兩顆入口拿掉 --></header>
   <!-- 第24任 必改第二批②：瀏覽器沒答應長期保存手機資料（storage.persist 被拒或不支援），又有沒上傳的資料 → 提醒快上傳（緬文等譯者，先留空） -->
   <p class="warn" id="storeWarn" role="alert" hidden><span class="zh" id="storeWarnZh"></span><span class="my" data-tr="待譯"></span></p>
@@ -388,6 +436,12 @@ textarea#note{min-height:8.2em}
 
   <!-- 分頁 1 田間打卡：照手稿左卡「農民」、右卡「盤商或種子商」，點了直接進打卡畫面（2026-11-12 規劃 D＋優化 1），下面是上傳狀態 -->
   <div class="hpanel" id="hp-punch" role="tabpanel" aria-labelledby="htab-punch">
+  <!-- 第24任 第六批⑧（tomtom 實測：快速打卡藏在執行任務分頁）：搬到這裡最上方，id 不變 -->
+  <div class="rejbox" id="rejBox" hidden></div><!-- 第24任 第七批設計版 C：主管退回的結案，首頁第一位紅框，點了直接打開那筆結案並帶入上次內容 -->
+  <div class="todocol quickpunch" id="todoRight">
+  <h2>快速打卡<span class="my">အမြန် ကွင်းဆင်းမှတ်တမ်း</span><span class="sub">我負責的客戶，點一位去田間打卡／နှိပ်ပြီး ကွင်းဆင်းမှတ်တမ်း ရေးပါ</span></h2>
+  <div class="tcgrps" id="todoCust"></div>
+  </div>
   <!-- 0.5.07 董事長截圖：一般／試作／推廣改成真正的下拉選單 → 選單放進各自卡片的框裡（hubwrap），從卡片正下方往下展開、直排、蓋在下面內容上 -->
   <div class="cats">
     <div class="hubwrap">
@@ -441,10 +495,7 @@ textarea#note{min-height:8.2em}
   <ul id="taskList"></ul>
   <!-- 0.5.14 客戶「歷史就是已完成的事情，還沒是歷史的就留在執行」：「已開發的客戶」（本月已經新增的）搬到歷史成就（id 不變） -->
   </div>
-  <div class="todocol" id="todoRight">
-  <h2>快速打卡<span class="my">အမြန် ကွင်းဆင်းမှတ်တမ်း</span><span class="sub">我負責的客戶，點一位去田間打卡／နှိပ်ပြီး ကွင်းဆင်းမှတ်တမ်း ရေးပါ</span></h2>
-  <div class="tcgrps" id="todoCust"></div>
-  </div>
+  <!-- 第24任 第六批⑧：「快速打卡」搬到首頁最上方（田間打卡分頁） -->
   <!-- 0.4.75 董事長截圖：右欄打叉拿掉——每月目標跟「我的進度」的「主管訂的目標」同一份，合成一份（todoPlan 拿掉，app.js 沒有這格就略過）；日程清單搬到「我的進度」 -->
   </div>
   <!-- 0.5.12 董事長截圖「以下都放入執行中任務」：主管訂的目標、農民種植進度、日程清單從「歷史成就」搬到這裡（id 都不變），放在任務兩欄下面、我負責的客戶上面 -->
@@ -604,8 +655,12 @@ textarea#note{min-height:8.2em}
   <div class="card">
     <!-- 拜訪類別切換：農民＝一般拜訪／試作／推廣，盤商或種子商＝盤商／種子商；首頁少點一層（2026-11-12 董事長同意優化 1） -->
     <div class="catswitch" id="catSwitch" role="group" aria-label="拜訪類別"></div>
+    <p class="warn signhint" id="signHint" hidden>簽約結案：選店家 → 按「有見到」→「已簽約」會自動打開 → 寫簽約內容 → 送主管確認<span class="my" data-tr="待譯"></span></p><!-- 第24任 第六批⑫ -->
     <div>
       <label class="lab" for="farmer" id="farmerLab">選擇農民<span class="my">လယ်သမား ရွေးပါ</span></label>
+      <!-- 第24任 第六批④（tomtom 實測：新增藏在下拉選單裡、清單不能搜尋）：上面一列搜尋（名字、代碼、村、鎮、地區）＋「＋新增」按鈕；下拉選單照舊可用 -->
+      <div class="fpick"><input type="search" id="farmerSearch" placeholder="搜尋名字、代碼、村" aria-label="搜尋客戶：名字、代碼、村" autocomplete="off"><button type="button" class="btn2" id="farmerNewBtn" hidden>＋ 新增<span class="my" data-tr="待譯"></span></button></div>
+      <ul class="fhits" id="farmerHits" hidden></ul>
       <select id="farmer"></select>
     </div>
     <!-- 0.4.35 董事長：選擇農民後跳出這位農民之前的進度（農民進度表）；沒有進度就跳出新增（補齊）農民資料。
@@ -645,6 +700,8 @@ textarea#note{min-height:8.2em}
           <div><label class="lab" for="pVillage">村<span class="my">ကျေးရွာ</span></label><input type="text" id="pVillage" maxlength="60"></div>
           <div><label class="lab" for="pGps">GPS 座標<span class="my">GPS တည်နေရာ</span></label><input type="text" id="pGps" readonly placeholder="拍照時自動帶入／ဓာတ်ပုံရိုက်လျှင် ဖြည့်မည်"></div>
         </div>
+        <!-- 第24任 第六批③（tomtom 實測：新增農民 19 欄、4 個螢幕）：必填只有名字（手機、後台都一樣），其他先收起來，之後拜訪可以補 -->
+        <details class="more" id="profileMore"><summary>更多資料（可之後補）<span class="my" data-tr="待譯"></span></summary><div class="fields">
         <div class="dealer-only"><label class="lab" for="pAddress">地址<span class="my">လိပ်စာ</span></label><input type="text" id="pAddress" maxlength="200"></div>
         <!-- 0.4.73 董事長截圖：盤商、種子商「品牌」改成「作物」下拉（跟農民同一份作物清單），選單沒有的寫在下面「其他」；舊品牌資料留在試算表不動 -->
         <div class="dealer-only"><label class="lab" for="pDCrop">作物<span class="my">သီးနှံ</span></label><select id="pDCrop"></select></div>
@@ -655,6 +712,7 @@ textarea#note{min-height:8.2em}
         <div class="farmer-only"><label class="lab" for="pPlantDate">種植日期<span class="my">စိုက်သည့်ရက်</span></label><input type="date" id="pPlantDate"></div>
         <!-- 0.4.71 董事長：「使用肥料」改「其他」（資料照存在客戶清單「使用肥料」欄，不搬欄位） -->
         <div><label class="lab" for="pFert">其他<span class="my">အခြား</span></label><input type="text" id="pFert" maxlength="120"></div><!-- 一般／試作／推廣農民、盤商、種子商都有 -->
+        </div></details>
       </div>
     </details>
 
@@ -676,13 +734,22 @@ textarea#note{min-height:8.2em}
 
     <!-- 結案：農民收成賣掉後（董事長 2026-11-12 手稿：選擇農民、拍照、圖片上傳、賣給 1 地區 2 價格 3 產量 4 收購客戶 5 電話） -->
     <div id="closeBox" class="trial" hidden>
+      <!-- 第24任 第六批⑪（tomtom 實測：種植失敗在第 7 題之後，但它決定前面要不要填）：先問結果，再只顯示相關欄位 -->
+      <p class="lab closefirst">先選這次的結果<span class="my" data-tr="待譯"></span></p>
+      <div id="closeTrialBox" class="fields" hidden>
+        <label class="lab" for="cTrialOutcome" id="closeTrialLab">試作結果（必填）<span class="my">ရလဒ် (မဖြစ်မနေ)</span></label>
+        <p class="sub" id="closeTrialNow"></p>
+        <select id="cTrialOutcome"><option value="">— 請選 ရွေးပါ —</option><option value="成功">成功／အောင်မြင်</option><option value="失敗">失敗／မအောင်မြင်</option></select>
+      </div>
+      <label class="chk" id="cPlantFailLab"><input type="checkbox" id="cPlantFail"> 這次發現<b>種植失敗</b>（要寫原因）<span class="my">စိုက်ပျိုးမှု မအောင်မြင် (အကြောင်းရင်း ဖြည့်ရန်)</span></label>
+      <div id="closeFailSlot"></div>
       <span class="lab">賣給<span class="my">ရောင်းချသည့်နေရာ</span></span>
       <!-- 0.4.62 董事長截圖：1～5 排成同一列（窄螢幕自動換行），後面加「原因」「進度」 -->
       <div class="closerow" id="closeRow">
       <div><label class="lab" for="cRegion">1. 地區<span class="my">ဒေသ</span></label><select id="cRegion"></select></div>
-        <div><label class="lab" for="cPrice">2. 價格（必填；種植失敗、試作／推廣失敗可不填）<span class="my">ဈေးနှုန်း (မဖြစ်မနေ၊ မအောင်မြင်လျှင် မဖြည့်လည်းရ)</span><small class="cunit-price"></small></label><input type="number" id="cPrice" min="0" step="any" inputmode="decimal" placeholder="例 12000"></div>
-        <div><label class="lab" for="cYield">3. 產量（必填；種植失敗、試作／推廣失敗可不填）<span class="my">အထွက်နှုန်း (မဖြစ်မနေ၊ မအောင်မြင်လျှင် မဖြည့်လည်းရ)</span><small class="cunit-yield"></small></label><input type="number" id="cYield" min="0" step="any" inputmode="decimal" placeholder="例 60"></div>
-      <div><label class="lab" for="cBuyer">4. 收購客戶（必填；種植失敗、試作／推廣失敗可不填）<span class="my">ဝယ်သူ (မဖြစ်မနေ၊ မအောင်မြင်လျှင် မဖြည့်လည်းရ)</span></label><input type="text" id="cBuyer" maxlength="80" placeholder="例：Golden 糧行／U Aung"></div>
+        <div><label class="lab" for="cPrice">2. 價格（必填）<span class="my">ဈေးနှုန်း (မဖြစ်မနေ)</span><small class="cunit-price"></small></label><input type="number" id="cPrice" min="0" step="any" inputmode="decimal" placeholder="例 12000"></div>
+        <div><label class="lab" for="cYield">3. 產量（必填）<span class="my">အထွက်နှုန်း (မဖြစ်မနေ)</span><small class="cunit-yield"></small></label><input type="number" id="cYield" min="0" step="any" inputmode="decimal" placeholder="例 60"></div>
+      <div><label class="lab" for="cBuyer">4. 收購客戶（必填）<span class="my">ဝယ်သူ (မဖြစ်မနေ)</span></label><input type="text" id="cBuyer" maxlength="80" placeholder="例：Golden 糧行／U Aung"></div>
       <div><label class="lab" for="cPhone">5. 電話<span class="my">ဖုန်း</span></label><input type="tel" id="cPhone" maxlength="30" inputmode="tel" placeholder="例：09 123 456 789"></div>
       <div><label class="lab" for="cReason">6. 原因<span class="my">အကြောင်းရင်း</span></label><input type="text" id="cReason" maxlength="300" placeholder="例：收成完、全部賣掉／ရိတ်ပြီး ရောင်းပြီး"></div>
       <div><label class="lab" for="cProgress">7. 進度<span class="my">တိုးတက်မှု</span></label><input type="text" id="cProgress" maxlength="300" placeholder="例：已收成 8 成，剩下下週賣／၈၀% ရိတ်ပြီး"></div>
@@ -705,14 +772,7 @@ textarea#note{min-height:8.2em}
         </div>
       </details>
       <!-- 0.4.74 董事長「要，先填結果」：這位農民有進行中的試作或推廣，結案前要先填結果（成功／失敗；失敗要填失敗紀錄） -->
-      <div id="closeTrialBox" class="fields" hidden>
-        <label class="lab" for="cTrialOutcome" id="closeTrialLab">試作結果（必填）<span class="my">ရလဒ် (မဖြစ်မနေ)</span></label>
-        <p class="sub" id="closeTrialNow"></p>
-        <select id="cTrialOutcome"><option value="">— 請選 ရွေးပါ —</option><option value="成功">成功／အောင်မြင်</option><option value="失敗">失敗／မအောင်မြင်</option></select>
-      </div>
       <!-- 0.4.75 董事長「『這次發現種植失敗』移到所有農民結案這邊」：一般／試作／推廣農民結案都有；試作結果選失敗時自動勾、鎖住（失敗紀錄只填一次） -->
-      <label class="chk" id="cPlantFailLab"><input type="checkbox" id="cPlantFail"> 這次發現<b>種植失敗</b>（要寫原因）<span class="my">စိုက်ပျိုးမှု မအောင်မြင် (အကြောင်းရင်း ဖြည့်ရန်)</span></label>
-      <div id="closeFailSlot"></div>
       <p class="sub" id="closeHint">只能選自己負責的農民。存檔後這位農民就結案（不再提醒回訪）。<br>ကိုယ်တာဝန်ယူထားသော လယ်သမားသာ ရွေးနိုင်သည်။</p>
     </div>
 
@@ -746,6 +806,7 @@ textarea#note{min-height:8.2em}
       </label>
     </div>
     <div class="thumbs" id="thumbs"></div>
+    <button type="button" class="btn2 again" id="againBtn" hidden>📷 再拍一張<span class="my" data-tr="待譯"></span></button><!-- 第24任 第六批⑮：拍完一張就出現，按了直接開相機（瀏覽器不准自動開相機，要業務按一下） -->
     <!-- 0.4.78 董事長「要有前期的發芽、開花、結果、長大、採收、採收後、剖面圖」：農民拜訪有拍照時選這張照片是哪個生長階段（選填，依種植日期自動建議，可改） -->
     <div class="fields" id="stageBox" hidden>
       <label class="lab" for="vStage">生長階段<span class="my">ကြီးထွားမှု အဆင့်</span></label>
@@ -868,13 +929,13 @@ textarea#note{min-height:8.2em}
 <footer>
   <!-- 0.4.29 董事長 2026-11-12：緬甸網路常擋某些網站主機 → 列出幾個備用網址（不同公司的主機、同一個後台與資料），打不開時換一個 -->
   <details class="mirrors" id="mirrors">
-    <summary>網址打不開時改用這個<span class="my">လိပ်စာ မဖွင့်နိုင်လျှင် ဤလိပ်စာ သုံးပါ</span></summary>
+    <summary>網址打不開時改用這個<small class="sub mirrornote">換網址要重新登入；還沒上傳的資料留在原本的網址，請回原網址送出<span class="my" data-tr="待譯"></span></small><span class="my">လိပ်စာ မဖွင့်နိုင်လျှင် ဤလိပ်စာ သုံးပါ</span></summary>
     <ul id="mirrorList"></ul>
     <p class="sub">換網址要重新登入一次；資料、帳號都一樣。還沒上傳的紀錄存在原本的網址裡，網路通了請回原本的網址送出。<span class="my">လိပ်စာပြောင်းလျှင် ပြန်ဝင်ပါ။ မတင်ရသေးသော မှတ်တမ်းများသည် မူလလိပ်စာတွင်သာ ရှိသည်၊ အင်တာနက်ရလျှင် မူလလိပ်စာသို့ ပြန်သွားပြီး တင်ပါ</span></p>
     <p class="warn" id="mirrorPending" hidden></p><!-- 0.5.19 A2：這個網址還有沒上傳的，換網址前先傳完 -->
   </details>
   <p><button type="button" class="link" id="unlockBtn" hidden>🔒 解鎖方式（人臉／指紋、九宮格）<span class="my" data-tr="待譯"></span></button></p><!-- 第24任 必改第四批 -->
-  <small>第 2 期測試版 <span id="appVer"></span>・緬文待校對 မြန်မာစာ ပြန်စစ်ရန်</small>
+  <small><span id="testTag">第 2 期測試版 </span><span id="appVer"></span><span id="testTag2">・緬文待校對 မြန်မာစာ ပြန်စစ်ရန်</span></small><!-- 第24任 第六批⑳：正式環境只顯示版本號 -->
 </footer>
 <div id="toast" hidden aria-live="polite"></div>
 
