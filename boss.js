@@ -278,10 +278,12 @@
 
   function render() {
     state.renderGen++;
-    const cs = active();
+    // 第25任：工作進度上方的統計卡原本把測試帳號的客戶、拜訪也算進去，跟同一頁的業務卡片、全員對照表（預設不列測試帳號）對不起來 → 一樣預設不算，「顯示測試資料」才算
+    const notTest = x => state.showTest || !isTestStaff(x.staff);
+    const cs = active().filter(notTest);
     const late = cs.filter(c => dueState(c) === 'late'), due = cs.filter(c => dueState(c) === 'due');
     const weekAgo = addDays(state.data.today, -6);
-    const week = state.data.visits.filter(v => v.time.slice(0, 10) >= weekAgo);
+    const week = state.data.visits.filter(v => v.time.slice(0, 10) >= weekAgo && notTest(v));
     $('stats').hidden = state.tab !== 'progress'; // 第24任 第七批升級版一-5：「0 逾期」這種統計卡不在首頁佔位置，放到工作進度
     $('stats').innerHTML = [
       ['red', late.length, '逾期未回訪'], ['yel', due.length, '今天該回訪'],
