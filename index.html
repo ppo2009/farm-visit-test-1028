@@ -21,7 +21,7 @@
 html,body{margin:0}
 body{background:var(--bg);color:var(--fg);font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;font-size:16px;line-height:1.55;
   padding:max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
-.my{font-family:"Noto Sans Myanmar","Myanmar Text","Padauk",sans-serif;font-size:.8em;color:var(--muted);display:block;font-weight:400}
+.my{font-family:"Noto Sans Myanmar","Myanmar Text","Padauk",sans-serif;font-size:max(11px,.8em);color:var(--muted);display:block;font-weight:400}
 button,input,select,textarea{font:inherit;color:inherit}
 header{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;margin-bottom:12px} /* 0.4.29 董事長：標題、名字置中 */
 h1{font-size:1.25rem;margin:0}
@@ -91,11 +91,11 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
 .htabs button .my{display:block;font-weight:400;font-size:.7rem}
 .htabs button[aria-selected="true"]{border-color:var(--paddy);color:var(--paddy);background:var(--surface)}
 .htabs .tbadge{position:absolute;top:-9px;right:-2px;z-index:1;min-width:18px;height:18px;border-radius:9px;background:var(--chili,#b23a2a);color:#fff;font-size:.72rem;line-height:18px;padding:0 4px}
-@media (max-width:400px){.htabs{gap:1px}.htabs button{font-size:.95rem;padding:6px 0;border-width:1px}.htabs button .my{font-size:.62rem;white-space:nowrap}}
+@media (max-width:400px){.htabs{gap:1px}.htabs button{font-size:.95rem;padding:6px 0;border-width:1px}.htabs button .my{font-size:11px;white-space:nowrap}}
 @media (max-width:400px){#htab-mine .my{white-space:normal;line-height:1.3}} /* 0.4.81 改名「月分工作進度」：緬文比格子寬，375 寬會壓到旁邊的「種植資料」→ 只有這格的緬文在空格處換行 */
 /* 0.4.91 分頁列變矮（董事長截圖、第11任派）：電腦照舊一行；手機（≤480px）中文兩字一行固定兩行（結案一行、上下置中對齊其他格），緬文放下面、字再小、行距收緊；選中樣式不變 */
 .htabs .zh span{display:inline}
-@media (max-width:480px){.htabs{grid-template-columns:1fr 1fr 1.75fr .9fr 1fr}.htabs button{min-height:0;padding:4px 0 5px;font-size:.92rem;line-height:1.12}.htabs .zh{display:flex;flex-direction:column;justify-content:center;min-height:2.24em}.htabs .zh span{display:block}.htabs button .my{font-size:.56rem;line-height:1.1;margin-top:1px;white-space:nowrap}}
+@media (max-width:480px){.htabs{grid-template-columns:1fr 1fr 1.75fr .9fr 1fr}.htabs button{min-height:0;padding:4px 0 5px;font-size:.92rem;line-height:1.12}.htabs .zh{display:flex;flex-direction:column;justify-content:center;min-height:2.24em}.htabs .zh span{display:block}.htabs button .my{font-size:11px;line-height:1.15;margin-top:1px;white-space:normal;overflow-wrap:anywhere}} /* 第24任 必改清單 ⑥：緬文原本 .56rem（9px）看不清 → 11px，格子窄就換行（不再 nowrap 撐出格子） */
 li.assigned{display:block}
 li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px}
 .progress{border:1.5px solid var(--paddy);border-radius:12px;padding:10px 14px;margin:12px 0 6px;background:var(--surface)} /* 0.4.44 小卡：拿掉最小高度 */
@@ -125,7 +125,7 @@ li.assigned .meta{display:block;color:var(--muted);font-size:1rem;margin-top:2px
 .ncchip{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:6px 4px;min-height:58px;font:inherit;cursor:pointer;text-align:center;color:inherit}
 .ncchip b{display:block;font-size:1.3rem;line-height:1.2;color:var(--paddy);font-variant-numeric:tabular-nums}
 .ncchip>span{display:block;font-size:.85rem;line-height:1.25}
-.ncchip .my{display:block;font-size:.68rem;line-height:1.6;color:var(--muted)}
+.ncchip .my{display:block;font-size:11px;line-height:1.6;color:var(--muted)}
 .ncchip[aria-pressed="true"]{border-color:var(--paddy);background:var(--paddy-soft)}
 .ncchip[disabled]{opacity:.55;cursor:default}
 .nclist{margin-top:8px}
@@ -213,8 +213,8 @@ li.go{cursor:pointer}
 .measure{margin:8px 0;border:1px solid var(--line);border-radius:10px;padding:6px 10px} .measure summary{cursor:pointer;font-weight:700;min-height:40px;display:flex;flex-wrap:wrap;align-items:center;gap:0 6px} /* 0.4.77 採收量測 */
 .vclose{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0} .vclose .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;margin:6px 0} .vclose .pgrid .btn2.small,.vclose .pgrid img{width:100%;margin:0} .mcard{list-style:none;padding:8px 10px;margin:6px 0;border:1px dashed var(--line);border-radius:8px;font-variant-numeric:tabular-nums} .mcard li{display:block;border:0;padding:1px 0;overflow-wrap:anywhere} /* 0.4.77 種植資料：結案照片格子＋量測卡 */
 .plbtns{display:flex;gap:8px;align-items:stretch;margin:6px 0} .plbtns #plWordBtn{flex:1;min-width:0;min-height:48px} .plbtns #plEditBtn{flex:0 0 auto;min-height:48px;padding:4px 12px} /* 0.4.77 種植資料：大按鈕 Word、小按鈕修改 */
-.hdracts{display:flex;flex-direction:column;gap:6px;align-items:stretch} #feedbackBtn{min-height:44px;padding:4px 12px;border:1px solid var(--paddy);border-radius:99px;background:var(--surface);color:var(--paddy);font:inherit;font-size:.9rem;font-weight:700;line-height:1.15;cursor:pointer;white-space:nowrap} #feedbackBtn .my{display:block;font-size:.7rem;font-weight:400;color:inherit} #feedbackBox{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px} #feedbackBox[hidden]{display:none} #feedbackBox .fbcard{background:var(--bg);border-radius:14px;padding:16px;width:100%;max-width:480px;display:flex;flex-direction:column;gap:10px} /* 0.5.03 提供建議 */
-#logoutBtn{min-height:44px;padding:4px 12px;border:1px solid var(--line);border-radius:99px;background:var(--surface);color:inherit;font:inherit;font-size:.9rem;font-weight:700;line-height:1.15;cursor:pointer;white-space:nowrap} #logoutBtn .my{display:block;font-size:.7rem;font-weight:400;color:inherit} /* 0.4.75 右上角看得清楚的登出鈕（按的範圍 44px） */
+.hdracts{display:flex;flex-direction:column;gap:6px;align-items:stretch} #feedbackBtn{min-height:44px;padding:4px 12px;border:1px solid var(--paddy);border-radius:99px;background:var(--surface);color:var(--paddy);font:inherit;font-size:.9rem;font-weight:700;line-height:1.15;cursor:pointer;white-space:nowrap} #feedbackBtn .my{display:block;font-size:.7rem;font-weight:400;color:inherit;line-height:1.5} #feedbackBox{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px} #feedbackBox[hidden]{display:none} #feedbackBox .fbcard{background:var(--bg);border-radius:14px;padding:16px;width:100%;max-width:480px;display:flex;flex-direction:column;gap:10px} /* 0.5.03 提供建議 */
+#logoutBtn{min-height:44px;padding:4px 12px;border:1px solid var(--line);border-radius:99px;background:var(--surface);color:inherit;font:inherit;font-size:.9rem;font-weight:700;line-height:1.15;cursor:pointer;white-space:nowrap} #logoutBtn .my{display:block;font-size:.7rem;font-weight:400;color:inherit;line-height:1.5} /* 0.4.75 右上角看得清楚的登出鈕（按的範圍 44px） */
 .chip[aria-pressed="true"]{background:var(--paddy);color:var(--surface);border-color:var(--paddy)}
 li.plan>span:first-child{flex:1;min-width:0}
 .bar{display:block;height:6px;border-radius:99px;background:var(--line);margin-top:4px;overflow:hidden}
@@ -253,7 +253,7 @@ details.mrep ul{margin-top:8px}
 header.homehdr{position:relative}
 .rptbtns{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%;max-width:420px}
 .rptbtn{border:1px solid var(--paddy);background:var(--surface);color:var(--paddy);border-radius:10px;padding:5px 6px;min-height:40px;font:inherit;font-size:.9rem;font-weight:700;cursor:pointer;line-height:1.2}
-.rptbtn .my{display:block;font-size:.68rem;font-weight:400;line-height:1.7;margin-top:1px} /* 緬文字高，行高拉開才不會壓到中文 */
+.rptbtn .my{display:block;font-size:11px;font-weight:400;line-height:1.7;margin-top:1px} /* 緬文字高，行高拉開才不會壓到中文 */
 @media (min-width:900px){.rptbtns{position:absolute;top:0;right:0;width:auto;max-width:none;display:flex}.rptbtn{padding:5px 12px}}
 .rptscope{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:4px 0 6px}
 .rptscope button{border:1px solid var(--line);background:var(--surface);border-radius:99px;min-height:40px;font:inherit;font-size:.9rem;cursor:pointer;padding:4px}
