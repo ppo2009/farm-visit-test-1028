@@ -120,8 +120,9 @@
       b.addEventListener('click', e => { if (e.detail === 0) add(Number(b.dataset.i)); }); // 鍵盤（Enter／空白鍵）
     });
     const up = () => { if (drawing && stroke >= 2 && seq.length >= MIN_POINTS) finish(); else drawing = false; };
-    box.addEventListener('pointerup', up);
-    box.addEventListener('pointercancel', () => { drawing = false; });
+    // 第25任 審查②：box 每次上鎖都是同一個元素，原本每畫一次就多掛一組 pointerup → 只綁一次，換成呼叫這一次的處理函式
+    box._up = up; box._cancel = () => { drawing = false; };
+    if (!box._bound) { box._bound = true; box.addEventListener('pointerup', () => box._up()); box.addEventListener('pointercancel', () => box._cancel()); }
     box.querySelector('[data-ok]').addEventListener('click', finish);
     return { reset() { seq = []; drawing = false; paint(); } };
   }
@@ -132,8 +133,11 @@
     el('lockMsg').textContent = '';
     el('lockBio').hidden = c.method !== 'bio'; el('lockPat').hidden = c.method !== 'pattern';
     el('lockScreen').hidden = false;
+    let checking = false; // 第25任 審查②：驗證要跑十幾萬次雜湊（慢手機近 1 秒），途中再畫一次會兩次同時讀到同一個錯誤次數、各自 +1 寫回 → 少算一次
     if (c.method === 'pattern') grid(el('lockGrid'), async seq => {
-      const r = await checkPattern(await H.getConfig(), seq);
+      if (checking) return; checking = true;
+      let r; try { r = await checkPattern(await H.getConfig(), seq); } finally { checking = false; }
+      if (!locked) return; // 驗證途中已經用別的方式解開或登出了
       if (r.ok) return unlock();
       if (r.locked) return lockout('九宮格錯了 ' + MAX_FAILS + ' 次，請用密碼重新登入（沒上傳的資料還在手機裡）');
       el('lockMsg').textContent = `圖形不對，還可以試 ${MAX_FAILS - r.fails} 次`;

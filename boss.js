@@ -206,6 +206,7 @@
       closeMsg: '', rf: {}, pm: '', grpOpen: {}, lastTab: '', replyRid: {}, loadedAt: 0, closeMsgSeq: 0 }); // 主管BUG#9：換人登入不留上一位的結案訊息、篩選、月份、展開狀態
     try { if (player) player.pause(); player = null; playingId = ''; playingBtn = null; } catch (e) { /* 還沒播過 */ }
     try { if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel(); } catch (e) { /* 不支援朗讀 */ }
+    Object.assign(state, { errs: null, ef: undefined, errMsg: '', errsLoading: false, vstaff: '', onlyFlag: false, openCards: {}, showTest: false, review: null, closeSending: null }); // 第25任 審查④：錯誤紀錄、第七批的篩選和審核狀態也不留給下一位
     showLogin();
   }
 
@@ -563,6 +564,8 @@
   /** E：測試帳號（設定分頁「測試帳號」）的業務名字。主管頁預設隱藏他們的拜訪、客戶、結案（右上「顯示測試資料」打開才看） */
   function testNames() {
     const t = cfg7().testAccounts; if (!t.length) return {};
+    const tn = state.data.bossCfg && state.data.bossCfg.testNames; // 第25任 審查⑧：後台直接給的姓名（含已停用帳號，跟日報同一批）；舊後台沒送才自己從名單換
+    if (Array.isArray(tn)) { const m = {}; tn.forEach(n => { m[String(n)] = true; }); return m; }
     const m = {}; (state.data.staffList || []).concat(state.data.bossList || []).forEach(s => { if (t.indexOf(String(s.account).toLowerCase()) >= 0) m[s.name] = true; });
     return m;
   }
@@ -633,8 +636,13 @@
   /** 逾期沒回訪、快採收待盯（從「需要你處理」點進來） */
   function renderOverdue() { return `<p><button class="btn" type="button" data-nav="today">← 回今天</button></p>` + renderHarvestSoon() + renderTodayLists(); }
   /** 更多（手機）：任務、試作報告、主管匯報、工作進度、帳號、錯誤紀錄；有未讀或待辦顯示紅點數字 */
+  /** 第25任 審查⑦：「更多」裡的紅點，選單和手機底部共用一份。錯誤紀錄原本讀 d.errors（後台主管資料沒有這欄、永遠 0）→ 改讀打開過的錯誤紀錄 state.errs */
+  function moreBadges() {
+    const d = state.data || {}, e = state.errs && state.errs.ok && Array.isArray(state.errs.errors) ? state.errs.errors : [];
+    return { briefs: briefUnreadCount(), tasks: (d.tasks || []).filter(t => t.status === '待辦' && t.account === d.account).length, errors: e.filter(x => !x.done).length };
+  }
   function renderMoreMenu() {
-    const d = state.data, badge = { briefs: briefUnreadCount(), tasks: (d.tasks || []).filter(t => t.status === '待辦' && t.account === d.account).length, errors: (d.errors || []).filter(e => !e.done).length };
+    const badge = moreBadges();
     return `<ul class="moremenu">${MORE_ITEMS.map(([t, n]) => `<li><button type="button" data-nav="${t}"><span>${n}</span>${badge[t] ? `<b class="badge">${badge[t]}</b>` : ''}<span class="arr" aria-hidden="true">＞</span></button></li>`).join('')}</ul>`;
   }
   /** 拜訪、客戶分頁上方的切換（卡片／表格／日曆、清單／地圖） */
@@ -716,9 +724,11 @@
   /** 設計版 C：退回原因面板（常用原因可複選＋自己寫，至少一項） */
   const REJ_REASONS = ['價格不合理', '缺照片', '照片非現場', '位置不符', '資料不完整', '其他'];
   function rejectPanel() {
-    return `<fieldset class="rejpanel"><legend>退回原因（至少選一項或寫說明）</legend>${REJ_REASONS.map(r => `<label class="rjc"><input type="checkbox" name="rj" value="${esc(r)}"> ${esc(r)}</label>`).join('')}
-      <textarea id="rejNote" maxlength="300" placeholder="寫給業務看的說明（例：價格比市價低一半，請確認單位）"></textarea>
-      <div class="rbtns"><button class="btn" type="button" data-rv="rejcancel">取消</button><button class="btn primary" type="button" data-rv="rejsend" disabled>送出退回</button></div></fieldset>`;
+    // 第25任 審查⑤：勾選和說明記在 state.review.rejDraft，畫面重讀（切回來超過 10 分鐘、跨午夜）後照樣帶回，不會寫到一半就清空
+    const R = state.review, d0 = R && R.rejDraft, dr = d0 && d0.id === R.rej ? d0 : { reasons: [], note: '' }, can = dr.reasons.length || dr.note.trim(); // 草稿跟著那一筆（換到別筆不帶過去）
+    return `<fieldset class="rejpanel"><legend>退回原因（至少選一項或寫說明）</legend>${REJ_REASONS.map(r => `<label class="rjc"><input type="checkbox" name="rj" value="${esc(r)}"${dr.reasons.indexOf(r) >= 0 ? ' checked' : ''}> ${esc(r)}</label>`).join('')}
+      <textarea id="rejNote" maxlength="300" placeholder="寫給業務看的說明（例：價格比市價低一半，請確認單位）">${esc(dr.note)}</textarea>
+      <div class="rbtns"><button class="btn" type="button" data-rv="rejcancel">取消</button><button class="btn primary" type="button" data-rv="rejsend"${can ? '' : ' disabled'}>送出退回</button></div></fieldset>`;
   }
   function bindReview() {
     const box = $('panel').querySelector ? $('panel').querySelector('#reviewCard') : null; if (!box) return; // 舊測試的假畫面沒有 querySelector
@@ -729,7 +739,10 @@
     box.addEventListener('touchend', e => { if (sx == null) return; const dx = e.changedTouches[0].clientX - sx; sx = null; if (Math.abs(dx) > 60 && !R.rej) go(dx < 0 ? 1 : -1); });
     const rp = box.querySelector('.rejpanel');
     if (rp) {
-      const upd = () => { rp.querySelector('[data-rv="rejsend"]').disabled = !(rp.querySelectorAll('input[name=rj]:checked').length || $('rejNote').value.trim()); };
+      const upd = () => {
+        R.rejDraft = { id: R.rej, reasons: [...rp.querySelectorAll('input[name=rj]:checked')].map(i => i.value), note: $('rejNote').value }; // 第25任 審查⑤：記下草稿
+        rp.querySelector('[data-rv="rejsend"]').disabled = !(R.rejDraft.reasons.length || R.rejDraft.note.trim());
+      };
       rp.addEventListener('change', upd); $('rejNote').addEventListener('input', upd);
     }
     box.querySelectorAll('[data-big]').forEach(b => b.addEventListener('click', () => { const src = state.photos[b.dataset.big]; if (src) showBig(src); }));
@@ -741,7 +754,7 @@
       if (a === 'seen') { markSeen(x.id); R.done++; state.closeMsg = '已標「看過」'; render(); return; }
       if (a === 'ask') { const s = (state.data.staffList || []).find(y => y.name === x.staff); state.tf = { staff: s ? s.account : '', cid: x.cid, text: `請說明 ${x.time.slice(5, 16)} 這筆拜訪：${flagsOf(x).map(f => f.txt.replace(/^\S+ /, '')).join('、')}` }; markSeen(x.id); state.review = null; state.tab = 'tasks'; render(); return; }
       if (a === 'reject') { R.rej = x.visitId; render(); return; }
-      if (a === 'rejcancel') { R.rej = null; render(); return; }
+      if (a === 'rejcancel') { R.rej = null; R.rejDraft = null; render(); return; }
       if (a === 'confirm' || a === 'rejsend') {
         const ok = a === 'confirm', v = state.data.visits.find(y => y.id === x.visitId), miss = ok ? closeMissing(x, v) : [];
         if (ok && !confirm(confirmText(x, miss))) return;
@@ -753,7 +766,7 @@
         if (r && r.code === 'DONE_ALREADY') r = Object.assign({}, r, { ok: true, already: true });
         if (r.closings) setData({ closings: r.closings });
         R.rej = null;
-        if (r.ok) { R.done++; state.closeMsg = r.already ? '這筆別人已經處理過了，跳下一筆' : ok ? `已確認結案：${x.name}` : `已退回：${x.name}（原因已傳給業務）`; state.closeMsgSeq = state.loadSeq + 1; render(); load(); return; } // closeMsgSeq：緊接著的重讀不清掉訊息（同舊清單 0.4.88 低7）
+        if (r.ok) { R.done++; R.rejDraft = null; state.closeMsg = r.already ? '這筆別人已經處理過了，跳下一筆' : ok ? `已確認結案：${x.name}` : `已退回：${x.name}（原因已傳給業務）`; state.closeMsgSeq = state.loadSeq + 1; render(); load(); return; } // closeMsgSeq：緊接著的重讀不清掉訊息（同舊清單 0.4.88 低7）
         state.closeMsg = '⚠ ' + (r.message || '處理失敗'); render();
       }
     }));
@@ -784,11 +797,12 @@
   function renderLatest() {
     let list = hideTest(state.data.visits).slice().sort((a, b) => b.time.localeCompare(a.time));
     if (state.vstaff) list = list.filter(v => v.staff === state.vstaff);
-    const nFlag = list.slice(0, 15).filter(v => flagsOf(v).length).length;
-    if (state.onlyFlag) list = list.filter(v => flagsOf(v).length);
+    // 第25任 審查⑥：按鈕上的數字原本只算最新 15 筆、按下去卻從全部篩 → 數字和列出的筆數對不上。改成兩邊都看全部（主管頁讀到的最近 500 筆），再列最新 15 筆
+    const flagged = list.filter(v => flagsOf(v).length), nFlag = flagged.length;
+    if (state.onlyFlag) list = flagged;
     list = list.slice(0, 15);
     const tools = `<div class="vtools"><button type="button" class="btn" data-onlyflag aria-pressed="${!!state.onlyFlag}">${state.onlyFlag ? '✓ ' : ''}只看有警示的（${nFlag}）</button>${state.vstaff ? `<button type="button" class="btn" data-vstaffclear>只看 ${esc(state.vstaff)} ✕</button>` : ''}</div>`;
-    return `<section><h3><span class="pill p-grn">最新拜訪</span> <span class="sub">最近 15 筆</span></h3>${tools}<ul class="list vcards">${list.map(vcard).join('') || '<li class="empty">' + (state.onlyFlag ? '最近 15 筆沒有警示' : '還沒有拜訪紀錄。業務用打卡網頁上傳後，這裡就會出現') + '</li>'}</ul></section>`;
+    return `<section><h3><span class="pill p-grn">最新拜訪</span> <span class="sub">${state.onlyFlag ? `有警示的最新 15 筆（共 ${nFlag} 筆）` : "最近 15 筆"}</span></h3>${tools}<ul class="list vcards">${list.map(vcard).join('') || '<li class="empty">' + (state.onlyFlag ? '沒有警示的拜訪' : '還沒有拜訪紀錄。業務用打卡網頁上傳後，這裡就會出現') + '</li>'}</ul></section>`;
   }
   /** 縮圖：捲到看得到才下載（15 筆 × 照片一次全抓太慢、太耗流量） */
   function lazyPhotos(root) {
@@ -818,13 +832,13 @@
     const g = navGroup(state.tab), need = state.data ? needList().reduce((s, x) => s + x.n, 0) : 0;
     document.querySelectorAll('#bnav [data-bnav]').forEach(b => b.setAttribute('aria-current', b.dataset.bnav === g ? 'page' : 'false'));
     const tb = $('todayBadge'); if (tb) { tb.hidden = !need; tb.textContent = need ? String(need) : ''; }
-    const mb = $('moreBadge'); if (mb) { const n = state.data ? briefUnreadCount() : 0; mb.hidden = !n; mb.textContent = n ? String(n) : ''; }
+    const mb = $('moreBadge'); if (mb) { const b = state.data ? moreBadges() : null, n = b ? b.briefs + b.tasks : 0; mb.hidden = !n; mb.textContent = n ? String(n) : ''; } // 第25任 審查⑦：匯報＋自己的待辦任務（錯誤紀錄不算進底部紅點：沒處理的可能一直很多，紅點會一直亮）
     const st = $('showTest'); if (st) { st.hidden = !cfg7().testAccounts.length; st.setAttribute('aria-pressed', String(!!state.showTest)); st.textContent = state.showTest ? '隱藏測試資料' : '顯示測試資料'; }
   }
   /** 0.4.82 董事長「蔬菜快採收前 10 天要提醒業務到現場、通知主管盯業務」：預計採收日（種植日期＋作物生長天數）0～10 天內，或已過還沒結案（紅字）。舊後台沒送就不顯示 */
   function renderHarvestSoon() {
-    const list = state.data.harvestSoon;
-    if (!Array.isArray(list)) return '';
+    if (!Array.isArray(state.data.harvestSoon)) return '';
+    const list = typeof hideTest === 'function' ? hideTest(state.data.harvestSoon) : state.data.harvestSoon; // 第25任 審查③：「需要你處理」的數字有排除測試帳號，點進來的清單也要排除（抽函式跑的舊測試沒有 hideTest）
     const left = h => (h.overdue ? `<span class="pill p-red">已過 ${esc(-h.daysLeft)} 天還沒結案</span>` : h.daysLeft === 0 ? '<span class="pill p-yel">今天採收</span>' : `<span class="pill p-yel">剩 ${esc(h.daysLeft)} 天</span>`);
     return `<section class="harvest"><h3><span class="pill p-yel">快採收待盯</span> <span class="sub">預計採收日前 10 天內，請業務到現場；紅色＝已過預計採收日還沒結案</span></h3>
       <ul class="list">${list.map(h => `<li${h.overdue ? ' class="hs-late"' : ''}>${esc(h.staff || '未指派')}｜<b><a href="javascript:void 0" data-go="${esc(h.cid)}">${esc(h.name)}</a></b>（${esc(cropText(h.crop))}）${left(h)}<br>
@@ -845,7 +859,7 @@
       <p class="sub" id="closeMsg" aria-live="polite">${esc(state.closeMsg || '')}</p></section>`;
   }
   function renderTodayLists() {
-    const cs = active();
+    const cs = active().filter(c => state.showTest || !isTestStaff(c.staff)); // 第25任 審查③：同「需要你處理」的逾期數字
     const late = cs.filter(c => dueState(c) === 'late'), due = cs.filter(c => dueState(c) === 'due');
     const li = c => { const l = visitsOf(c.id)[0]; return `<li><b><a href="javascript:void 0" data-go="${esc(c.id)}">${esc(c.name)}</a></b>（${esc(cropText(c.crop) || '—')}）— ${esc(c.staff || '未指派')}${c.nextDue ? ' — 應回訪 ' + md(c.nextDue) : ''}${l && l.issue && l.issue !== '無' ? `<br><span class="sub">上次問題：${esc(l.issue)}</span>` : ''}</li>`; };
     return `<section><h3><span class="pill p-red">逾期</span></h3><ul class="list">${late.map(li).join('') || '<li class="empty">沒有</li>'}</ul></section>

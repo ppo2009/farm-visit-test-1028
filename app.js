@@ -66,11 +66,12 @@
       lockout: async msg => {
         const c = await getConfig();
         // 第24任 第六批（老闆問：錯 5 次會不會丟資料）：正在填、還沒儲存的表單比照「登入失效」——先讓業務存進手機，離開打卡畫面才回登入頁（已儲存的本來就不會丟）
-        if (state.view === 'visit' && typeof formDirty === 'function' && formDirty() && c && c.deviceKey) {
-          state.loginLost = { key: c.deviceKey, msg }; await Store.setMeta('loginLost', { key: c.deviceKey, msg });
-          toast(msg + '。正在填的這一筆請先儲存，回首頁後要用密碼重新登入'); return;
-        }
-        if (typeof tagOwner === 'function') await tagOwner(); await Store.setMeta('config', { gasUrl: (c || {}).gasUrl }); showLogin(msg);
+        // 第25任 審查①（安全）：原本這條路只記 loginLost、金鑰照留 → 鎖畫面收起後別人可以繼續用這個登入看客戶資料。改成金鑰一樣立刻清掉，
+        //   只是不跳登入頁、表單留著：存檔照 0.5.23 J5「沒人登入、用表單主人存」，存完自動回登入頁；不存回首頁時 showHome 看 lockedOut 跳登入
+        const dirty = state.view === 'visit' && typeof formDirty === 'function' && formDirty() && c && c.deviceKey;
+        if (typeof tagOwner === 'function') await tagOwner(); await Store.setMeta('config', { gasUrl: (c || {}).gasUrl });
+        if (dirty) { state.lockedOut = msg; toast(msg + '。正在填的這一筆可以先儲存在手機裡，之後要用密碼重新登入'); return; }
+        showLogin(msg);
       }
     };
   }
@@ -151,7 +152,7 @@
       //   畫面說手機存資料失敗；已標好的歸這個人（換別人登入會被擋），沒標到的下次登入再標，不會被別的帳號帶走
       for (const v of await Store.allVisits()) if (v.status === 'pending' && !v.account) { v.account = data.account; await Store.putVisit(v); }
       await Store.setMeta('config', { gasUrl: FARM_CONFIG.gasUrl, deviceKey: data.deviceKey, name: data.name, account: data.account, role: data.role });
-      await Store.setMeta('loginLost', null); state.loginLost = null; // 0.4.91 中4：重新登入了，先前延後的登入失效作廢
+      await Store.setMeta('loginLost', null); state.loginLost = null; state.lockedOut = null; // 0.4.91 中4：重新登入了，先前延後的登入失效作廢（第25任：解鎖鎖死的也作廢）
       // 0.5.24（第21任抓BUG）：登入已經成功、金鑰也存好了，接著存客戶清單等資料失敗（多半是空間不足）
       // → 照樣進首頁、跳提示，不停在登入頁讓業務一直重按（每按一次後台就多發一把金鑰）；同步時會再抓一次
       const warn = (typeof FarmCore !== 'undefined' && FarmCore.SYNC_WARN) || '同步資料寫回手機失敗（可能空間不足），稍後再同步';
@@ -3613,6 +3614,7 @@
   }
   /** 0.4.87 中6：離開打卡畫面時，補做先前延後的「登入失效」（金鑰還是同一把才做）；0.4.91 也讀手機裡記的（重新整理過也接得上） */
   async function loginLostCheck() {
+    if (state.lockedOut) { const m = state.lockedOut; state.lockedOut = null; showLogin(m); return true; } // 第25任 審查①：解鎖鎖死時正在填表單（金鑰已經清掉），離開打卡畫面就回登入頁
     const L = state.loginLost || (await Store.getMeta('loginLost'));
     if (!L) return false;
     state.loginLost = null; await Store.setMeta('loginLost', null);
@@ -3646,6 +3648,8 @@
         await onLoginExpired(cfg.deviceKey, (r.error || '登入已失效') + '。沒上傳的資料還在手機裡，重新登入後會自動補傳。／ပြန်ဝင်ပြီးလျှင် ကျန်သော မှတ်တမ်း တင်မည်။');
         return;
       }
+      // 第25任 審查⑪：背景程式正在上傳（拿不到上傳鎖回 busy）不是「沒東西要傳」——原本照樣再抓一次整份資料、把上傳進度字清掉。傳完背景程式會通知畫面重畫
+      if (r && r.busy) { $('syncState').textContent = '背景上傳中…'; return; }
       if (r && !r.error && !r.sent) {
         // 沒有要上傳的，順便抓最新的客戶、選單和首頁數字
         const sentAt = Date.now();
@@ -3656,8 +3660,11 @@
           if (!r.syncWarn && typeof FarmCore !== 'undefined' && FarmCore.oldServer && FarmCore.oldServer(data)) r.syncWarn = FarmCore.OLD_SRV_WARN; // R20（GPT 04）：後台被單獨退回舊版 → 不清理、提示
         }
         else if (data && data.code === 'BAD_LOGIN') { await onLoginExpired(cfg.deviceKey, (data.message || '登入已失效') + '。沒上傳的資料還在手機裡，重新登入後會自動補傳。／ပြန်ဝင်ပြီးလျှင် ကျန်သော မှတ်တမ်း တင်မည်။'); return; } // 0.4.87 高1、中6；0.4.92 中2 比照上傳那條加緬文
+        // 第25任 審查⑫：連不上後台（被擋、逾時）或後台回錯誤，原本 .catch(() => null) 之後什麼都不說，首頁數字一直是舊的。只在上傳狀態列寫一行（每分鐘都會跑，不跳提示）；
+        //   不放進 r.error：後面「同步成功才做」的判斷照舊
+        else r.pullWarn = '抓最新資料失敗，首頁可能不是最新的；一直這樣請改用備用網址';
       }
-      $('syncState').textContent = r && r.error ? r.error : (r && r.syncWarn) || ''; // R13-01：寫回失敗的提示也顯示
+      $('syncState').textContent = r && r.error ? r.error : r && r.pullWarn && !r.syncWarn ? r.pullWarn : (r && r.syncWarn) || ''; // R13-01：寫回失敗的提示也顯示（第25任 審查⑫：抓資料失敗的提醒也顯示）
       // 0.4.81（0.4.80 巡檢中1）：上傳、同步完成 → 種植資料的紀錄切回來要重讀（這裡不馬上重讀，省流量）
       if (r && !r.error) { const ph = document.getElementById('plHistory'); if (ph) ph._doneCid = null; }
       // R16-05（GPT 中）：前景抓完最新資料後試作記號也要馬上清理（runSync 的清理在抓資料之前），不然主管退回、待確認的試作要再同步一次才看得到
