@@ -4074,7 +4074,7 @@
       await openVisit(cat);
       // 第24任 第六批⑫（tomtom 實測：沒有可結案的農民仍打開空表單；盤商、種子商卻是提示）：統一——沒有可結案的就回結案分頁、跳同樣的提示
       if (cat === '結案' && state.closeGroup && ![...$('farmer').options].some(o => o.value && o.value !== '__new' && !o.disabled)) {
-        const g = state.closeGroup; // 清表單會把 closeGroup 清掉，先記下
+        const g = state.closeGroup; // 回首頁會清掉 closeGroup，先記下
         resetForm(); await showHome(); if (typeof setHomeTab === 'function') setHomeTab('close');
         toast(`你沒有可結案的${g}／မရှိပါ`); return;
       }
@@ -4147,7 +4147,13 @@
         }
         if (cr === 'stale') { showLogin('另一個畫面已經換人登入，請重新整理網頁／အခြား စာမျက်နှာတွင် ဝင်ထားပြီ၊ ပြန်ဖွင့်ပါ'); return; }
       }
-      if (typeof FarmLock === 'object') await FarmLock.start(lockHooks()).catch(e => { if (typeof noteErr === 'function') noteErr('解鎖啟動', e); return false; }); // 第24任 第四批：重開 App 有解鎖設定就先鎖（同步照常）；第26任：失敗記下來（要不要改成失敗就鎖住，等老闆決定）
+      // 第24任 第四批：重開 App 有解鎖設定就先鎖（同步照常）
+      // 第26任 老闆核准：解鎖啟動失敗原本照舊不鎖（等於不用解鎖就能看資料）→ 這支手機有設解鎖的話，改成直接要用帳號密碼重新登入；沒設過解鎖的照舊進首頁。看不出有沒有設也當有設（寧可多問一次密碼）
+      const lockFail = typeof FarmLock === 'object' && await FarmLock.start(lockHooks()).then(() => false, e => { if (typeof noteErr === 'function') noteErr('解鎖啟動', e); return true; });
+      if (lockFail) {
+        let had = true; try { const c = FarmLock._t.load(); had = !!(c && (c.method === 'bio' || c.method === 'pattern')); } catch (x) { had = true; }
+        if (had) { await lockHooks().lockout('解鎖功能出錯，請用帳號密碼重新登入（沒上傳的資料還在手機裡）'); return; }
+      }
       await showHome(); syncNow();
     } else showLogin();
   }

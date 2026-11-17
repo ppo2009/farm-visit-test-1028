@@ -109,6 +109,7 @@
     renderGen: 0,    // 每畫一次加一，舊畫面的照片迴圈看到不同就停
     loadSeq: 0,      // 0.4.75（1號主管清單低5）：每次 load 加一，回來時不是最新那次就丟掉
     dataGen: 0 };    // 畫面資料被動作（確認結案、派任務、標已讀…）改過就加一：在那之前出發的 load 晚到時不採用，改重讀一次
+  const STATE_INIT = Object.keys(state).reduce((m, k) => { m[k] = 1; return m; }, {}); // 第26任：一開始就有的欄位（登出時的保險用，見 logout）
   /** 動作回來的資料寫進畫面資料（一律走這裡，dataGen 才會加一） */
   function setData(patch) { Object.assign(state.data, patch); state.dataGen++; }
   // 登入後的金鑰記在這台電腦的瀏覽器裡（存不了就每次重新登入）
@@ -210,6 +211,10 @@
       closeMsg: '', rf: {}, pm: '', grpOpen: {}, lastTab: '', replyRid: {}, loadedAt: 0, closeMsgSeq: 0 }); // 主管BUG#9：換人登入不留上一位的結案訊息、篩選、月份、展開狀態
     try { if (player) player.pause(); player = null; playingId = ''; playingBtn = null; } catch (e) { /* 還沒播過 */ }
     try { if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel(); } catch (e) { /* 不支援朗讀 */ }
+    // 第26任（保哥角度審查第 14 點）：登出原本靠上面幾行手動列欄位歸零，之後新增欄位忘了加就會留給下一位登入的人 →
+    //   再加一道保險：一開始沒有、上面也沒歸零的欄位（執行中才長出來的）全部拿掉；計數器（防舊回應蓋新資料用的）留著
+    const RESET_KEEP = ['dataGen', 'loadSeq', 'renderGen', 'cacheGen', 'closeMsgSeq', 'mustChangeAcct', 'errs', 'ef', 'errMsg', 'errsLoading', 'vstaff', 'onlyFlag', 'openCards', 'showTest', 'review', 'closeSending'];
+    Object.keys(state).forEach(k => { if (!(k in STATE_INIT) && RESET_KEEP.indexOf(k) < 0 && ['progReq', 'histReq', 'photoReq', 'areq', 'briefOpen', 'bf', 'replyDraft', 'tf', 'af', 'newPw', 'taskMsg', 'briefMsg', 'acctMsg', 'moreOpen', 'cf', 'closeMsg', 'grpOpen', 'lastTab', 'replyRid', 'loadedAt'].indexOf(k) < 0) delete state[k]; });
     Object.assign(state, { errs: null, ef: undefined, errMsg: '', errsLoading: false, vstaff: '', onlyFlag: false, openCards: {}, showTest: false, review: null, closeSending: null }); // 第25任 審查④：錯誤紀錄、第七批的篩選和審核狀態也不留給下一位
     showLogin();
   }
@@ -480,6 +485,7 @@
       let t = ''; try { t = new Date(Number(gm.pausedUntil)).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Yangon' }); } catch (e) { t = ''; }
       return '⏳ 翻譯服務忙碌，' + t + '（緬甸時間）後自動再試／ဘာသာပြန်ဝန်ဆောင်မှု အလုပ်များနေသည်၊ ' + t + ' နောက်ပိုင်း အလိုအလျောက် ထပ်ကြိုးစားမည်';
     }
+    if (v.status === '待處理' && v.error && /翻譯服務忙碌|\b503\b/.test(v.error)) return '⏳ 翻譯服務忙碌（Google 那邊），稍後自動補'; // 第26任 老闆核准：503 是 Google 太忙，不說成額度不足（舊資料的 503 原文也一樣）
     if (v.status === '待處理' && v.error && /額度不足|暫時連不上|\b(429|402|503)\b/.test(v.error)) return '⏳ 翻譯額度不足，稍後自動補';
     if (v.status === '待處理') return v.error ? '⏳ 翻譯延遲（上次失敗，稍後自動重試）' : '翻譯處理中，約 10 分鐘內完成'; // 第24任 必改第二批③：原文不直接秀，收進「詳細」（errDetail）
     if (v.status === '處理異常' || v.status === '翻譯異常') return '⚠ 處理失敗' + '（原因排除後，到試算表選單「農業CRM → 重新處理「處理異常」的拜訪」，或把狀態改回「待處理」、重試次數改 0）';
@@ -1632,5 +1638,5 @@
   renderMirrors();
   state.key = keyStore.get();
   if (state.key) load(); else showLogin();
-  window.__bossTest = { state, startReview, flagsOf, render, load, logout, measureDue, weekCompare, syncPlayer, stopAudio, mmToday }; // 本機測試用（0.4.88 多開幾個給測試）
+  window.__bossTest = { state, startReview, flagsOf, render, load, logout, measureDue, weekCompare, syncPlayer, stopAudio, mmToday, noSummaryText, planParts }; // 本機測試用（0.4.88 多開幾個給測試；第26任：多給 noSummaryText、planParts，測試整份載入呼叫，不再切原始碼）
 })();

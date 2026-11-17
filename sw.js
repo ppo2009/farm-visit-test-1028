@@ -1,6 +1,6 @@
 /* 背景程式：讓網頁沒網路也打得開，並在 Android 手機一有網路時於背景自動上傳 */
 /* global self, caches, clients, FarmCore */
-const VERSION = 'build-20261117-214456';
+const VERSION = 'build-20261117-222606';
 const CACHE = 'farm-visit-' + VERSION;
 const NET_TIMEOUT_MS = 4000; // 0.4.87 中7：網路 4 秒還沒回，手機裡有快取就先用
 const SLOW = {};               // 逾時的記號
@@ -43,7 +43,7 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return; // 上傳不經過快取
   // 網頁本身（html）先抓網路上的新版，沒網路才用手機裡存的，避免更新後還看到舊畫面
-  // 有網路一律用最新版（測試期常更新），沒網路才用手機裡存的
+  // 有網路一律用最新版（測試期常更新），沒網路才用手機裡存的；訊號很弱、網路太久沒回時也先用手機裡存的（第26任補充：見下面 0.4.87 那段，網頁 4 秒、程式檔 15 秒）
   // 0.4.46 第6任查到：Firebase 對「/」快取 1 小時、GitHub 全部 10 分鐘 → 一律跟伺服器確認最新版（cache:'no-cache'），不吃瀏覽器舊快取，避免舊頁面＋新程式
   // 0.4.87（第11任清單中7）：訊號很弱時網路一直不回 → 等 NET_TIMEOUT_MS 還沒回，手機裡有這個檔就先用（網路那邊繼續等，回來照樣更新快取）；
   // 沒有快取才繼續等網路。網路失敗照舊改用快取（找不到就給首頁）。安裝、啟用、換版的流程不動
