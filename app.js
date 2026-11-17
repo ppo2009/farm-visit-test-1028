@@ -226,7 +226,7 @@
     const txt = $n('feedbackText'), hint = $n('feedbackHint'), send = $n('feedbackSend');
     let sid = '', sidText = null; // 0.5.19 B3：sidText＝這個送出代號上次送出的內容（沒送過是 null）
     const newSid = () => 'fb_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
-    const close = () => { box.hidden = true; };
+    const close = () => { box.hidden = true; if (typeof FarmVoice === 'object' && FarmVoice.active()) FarmVoice.stop(true); }; // 第26任 低風險修正3③：關建議框也停語音（原本麥克風還開著，之後說的話寫進藏起來的框，打卡畫面按錄音又說「正在語音輸入」卻找不到停止鈕）
     // 0.5.24（第21任抓BUG）：草稿記下是誰寫的；另一個分頁換了帳號再回來按送出 → 不用新帳號送（比照 0.5.23 拜訪存檔的表單主人）
     let author = '';
     const curCfg = async () => { try { const c = await Store.getMeta('config'); return c && c.deviceKey && c.account ? c : null; } catch (e) { return null; } };
@@ -3254,6 +3254,8 @@
   }
   async function save() {
     if (state.saving) return;
+    // 第26任 低風險修正3②：語音輸入還在聽就按儲存 → 存檔先讀走文字、清表單時再把語音作廢，停頓後才回來的最後一句就不見了（畫面也沒提示）。先停語音、讓業務看一下文字再按
+    if (typeof FarmVoice === 'object' && FarmVoice.active()) { FarmVoice.stop(false); toast('已停止語音輸入，請看一下文字再按儲存'); return; }
     state.saving = true;
     // R30-3（GPT）：原本只在等定位時鎖拍照、相簿、錄音，之後讀暫存客戶、重新判斷結案時又放開 → 期間加的照片還在處理就存檔、照片無聲不見。
     //   整段存檔期間都鎖（已開著的檔案選擇器回來也會被 addPhotos 擋下並提示），不管怎麼結束都解鎖

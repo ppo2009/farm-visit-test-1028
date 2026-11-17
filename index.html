@@ -263,7 +263,7 @@ header.homehdr{position:relative}
 .rptnow{font-weight:700;color:var(--paddy);margin:2px 0}
 .tip{background:var(--turmeric-soft);color:var(--fg);border-radius:12px;padding:10px 12px;font-size:1rem;margin-bottom:12px}
 #syncState{min-height:1.2em;font-size:1rem;color:var(--muted);margin:6px 0 0}
-#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,env(safe-area-inset-bottom));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:1rem;max-width:90%;z-index:9}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,env(safe-area-inset-bottom));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:1rem;max-width:90%;z-index:9} body:has(#feedbackBox:not([hidden])) #toast{z-index:60} /* 第26任 低風險修正3⑤：建議框開著時，語音、麥克風說明的提示原本壓在灰色遮罩下面 */
 #loginForm{display:grid;gap:12px}
 .err{color:var(--chili)}
 /* 0.4.82 快採收提醒條（首頁最上面，紅色；375 寬不撐寬） */

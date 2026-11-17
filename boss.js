@@ -760,7 +760,10 @@
       if (a === 'prev') return go(-1);
       if (a === 'next') return go(1);
       if (a === 'seen') { markSeen(x.id); state.closeMsg = '已標「看過」'; render(); return; }
-      if (a === 'ask') { const s = (state.data.staffList || []).find(y => y.name === x.staff); state.tf = { staff: s ? s.account : '', cid: x.cid, text: `請說明 ${x.time.slice(5, 16)} 這筆拜訪：${flagsOf(x).map(f => f.txt.replace(/^\S+ /, '')).join('、')}` }; markSeen(x.id); state.review = null; state.tab = 'tasks'; render(); return; }
+      // 第26任 低風險修正3①：原本一按就標「看過」→ 盤商、種子商（任務只能派給農民）或已結束的客戶派不出去，這筆可疑拜訪卻已經從清單消失；
+      //   改成：派不了就留在清單、寫原因；派得了就帶到任務頁，任務真的派出去才標「看過」
+      if (a === 'ask') { const cu = (state.data.customers || []).find(c => c.id === x.cid); if (!cu || (cu.type || '農民') !== '農民' || cu.status === '已結束') { state.closeMsg = `這位客戶${cu ? '是' + (cu.status === '已結束' ? '已結束的客戶' : cu.type) : '找不到'}，任務只能派給往來中的農民；請直接聯絡 ${x.staff || '業務'}（這筆先留在清單）`; render(); return; }
+        const s = (state.data.staffList || []).find(y => y.name === x.staff); state.tf = { staff: s ? s.account : '', cid: x.cid, text: `請說明 ${x.time.slice(5, 16)} 這筆拜訪：${flagsOf(x).map(f => f.txt.replace(/^\S+ /, '')).join('、')}`, seenVid: x.id }; state.review = null; state.tab = 'tasks'; render(); return; }
       if (a === 'reject') { R.rej = x.visitId; render(); return; }
       if (a === 'rejcancel') { R.rej = null; R.rejDraft = null; render(); return; }
       if (a === 'confirm' || a === 'rejsend') {
@@ -1241,6 +1244,7 @@
         const fo = c => `<option value="${esc(c.id)}"${f.cid === c.id ? ' selected' : ''}>${esc(c.name)}${c.area ? '｜' + esc(c.area) : ''}${c.staff ? '（' + esc(c.staff) + '）' : ''}</option>`;
         // 第24任 第七批設計版 J：選了業務後只列他負責的農民（原本其他人的也列在後面，名單太長）
         const own = selName ? farmers.filter(c => c.staff === selName) : farmers;
+        const pre = f.cid && own.indexOf(farmers.find(c => c.id === f.cid)) < 0 ? farmers.find(c => c.id === f.cid) : null; if (pre) own.push(pre); // 第26任 低風險修正3①：從可疑拜訪「派任務追問」帶過來的客戶不是這位業務負責的 → 也列進選單（原本選單空白、送出說「請選一位農民」）
         return `<select id="tFarmer" aria-label="哪一位農民"><option value="">${own.length ? '— 選擇農民／လယ်သမား ရွေးပါ —' : '（這位業務沒有負責的農民）'}</option>` + own.map(fo).join('') + '</select>';
       })();
     const form = staff.length || bosses.length ? `<h3>派出任務</h3><form class="taskform" id="taskForm">
@@ -1273,7 +1277,7 @@
     if (form) {
       // 0.4.85 高2（第11任 0.4.84 清單）：keep() 原本整個換掉 state.tf，送出時第一步就呼叫 → rid、ridKey 被清，斷線後再按每次都是新代號（後台認不出、派成兩條）
       // → 只更新三個欄位，原本的 rid、ridKey 留著（內容改了，送出時 ridKey 對不上才換新代號）
-      const keep = () => { const o = state.tf || {}; state.tf = { staff: $('tStaff').value, cid: $('tFarmer').value, text: $('tText').value, rid: o.rid || '', ridKey: o.ridKey || '' }; };
+      const keep = () => { const o = state.tf || {}; state.tf = { staff: $('tStaff').value, cid: $('tFarmer').value, text: $('tText').value, rid: o.rid || '', ridKey: o.ridKey || '' }; if (o.seenVid) state.tf.seenVid = o.seenVid; };
       ['tFarmer', 'tText'].forEach(id => $(id).addEventListener('input', keep));
       // 換對象（業務 ↔ 主管）時客戶選單不一樣，重畫；原本選的客戶清掉
       $('tStaff').addEventListener('change', () => { keep(); state.tf.cid = ''; state.taskMsg = ''; render(); });
@@ -1289,6 +1293,7 @@
         let r;
         try { r = await api({ action: 'taskAdd', staff: state.tf.staff, cid: state.tf.cid, text: state.tf.text.trim(), rid: state.tf.rid }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再按一次（不會派成兩條）' }; }
         if (r.ok) { setData({ tasks: r.tasks }); state.tf.text = ''; state.tf.rid = ''; state.tf.ridKey = ''; state.taskMsg = toBoss ? '已派出（主管打開主管網頁「任務」就會看到）／ပေးပို့ပြီး' : '已派出（業務手機下次同步就會看到）／ပေးပို့ပြီး'; }
+        if (r.ok && state.tf.seenVid) { markSeen(state.tf.seenVid); state.tf.seenVid = ''; } // 第26任 低風險修正3①：追問的任務真的派出去，那筆可疑拜訪才標「看過」
         else state.taskMsg = '⚠ ' + (r.message || '派發失敗／မပေးနိုင်ပါ');
         render();
       });

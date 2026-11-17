@@ -140,6 +140,7 @@
       if (!locked) return; // 驗證途中已經用別的方式解開或登出了
       if (r.ok) return unlock();
       if (r.locked) return lockout('九宮格錯了 ' + MAX_FAILS + ' 次，請用密碼重新登入（沒上傳的資料還在手機裡）');
+      el('lockWho').textContent = (cfg.name || cfg.account || '') + `（已錯 ${r.fails} 次，錯 ${MAX_FAILS} 次要用密碼重新登入）`; // 第26任 低風險修正3④：上面的「已錯 N 次」原本只在上鎖時寫一次，跟下面「還可以試」對不起來
       el('lockMsg').textContent = `圖形不對，還可以試 ${MAX_FAILS - r.fails} 次`;
     });
     if (c.method === 'bio') { el('lockBio').onclick = tryBio; tryBio(); }
