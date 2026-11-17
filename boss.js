@@ -518,9 +518,9 @@
     return { now: days.filter(x => x >= w1).length, prev: days.filter(x => x >= w2 && x < w1).length, partial: d.visits.length >= 500 && oldest >= w2 }; // 0.4.88 低4：最舊那筆剛好是上週第一天，那天可能被 500 筆截掉一半，也算可能不全
   }
   function staffCards() {
-    const d = state.data, staff = d.staffList || [];
+    const d = state.data, staff = (d.staffList || []).filter(s => state.showTest || !isTestStaff(s.name)); // 第25任④：測試帳號預設不列（同全員對照表）
     if (!staff.length) return '';
-    const max = d.maxTasks || 10;
+    const max = d.maxTasks || 10, idleWarn = cfg7().idleDays; // 第25任②：跟設定「沒拜訪提醒天數」（原本寫死 3）
     const p = state.prog[monthsBack(1)[0]];
     const card = s => {
       const open = (d.tasks || []).filter(t => t.status === '待辦' && t.account === s.account).length;
@@ -534,11 +534,11 @@
       const ps = p && p.ok ? ((p.staff || []).find(x => x.name === s.name) || { plan: [] }).plan || [] : null;
       const plan = !p ? '<span class="sub">月計劃讀取中…</span>' : !p.ok ? '<span class="sub">月計劃讀取失敗</span>'
         : ps.length ? ps.slice(0, 3).map(x => `<span>${esc(x.label)}　${x.done}／${x.target}${x.done >= x.target ? ' <span class="pill p-grn">達成</span>' : ''}${planParts(x)}<span class="bar"><i style="width:${pct(x.pct)}%"></i></span></span>`).join('')
-          + (ps.length > 3 ? `<span class="sub">還有 ${ps.length - 3} 項，看「更多 → 工作進度明細」</span>` : '')
+          + (ps.length > 3 ? `<span class="sub">還有 ${ps.length - 3} 項，看下面「每位業務的目標明細」</span>` : '') // 第25任③：卡片已在工作進度頁
         : '<span class="sub">本月沒有訂目標</span>';
       return `<button type="button" class="card scard" data-staff="${esc(s.name)}">
         <span class="top"><b>${esc(s.name)}</b><span class="sub">${esc(s.account)}</span></span>
-        <span class="row">任務 <b>${open}／${max}</b>${late ? ` <span class="pill p-red">逾期回訪 ${late}</span>` : ''}${idle == null ? ' <span class="pill p-yel">近期沒有拜訪</span>' : idle >= 3 ? ` <span class="pill p-red">${idle} 天沒拜訪</span>` : ''}</span>
+        <span class="row">任務 <b>${open}／${max}</b>${late ? ` <span class="pill p-red">逾期回訪 ${late}</span>` : ''}${idle == null ? ' <span class="pill p-yel">近期沒有拜訪</span>' : idle >= idleWarn ?` <span class="pill p-red">${idle} 天沒拜訪</span>` : ''}</span>
         ${plan}
         <span class="row">本週拜訪 <b>${wk.now}</b> 次（上週 ${wk.prev}${wk.partial ? '，資料可能不全' : ''}）${drop ? ` <span class="pill p-red">比上週少 ${wk.prev - wk.now} 次</span>` : ''}</span>
         <span class="row">試作 ${measure ? `<span class="pill p-red">該量測未量測 ${measure}</span>` : ''}<span class="pill p-yel">進行中 ${n('進行中')}</span><span class="pill p-grn">成功 ${n('成功')}</span><span class="pill p-red">失敗 ${n('失敗')}</span>${n('結束') ? `<span class="pill">結束 ${n('結束')}</span>` : ''}</span>
@@ -1560,7 +1560,7 @@
     // 0.4.88 低2：登入失效、不是主管 → 回登入頁（原本只在進度那格寫錯誤，畫面其他地方照用舊資料）
     if (r && (r.code === 'BAD_LOGIN' || r.code === 'NOT_BOSS')) { logout(); showLogin(r.message || '登入已失效，請重新登入'); return; }
     state.prog[m] = r && r.ok ? r : Object.assign({}, r, { ok: false, failedAt: Date.now() });
-    if ((state.tab === 'progress' && state.pm === m) || (state.tab === 'today' && monthsBack(1)[0] === m)) render();
+    if (state.tab === 'progress' && (state.pm === m || monthsBack(1)[0] === m)) render(); // 第25任①：第七批把業務卡片（用本月）搬到工作進度；選過去月份時本月的回來也要重畫（原本只看「今天」分頁）
   }
 
   const VISIT_TABLE_MAX = 500; // 後台 bossData_ 的 visits 只回最近 500 筆（Code.gs slice(-500)），兩邊要一起改
