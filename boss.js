@@ -133,7 +133,11 @@
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(Object.assign({ deviceKey: sentKey }, payload)), signal: ctl ? ctl.signal : undefined
       });
-      data = await res.json();
+      // 第26任：後台本身出錯（例如試算表服務故障）時回的是錯誤網頁、不是資料，原本解析失敗被說成「連不上伺服器，請確認網路」→ 分開說
+      try { data = await res.json(); } catch (pe) {
+        if (!pe || pe.name !== 'SyntaxError') throw pe; // 逾時、斷線照舊
+        data = { ok: false, code: 'BAD_RESPONSE', message: '伺服器回應異常（狀態 ' + res.status + '），不是網路問題；請稍後再試，一直出現請看錯誤紀錄或告訴總經理' };
+      }
     } catch (e) {
       if (timedOut) { const t = new Error('逾時'); t.timeout = true; throw t; }
       throw e;

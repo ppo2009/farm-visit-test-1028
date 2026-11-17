@@ -23,6 +23,24 @@
   const pad = n => String(n).padStart(2, '0');
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const MAX_REC_SEC = 90;
+  /* 第26任 錯誤分類開始：原本手機上什麼錯都說成「可能空間不足」，而且整支程式一行錯誤紀錄都沒有，出事收不到線索。
+     isCodeErr：程式本身的錯（TypeError 這類），不是手機資料庫寫不進去；errCode：給畫面和錯誤紀錄看的簡短原因；
+     noteErr：寫進主控台，並記在手機資料庫 errQueue（最多 20 筆），下次同步成功時 sendErrs 送到後台「錯誤紀錄」 */
+  const isCodeErr = e => !!e && ['TypeError', 'ReferenceError', 'SyntaxError', 'RangeError'].indexOf(e.name) >= 0;
+  const errCode = e => String((e && e.name && e.name !== 'Error' ? e.name + '：' : '') + ((e && e.message) || e || '不明')).slice(0, 120);
+  async function noteErr(where, e) {
+    try { console.error('[農場打卡]', where, e); } catch (x) { /* 沒有主控台 */ }
+    try { const q = (await Store.getMeta('errQueue')) || []; q.push({ at: Date.now(), where: String(where), msg: errCode(e) }); await Store.setMeta('errQueue', q.slice(-20)); } catch (x) { /* 手機資料庫本身壞了：只留在主控台 */ }
+  }
+  async function sendErrs(cfg) {
+    try {
+      const q = (await Store.getMeta('errQueue')) || [];
+      if (!q.length || !cfg || !cfg.deviceKey) return;
+      const r = await post(cfg.gasUrl || FARM_CONFIG.gasUrl, { action: 'clientError', deviceKey: cfg.deviceKey, errors: q.slice(0, 10), app: String((typeof FARM_CONFIG !== 'undefined' && FARM_CONFIG.appVersion) || '') });
+      if (r && r.ok) { const now = (await Store.getMeta('errQueue')) || []; await Store.setMeta('errQueue', now.slice(Math.min(10, q.length))); }
+    } catch (e) { /* 送不出去：留在手機，下次同步再送（不再記一筆，免得越積越多） */ }
+  }
+  /* 第26任 錯誤分類結束 */
   /** 這台裝置的識別碼：第一次用時隨機產生、只存在這台裝置（登出也不清）。登入時帶給後台，
       以前登入成功過的裝置，不會被外人亂猜密碼造成的鎖定擋住（第七輪 A-2）。存不了（無痕模式）就每次新產生 */
   function deviceId() {
@@ -169,11 +187,13 @@
       showHome();
       if (loginWarn) toast('已登入。' + loginWarn);
       syncNow();
-      if (typeof FarmLock === 'object') FarmLock.afterLogin(lockHooks()).catch(() => {}); // 第24任 第四批：剛用密碼登入 → 問要不要啟用人臉／指紋或九宮格
+      if (typeof FarmLock === 'object') FarmLock.afterLogin(lockHooks()).catch(e => { if (typeof noteErr === 'function') noteErr('解鎖設定', e); }); // 第24任 第四批：剛用密碼登入 → 問要不要啟用人臉／指紋或九宮格（第26任：失敗記下來）
     } catch (err) {
       msg.textContent = answered
         ? '手機存資料失敗（可能空間不足），請先清出空間再登入／ဖုန်းထဲ သိမ်းမရပါ၊ နေရာလွတ် လုပ်ပြီး ပြန်ဝင်ပါ'
         : '連不上伺服器，第一次登入需要網路／ဆာဗာနှင့် မချိတ်နိုင်ပါ၊ ပထမအကြိမ် ဝင်ရန် အင်တာနက်လိုသည်';
+      if (answered && typeof isCodeErr === 'function' && isCodeErr(err)) msg.textContent = '登入途中程式出錯（' + errCode(err) + '），請再按一次；一直出現請告訴主管'; // 第26任：程式錯不說成空間不足
+      if (answered && typeof noteErr === 'function') noteErr('登入', err);
       msg.className = 'sub err';
     } finally {
       $('loginBtn').disabled = false;
@@ -1278,9 +1298,11 @@
   async function renderHome(inner) {
     // 第24任 第六批：首頁重畫（開首頁、同步完成）時看總開關、環境（原本掛在 showHome，但同步完只呼叫 renderHome，瀏覽器流程抓到）
     if (inner !== HOME_INNER) {
-      if (typeof FarmLock === 'object' && FarmLock.refresh) FarmLock.refresh(lockHooks()).catch(() => {}); // 第24任 第六批：總開關（同步到「關」就自動解開）
-      if (typeof paintEnvFoot === 'function') paintEnvFoot().catch(() => {}); // 第24任 第六批⑳
-      if (typeof paintRejected === 'function') paintRejected().catch(() => {}); // 第24任 第七批 C：主管退回的結案
+      // 第26任：這三件原本失敗就默默不見（例如「主管退回的結案」畫不出來，業務不知道有東西要補）→ 記下來
+      const bgErr = where => e => { if (typeof noteErr === 'function') noteErr(where, e); };
+      if (typeof FarmLock === 'object' && FarmLock.refresh) FarmLock.refresh(lockHooks()).catch(bgErr('解鎖總開關')); // 第24任 第六批：總開關（同步到「關」就自動解開）
+      if (typeof paintEnvFoot === 'function') paintEnvFoot().catch(bgErr('環境標示')); // 第24任 第六批⑳
+      if (typeof paintRejected === 'function') paintRejected().catch(bgErr('主管退回的結案')); // 第24任 第七批 C：主管退回的結案
     }
     // R13-03（GPT 中）：同一時間只跑一次首頁重畫——正在畫時又被叫（連點月份、返回、同步通知），記「畫完再畫一次」，畫完照最新狀態重畫一次；
     // 不會再有較舊的重畫在等待後蓋掉較新的（R12-02 的序號只在後段檢查，前段日程、目標仍可能被舊的蓋掉）
@@ -3686,9 +3708,13 @@
       // 正在填拜訪而且已經選了客戶，就不重整選單（暫時客戶上傳後會換成正式編號，重整會把選好的清掉；R1-02）
       if (state.view === 'visit' && !$('farmer').value) { await loadOptions(); await loadFarmers(); }
       if (typeof refreshCloseUnknown === 'function') await refreshCloseUnknown(); // R26-1：正在填結案時，照同步後的試作快取重新判斷「結案狀態未知」
+      if (r && !r.error && typeof sendErrs === 'function') await sendErrs(cfg); // 第26任：同步成功就順便把手機記下的錯誤送到後台錯誤紀錄
     } catch (e) {
       // 0.5.33（第23任抓BUG P1）：上傳途中讀寫手機資料庫丟錯（多半是空間不足），原本只有 try/finally → 畫面停在「上傳中 1/3…」不說原因
       $('syncState').textContent = '手機存資料失敗（可能空間不足），請清出空間，稍後自動再傳／ဖုန်းထဲ သိမ်းမရပါ၊ နေရာလွတ် လုပ်ပေးပါ';
+      // 第26任：這段也包住畫首頁、重讀選單 → 程式本身出錯時不說成空間不足（業務會去清空間，問題卻還在），並記下來
+      if (typeof isCodeErr === 'function' && isCodeErr(e)) $('syncState').textContent = '同步途中程式出錯（' + errCode(e) + '），稍後自動再試；一直出現請告訴主管';
+      if (typeof noteErr === 'function') noteErr('同步', e);
     } finally {
       syncing = false;
       await renderQueue();
@@ -4121,7 +4147,7 @@
         }
         if (cr === 'stale') { showLogin('另一個畫面已經換人登入，請重新整理網頁／အခြား စာမျက်နှာတွင် ဝင်ထားပြီ၊ ပြန်ဖွင့်ပါ'); return; }
       }
-      if (typeof FarmLock === 'object') await FarmLock.start(lockHooks()).catch(() => false); // 第24任 第四批：重開 App 有解鎖設定就先鎖（同步照常）
+      if (typeof FarmLock === 'object') await FarmLock.start(lockHooks()).catch(e => { if (typeof noteErr === 'function') noteErr('解鎖啟動', e); return false; }); // 第24任 第四批：重開 App 有解鎖設定就先鎖（同步照常）；第26任：失敗記下來（要不要改成失敗就鎖住，等老闆決定）
       await showHome(); syncNow();
     } else showLogin();
   }
