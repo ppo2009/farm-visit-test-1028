@@ -369,6 +369,8 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
 #testTag[hidden]+#appVer+#testTag2{display:none}
 /* 第24任 第六批③ */ #profileMore>summary{min-height:48px;display:flex;align-items:center;font-weight:700;color:var(--paddy);cursor:pointer} #profileMore>summary .my{display:inline;margin-left:6px}
 #farmerNewBtn{width:auto;max-width:42%;white-space:normal;overflow-wrap:anywhere} .fpick input{min-width:0}
+/* 第25任（老闆選 C）：下拉選單是主要的；下面搜尋框縮小、虛線框、淡底，看得出是「另一個選擇」（字仍 16px，iPhone 點了不會放大畫面） */
+.fpick2{margin:8px 0} .fpick2 input{min-height:40px;padding:6px 10px;font-size:16px;border:1.5px dashed var(--line);background:transparent} .fpick2 input::placeholder{font-size:.9rem} .fpick2 #farmerNewBtn{min-height:44px}
 /* 第24任 第六批⑭ */ #unlockBtn{min-height:44px} #profileTitle{min-height:44px;display:flex;align-items:center;flex-wrap:wrap}
 /* 第24任 第七批 C */ .rejbox{border:2px solid var(--chili);background:var(--chili-soft);border-radius:12px;padding:10px 12px;margin-bottom:14px} .rejbox h2{margin:0 0 6px;color:var(--chili);font-size:1.05rem} .rejbox button{display:block;width:100%;min-height:48px;text-align:left;border:1px solid var(--chili);background:var(--bg);border-radius:10px;padding:8px 12px;margin-top:6px;cursor:pointer} .rejbox .sub{display:block;font-size:.9rem}
 </style>
@@ -658,10 +660,11 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
     <p class="warn signhint" id="signHint" hidden>簽約結案：選店家 → 按「有見到」→「已簽約」會自動打開 → 寫簽約內容 → 送主管確認<span class="my" data-tr="待譯"></span></p><!-- 第24任 第六批⑫ -->
     <div>
       <label class="lab" for="farmer" id="farmerLab">選擇農民<span class="my">လယ်သမား ရွေးပါ</span></label>
-      <!-- 第24任 第六批④（tomtom 實測：新增藏在下拉選單裡、清單不能搜尋）：上面一列搜尋（名字、代碼、村、鎮、地區）＋「＋新增」按鈕；下拉選單照舊可用 -->
-      <div class="fpick"><input type="search" id="farmerSearch" placeholder="搜尋名字、代碼、村" aria-label="搜尋客戶：名字、代碼、村" autocomplete="off"><button type="button" class="btn2" id="farmerNewBtn" hidden>＋ 新增<span class="my" data-tr="待譯"></span></button></div>
-      <ul class="fhits" id="farmerHits" hidden></ul>
+      <!-- 第24任 第六批④（tomtom 實測：新增藏在下拉選單裡、清單不能搜尋）加搜尋（名字、代碼、村、鎮、地區）＋「＋新增」按鈕。
+           第25任（老闆 2026-11-17 選 C：三樣疊在一起不知道先用哪個）：下拉選單放最上面當主要的；下面一列是縮小的搜尋框（寫「也可以打字找」）＋「＋新增」 -->
       <select id="farmer"></select>
+      <div class="fpick fpick2"><input type="search" id="farmerSearch" placeholder="🔍 也可以打字找" aria-label="也可以打字找客戶：名字、代碼、村" autocomplete="off"><button type="button" class="btn2" id="farmerNewBtn" hidden>＋ 新增<span class="my" data-tr="待譯"></span></button></div>
+      <ul class="fhits" id="farmerHits" hidden></ul>
     </div>
     <!-- 0.4.35 董事長：選擇農民後跳出這位農民之前的進度（農民進度表）；沒有進度就跳出新增（補齊）農民資料。
          0.4.44 董事長：照四步驟（選農民→進度小卡→有見到嗎→存檔）移到選農民正下方 -->
