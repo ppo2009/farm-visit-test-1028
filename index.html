@@ -30,6 +30,8 @@ small,.sub{color:var(--muted);font-size:1rem} /* 0.4.29 董事長：業務字體
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:14px}
 label.lab,.lab{font-weight:700;display:block;margin-bottom:6px}
 select,input[type=text],input[type=tel],input[type=number],input[type=date],input[type=password],textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);min-width:0}
+/* 第24任 必改第三批⑦：360 寬兩欄並排時（用量／開始日），日期字和月曆圖示擠在一起 → 日期欄左右內距縮小、圖示不另外留邊 */
+input[type=date]{padding-left:8px;padding-right:4px} input[type=date]::-webkit-calendar-picker-indicator{margin-left:2px;padding:2px}
 select{max-width:100%;text-overflow:ellipsis;white-space:nowrap;overflow:hidden} /* 0.4.89 地區改「業務－地區」完整顯示：選項太長用省略號，不撐寬、不切字 */
 #tItemOther{margin-top:8px}
 textarea{min-height:96px;resize:vertical}

@@ -3228,12 +3228,14 @@
   function closeConfirmText(o) {
     // 抓BUG第1輪（小助手1）：推廣農民原本也寫「試作結果」→ 照進行中那件的類別寫
     const tOut = o.trialOutcome ? (o.trialCat === '推廣' ? `\n推廣結果：${o.trialOutcome}` : `\n試作結果：${o.trialOutcome}`) : '';
+    // 第24任 必改第三批⑦：價格、產量加千分位（12000 → 12,000，跟主管頁、Word 一樣）；舊測試只抽這個函式出來跑時沒有 thou → 照原樣
+    const tq = x => (typeof thou === 'function' ? thou(x) : x);
     // 抓BUG第1輪（小助手1）：作物失敗的結案可以不填價格、產量、收購客戶，原本視窗照樣寫「價格： 緬幣／籃」「產量： 籃」→ 空的寫「沒收成，不用填」，並寫明是作物失敗
     if (o.fail) {
-      const v = (x, u) => (String(x == null ? '' : x).trim() ? `${x} ${u}` : '（沒收成，不用填）');
+      const v = (x, u) => (String(x == null ? '' : x).trim() ? `${tq(x)} ${u}` : '（沒收成，不用填）');
       return `確定要把這位農民結案嗎？\nလယ်သမား ပိတ်သိမ်းမှာ သေချာပါသလား\n\n農民：${o.who}\n結案原因：作物失敗、沒收成／သီးနှံ မအောင်မြင်\n價格：${v(o.price, o.priceUnit || '緬幣／籃')}\n產量：${v(o.yield, o.yieldUnit || '籃')}\n收購客戶：${String(o.buyer == null ? '' : o.buyer).trim() || '（沒收成，不用填）'}${tOut}\n\n${o.closeConfirm ? '送出後要等主管確認才算結案。' : '存檔後這位農民就結案，不再提醒回訪。'}`;
     }
-    return `確定要把這位農民結案嗎？\nလယ်သမား ပိတ်သိမ်းမှာ သေချာပါသလား\n\n農民：${o.who}\n價格：${o.price} ${o.priceUnit || '緬幣／籃'}\n產量：${o.yield} ${o.yieldUnit || '籃'}\n收購客戶：${o.buyer}${tOut}\n\n${o.closeConfirm ? '送出後要等主管確認才算結案。' : '存檔後這位農民就結案，不再提醒回訪。'}`;
+    return `確定要把這位農民結案嗎？\nလယ်သမား ပိတ်သိမ်းမှာ သေချာပါသလား\n\n農民：${o.who}\n價格：${tq(o.price)} ${o.priceUnit || '緬幣／籃'}\n產量：${tq(o.yield)} ${o.yieldUnit || '籃'}\n收購客戶：${o.buyer}${tOut}\n\n${o.closeConfirm ? '送出後要等主管確認才算結案。' : '存檔後這位農民就結案，不再提醒回訪。'}`;
   }
   /** ① 盤商、種子商已簽約的確認視窗文字 */
   function dealerSignConfirmText(cat, who, note) {
@@ -3392,7 +3394,7 @@
   /** ③ 存好之後：清表單、提示、回首頁、叫背景上傳 */
   async function afterSaved() {
     resetForm();
-    toast('已存在手機裡，會自動上傳／ဖုန်းထဲ သိမ်းပြီး၊ အလိုအလျောက် တင်မည်');
+    toast('已存在手機裡，會自動上傳／ဖုန်းထဲ သိမ်းပြီး၊ အလိုအလျောက် တင်မည်', 4000); // 第24任 必改第三批⑦：至少留 4 秒、共顯示 5 秒，不被同步提示蓋掉
     await showHome();
     requestBackgroundSync();
     syncNow();
@@ -3659,8 +3661,18 @@
   }
 
   /* ───── 小提示 ───── */
-  let toastTimer;
-  function toast(t) { const el = $('toast'); el.textContent = t; el.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 3000); }
+  let toastTimer, toastHoldUntil = 0, toastQueued = null, toastQueueTimer = null;
+  /**
+   * 小提示。第24任 必改第三批⑦：存檔後的「已存在手機裡」原本會被緊接著的同步提示蓋掉，一閃就不見 →
+   *   holdMs：這則至少留這麼久（這段時間來的其他提示先排著，時間到再顯示最後一則）；顯示時間＝max(3 秒, holdMs＋1 秒)。沒給 holdMs 跟原本一樣 3 秒
+   */
+  function toast(t, holdMs) {
+    const now = Date.now();
+    if (!holdMs && now < toastHoldUntil) { toastQueued = t; clearTimeout(toastQueueTimer); toastQueueTimer = setTimeout(() => { const q = toastQueued; toastQueued = null; if (q) toast(q); }, toastHoldUntil - now); return; }
+    const el = $('toast'); el.textContent = t; el.hidden = false; clearTimeout(toastTimer);
+    if (holdMs) toastHoldUntil = now + holdMs;
+    toastTimer = setTimeout(() => { el.hidden = true; }, Math.max(3000, (holdMs || 0) + 1000));
+  }
 
   /* ───── 啟動 ───── */
   /* 0.4.91 中1（第11任第三輪清單）：網頁（index.html）和程式（app.js）新舊混用時（背景程式逾時各自拿快取），試作品項只剩空白、開不了試作。
