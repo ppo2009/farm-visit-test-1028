@@ -300,8 +300,7 @@
     state.lastTab = state.tab;
     // 主管匯報分頁的紅點：總經理＝還沒看過的匯報（含 100 份以外的舊未讀，後台算的 briefUnread）；
     // 主管＝總經理有新回覆、這台電腦還沒打開看過的（總經理BUG(2號)中2，不加試算表欄位，記在瀏覽器）
-    const unread = state.data.role === '總經理' ? Math.max((state.data.briefs || []).filter(b => !b.read).length, Number(state.data.briefUnread) || 0)
-      : (state.data.briefs || []).filter(newReply).length;
+    const unread = briefUnreadCount(); // 第25任 審查第二批：原本這裡另寫一份同樣的算法
     $('briefBadge').hidden = !unread; $('briefBadge').textContent = unread ? String(unread) : '';
     $('panel').innerHTML = segBar() + ({ today: renderToday, overdue: renderOverdue, review: renderReview, moremenu: renderMoreMenu, latest: renderLatest, cal: renderCal, trial: renderTrial, map: renderMap, table: renderTable, reports: renderReports, progress: () => staffCards() + renderProgress(), tasks: renderTasks, accounts: renderAccounts, briefs: renderBriefs, errors: renderErrors })[state.tab](); // 第24任 第七批：今天、逾期、審核、更多（手機）；本月目標、每位業務卡片搬到工作進度
     if (state.tab === 'tasks') bindTasks();
@@ -506,7 +505,8 @@
     const cs = custOf(t.cid).status; // 0.4.88 中3：客戶暫停、已結束不算該量測（跟後台派量測任務只算往來中的農民一致）
     if (cs === '暫停' || cs === '已結束' || cs === '已結案') return null;
     const days = daysBetween(t.start, today);
-    const w = MEASURE_WEEKS.filter(x => days >= x * 7).pop();
+    const W = state.data && Array.isArray(state.data.measureWeeks) && state.data.measureWeeks.length ? state.data.measureWeeks : MEASURE_WEEKS; // 第25任 審查第二批：週數由後台送，舊後台沒送用預設
+    const w = W.filter(x => days >= x * 7).pop();
     if (!w) return null;
     return !lastVisit || String(lastVisit).slice(0, 10) < addDays(t.start, w * 7 - MEASURE_EARLY) ? w : null;
   }
@@ -516,7 +516,7 @@
     const d = state.data, w1 = addDays(d.today, -6), w2 = addDays(d.today, -13);
     const days = d.visits.filter(v => v.staff === name).map(v => v.time.slice(0, 10));
     const oldest = d.visits.map(v => v.time.slice(0, 10)).sort()[0];
-    return { now: days.filter(x => x >= w1).length, prev: days.filter(x => x >= w2 && x < w1).length, partial: d.visits.length >= 500 && oldest >= w2 }; // 0.4.88 低4：最舊那筆剛好是上週第一天，那天可能被 500 筆截掉一半，也算可能不全
+    return { now: days.filter(x => x >= w1).length, prev: days.filter(x => x >= w2 && x < w1).length, partial: d.visits.length >= (d.visitMax || 500) && oldest >= w2 }; // 第25任 審查第二批：上限由後台送（visitMax） // 0.4.88 低4：最舊那筆剛好是上週第一天，那天可能被 500 筆截掉一半，也算可能不全
   }
   function staffCards() {
     const d = state.data, staff = (d.staffList || []).filter(s => state.showTest || !isTestStaff(s.name)); // 第25任④：測試帳號預設不列（同全員對照表）
@@ -562,7 +562,13 @@
       testAccounts: (Array.isArray(c.testAccounts) ? c.testAccounts : []).map(x => String(x).toLowerCase()) };
   }
   /** E：測試帳號（設定分頁「測試帳號」）的業務名字。主管頁預設隱藏他們的拜訪、客戶、結案（右上「顯示測試資料」打開才看） */
+  // 第25任 審查第三批：isTestStaff 在 500 筆拜訪的迴圈裡一筆呼叫一次，原本每次都重切設定、重掃名單 → 同一份資料（state.data 同一個、dataGen 沒變）只算一次
+  let tnCache = { d: null, gen: -1, m: {} };
   function testNames() {
+    if (tnCache.d === state.data && tnCache.gen === state.dataGen) return tnCache.m;
+    const m = testNamesCalc(); tnCache = { d: state.data, gen: state.dataGen, m }; return m;
+  }
+  function testNamesCalc() {
     const t = cfg7().testAccounts; if (!t.length) return {};
     const tn = state.data.bossCfg && state.data.bossCfg.testNames; // 第25任 審查⑧：後台直接給的姓名（含已停用帳號，跟日報同一批）；舊後台沒送才自己從名單換
     if (Array.isArray(tn)) { const m = {}; tn.forEach(n => { m[String(n)] = true; }); return m; }
@@ -690,7 +696,7 @@
   }
   function startReview(kind) {
     const ids = kind === 'close' ? hideTest(state.data.closings || []).map(c => c.visitId) : suspiciousList().map(v => v.id);
-    state.review = { kind, ids, i: 0, total: ids.length, done: 0, rej: null }; state.tab = 'review'; render();
+    state.review = { kind, ids, i: 0, rej: null }; state.tab = 'review'; render();
   }
   function renderReview() {
     const R = state.review, items = reviewItems();
@@ -698,10 +704,10 @@
     if (R.i >= items.length) R.i = items.length - 1;
     const x = items[R.i], close = R.kind === 'close';
     const v = close ? state.data.visits.find(y => y.id === x.visitId) : x;
-    const cu = custOf(close ? x.cid : x.cid), photos = close ? reviewPhotos(x.cid, v) : (x.photos || []).slice(0, 3);
+    const cu = custOf(x.cid), photos = close ? reviewPhotos(x.cid, v) : (x.photos || []).slice(0, 3);
     const flags = v ? flagsOf(v) : [];
     const pos = `${close ? '待確認結案' : '可疑拜訪'} ${R.i + 1}／${items.length}`;
-    const head = close ? `<h2 class="rh">${esc(x.name || '客戶 ' + x.cid)}・${esc(cu.type || x.group || '')}${cu.crop ? '・' + esc(cropText(cu.crop)) : ''}</h2><p class="sub">${esc(x.staff || '業務未填')}・送出 ${esc(x.date || '')}${isTestStaff(x.staff) ? ' <span class="pill">測試</span>' : ''}</p>`
+    const head = close ? `<h2 class="rh">${esc(x.name || '客戶 ' + x.cid)}・${esc(cu.type || x.group || '')}${cu.crop ? '・' + esc(cropText(cu.crop)) : ''}</h2><p class="sub">${esc(x.staff || '業務未填')}・送出 ${esc(x.date || '日期未填')}${isTestStaff(x.staff) ? ' <span class="pill">測試</span>' : ''}</p>`
       : `<h2 class="rh">${esc(x.cat || '')}・${esc(x.name)}</h2><p class="sub">${esc(x.staff)}・${esc(x.time)}</p>`;
     const cells = close ? `<div class="r4">
         <div><span class="sub">價格</span><b>${x.price === '' || x.price == null ? '—' : esc(nfmt(x.price)) + ' ' + esc(x.priceUnit || '')}</b></div>
@@ -718,7 +724,7 @@
     const btns = close ? `<div class="rbtns"><button class="btn" type="button" data-rv="reject"${state.closeSending ? ' disabled' : ''}>退回（寫原因）</button><button class="btn primary" type="button" data-rv="confirm"${state.closeSending ? ' disabled' : ''}>確認結案</button></div>`
       : `<div class="rbtns"><button class="btn" type="button" data-rv="ask">派任務追問</button><button class="btn primary" type="button" data-rv="seen">已看過</button></div>`;
     return `<div class="review" id="reviewCard"><div class="rtop"><button class="btn" type="button" data-rv="exit">← 回今天</button><b>${pos}</b><span><button class="btn" type="button" data-rv="prev" aria-label="上一筆"${R.i ? '' : ' disabled'}>‹</button><button class="btn" type="button" data-rv="next" aria-label="下一筆"${R.i < items.length - 1 ? '' : ' disabled'}>›</button></span></div>
-      <div class="rcard">${head}${cells}${ph}${fl}${sum}${missH}${close ? `<p class="sub"><a href="javascript:void 0" data-go="${esc(x.cid)}">看這位客戶的完整紀錄</a></p>` : `<p class="sub"><a href="javascript:void 0" data-go="${esc(x.cid)}">看這位客戶的完整紀錄</a></p>`}${rej}</div>
+      <div class="rcard">${head}${cells}${ph}${fl}${sum}${missH}<p class="sub"><a href="javascript:void 0" data-go="${esc(x.cid)}">看這位客戶的完整紀錄</a></p>${rej}</div>
       <p class="sub" id="closeMsg" aria-live="polite">${esc(state.closeMsg || '')}</p>${btns}</div>`;
   }
   /** 設計版 C：退回原因面板（常用原因可複選＋自己寫，至少一項） */
@@ -751,7 +757,7 @@
       if (a === 'exit') { state.review = null; state.tab = 'today'; state.closeMsg = ''; render(); return; }
       if (a === 'prev') return go(-1);
       if (a === 'next') return go(1);
-      if (a === 'seen') { markSeen(x.id); R.done++; state.closeMsg = '已標「看過」'; render(); return; }
+      if (a === 'seen') { markSeen(x.id); state.closeMsg = '已標「看過」'; render(); return; }
       if (a === 'ask') { const s = (state.data.staffList || []).find(y => y.name === x.staff); state.tf = { staff: s ? s.account : '', cid: x.cid, text: `請說明 ${x.time.slice(5, 16)} 這筆拜訪：${flagsOf(x).map(f => f.txt.replace(/^\S+ /, '')).join('、')}` }; markSeen(x.id); state.review = null; state.tab = 'tasks'; render(); return; }
       if (a === 'reject') { R.rej = x.visitId; render(); return; }
       if (a === 'rejcancel') { R.rej = null; R.rejDraft = null; render(); return; }
@@ -766,7 +772,7 @@
         if (r && r.code === 'DONE_ALREADY') r = Object.assign({}, r, { ok: true, already: true });
         if (r.closings) setData({ closings: r.closings });
         R.rej = null;
-        if (r.ok) { R.done++; R.rejDraft = null; state.closeMsg = r.already ? '這筆別人已經處理過了，跳下一筆' : ok ? `已確認結案：${x.name}` : `已退回：${x.name}（原因已傳給業務）`; state.closeMsgSeq = state.loadSeq + 1; render(); load(); return; } // closeMsgSeq：緊接著的重讀不清掉訊息（同舊清單 0.4.88 低7）
+        if (r.ok) { R.rejDraft = null; state.closeMsg = r.already ? '這筆別人已經處理過了，跳下一筆' : ok ? `已確認結案：${x.name}` : `已退回：${x.name}（原因已傳給業務）`; state.closeMsgSeq = state.loadSeq + 1; render(); load(); return; } // closeMsgSeq：緊接著的重讀不清掉訊息（同舊清單 0.4.88 低7）
         state.closeMsg = '⚠ ' + (r.message || '處理失敗'); render();
       }
     }));
@@ -1184,8 +1190,6 @@
       ${live.map(x => `<tr><td data-label="業務"><b>${esc(x.name)}</b></td><td data-label="拜訪">${x.visits}</td>${cats.map(c => `<td data-label="${c === '農戶' ? '一般拜訪' : c}">${(x.byCategory || {})[c] || 0}</td>`).join('')}<td data-label="拜訪過的客戶">${x.customersVisited}</td><td data-label="新增客戶">${x.newCustomers}</td><td data-label="試作 開始／完成">${x.trialsStarted}／${x.trialsEnded}</td><td data-label="目標 1">${goal(x, 0)}</td><td data-label="目標 2">${goal(x, 1)}</td><td data-label="目標 3">${goal(x, 2)}</td></tr>`).join('') || `<tr><td colspan="13" class="empty">${ppl.length ? '本月大家都還沒有紀錄' : '沒有業務帳號'}</td></tr>`}
       </tbody></table></div>${idle.length ? `<p class="sub notask">本月尚無紀錄：${idle.map(x => esc(x.name)).join('、')}</p>` : ''}
       <details class="plandet"><summary>每位業務的目標明細</summary><ul class="list">${ppl.map(x => `<li><b>${esc(x.name)}</b> ${planHtml(x.plan)}</li>`).join('')}</ul></details>
-      <div class="tbl" hidden><table><tbody>
-      </tbody></table></div>
       <h3>各地區（${esc(p.label)}）</h3><div class="tbl"><table><thead><tr><th>地區</th><th>農民（目前）</th><th>盤商（目前）</th><th>種子商（目前）</th><th>${Number(state.pm.slice(5))} 月拜訪</th><th>進行中的試作（目前）</th></tr></thead><tbody>      ${p.regions.map(r => `<tr><td>${esc(r.area)}</td><td>${r.customers}</td><td>${r.dealers}</td><td>${r.seeds || 0}</td><td>${r.visits}</td><td>${r.trialsActive}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">還沒有客戶</td></tr>'}
       </tbody></table></div><p class="sub">目標在試算表「計劃」分頁設定：月份空白＝每個月都適用；業務空白＝每位業務各自的目標；指標有拜訪次數、拜訪客戶數、新增客戶、開始試作、完成試作、簽約（盤商、種子商結案「已簽約」；還在等主管確認、被退回的不算；類別空白＝兩種都算）。新增客戶的類別填「農戶」時，會另外列出試作、推廣、一般農民各幾位。</p>`;
   }

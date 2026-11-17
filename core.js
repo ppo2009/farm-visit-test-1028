@@ -887,5 +887,10 @@
     }
   }
 
-  g.FarmCore = { Store, runSync, post, rememberServer, sameLogin, pruneLocalCustomers, pruneLocalTrials, buildAsk, oldServer, OLD_SRV_WARN, updateTaskDone, untickTask, isSending, isLocked, SYNC_WARN }; // sameLogin：0.4.87 給 app.js 判斷回應是不是現在這個帳號的
+  /** 第25任 審查第二批：是不是 iPhone／iPad（app.js、voice.js 共用；原本寫 5 次，只有一處認得 iPadOS 13 起冒充 Mac 的 iPad → iPad 的定位、麥克風說明給成 Android 版） */
+  function isIOS(ua) {
+    const n = typeof navigator !== 'undefined' ? navigator : {};
+    return /iphone|ipad|ipod/i.test(String(ua == null ? n.userAgent || '' : ua)) || (n.platform === 'MacIntel' && Number(n.maxTouchPoints) > 1);
+  }
+  g.FarmCore = { Store, runSync, post, rememberServer, sameLogin, pruneLocalCustomers, pruneLocalTrials, buildAsk, oldServer, OLD_SRV_WARN, updateTaskDone, untickTask, isSending, isLocked, SYNC_WARN, isIOS }; // sameLogin：0.4.87 給 app.js 判斷回應是不是現在這個帳號的
 })(typeof self !== 'undefined' ? self : this);

@@ -31,7 +31,7 @@
   }
   /** 麥克風被拒時教怎麼打開：看是 iPhone／Android、是不是從主畫面圖示打開 */
   function permHelp(ua, standalone) {
-    const ios = /iphone|ipad|ipod/i.test(ua || ''), android = /android/i.test(ua || '');
+    const ios = typeof FarmCore === 'object' && FarmCore.isIOS ? FarmCore.isIOS(ua || '') : /iphone|ipad|ipod/i.test(ua || ''), android = /android/i.test(ua || ''); // 第25任 審查第二批：iPad 也認得（共用 FarmCore.isIOS）
     if (ios) return standalone
       ? '麥克風被關掉了：請到 iPhone「設定」→「Safari」→「麥克風」改成「允許」，再回來關掉 App 重開。'
       : '麥克風被關掉了：請按網址列左邊的「大小」(aA) →「網站設定」→「麥克風」改成「允許」，再重新整理。';

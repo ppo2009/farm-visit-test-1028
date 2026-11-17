@@ -2846,7 +2846,7 @@
   function isStandalone() { try { return !!((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone); } catch (e) { return false; } }
   /** 第24任 第六批②（tomtom 實測：說明只有一種、寫「網址列」但主畫面 App 沒有網址列）：定位被關時，依 iPhone／Android、瀏覽器／主畫面 App 給步驟 */
   function geoHelp(ua, standalone) {
-    const ios = /iphone|ipad|ipod/i.test(ua || ''), android = /android/i.test(ua || ''), chrome = /CriOS|Chrome\//.test(ua || '');
+    const ios = typeof FarmCore === 'object' && FarmCore.isIOS ? FarmCore.isIOS(ua || '') : /iphone|ipad|ipod/i.test(ua || ''), android = /android/i.test(ua || ''), chrome = /CriOS|Chrome\//.test(ua || '');
     if (ios) return '請到 iPhone「設定」→「隱私權與安全性」→「定位服務」打開，往下找到' + (standalone ? '「Safari 網站」' : chrome ? '「Chrome」' : '「Safari 網站」') + '設成「使用 App 期間」' + (standalone ? '，再把田間打卡關掉重開' : '') + '，回來按「重新定位」。';
     if (android) return standalone
       ? '請長按手機主畫面上的「田間打卡」圖示 →「應用程式資訊」（或「網站設定」）→「權限」→「位置」改成允許；也確認手機上方下拉的「定位」是開的，再回來按「重新定位」。'
@@ -3625,8 +3625,12 @@
     showLogin(L.msg);
     return true;
   }
+  /** 第25任 審查第三批：每分鐘的自動同步在「沒東西要傳」時原本每次都整份抓後台資料（客戶、首頁、試作、任務…）再重畫首頁 → 手機開著首頁一小時抓 60 次。
+   *  改成自動的那次距離上次抓成功不到 5 分鐘就不抓、不重畫；連上網路、切回畫面、存檔後、手動同步不受限制 */
+  const AUTO_PULL_MS = 5 * 60 * 1000;
   async function syncNow() {
     const cfg = await getConfig();
+    const auto = !!(arguments[0] && arguments[0].auto === true); // 第25任 審查第三批：只有計時器明確給 { auto: true } 才算自動（online 事件會把 Event 物件傳進來）。不寫成參數：很多舊測試用函式開頭那一行（沒有參數）找這個函式；這行註解也不能寫大括號（舊測試數大括號抽函式）
     if (!cfg || !cfg.deviceKey) {
       // 0533 N1：別的分頁登出了（切回這頁、連上網路時會跑同步）→ 這頁也回登入頁。已在登入頁不重畫（不洗掉錯誤訊息）；
       //   打卡頁已經填了東西不跳走（照 0.5.23 J5 先存進手機、存完回登入頁）
@@ -3648,6 +3652,7 @@
         await onLoginExpired(cfg.deviceKey, (r.error || '登入已失效') + '。沒上傳的資料還在手機裡，重新登入後會自動補傳。／ပြန်ဝင်ပြီးလျှင် ကျန်သော မှတ်တမ်း တင်မည်။');
         return;
       }
+      if (auto && r && !r.error && !r.sent && Date.now() - (state.lastPullAt || 0) < AUTO_PULL_MS) { $('syncState').textContent = r.syncWarn || ''; return; } // 第25任 審查第三批：自動那次、沒東西傳、5 分鐘內抓過 → 不抓不重畫（finally 照樣更新待上傳筆數）
       // 第25任 審查⑪：背景程式正在上傳（拿不到上傳鎖回 busy）不是「沒東西要傳」——原本照樣再抓一次整份資料、把上傳進度字清掉。傳完背景程式會通知畫面重畫
       if (r && r.busy) { $('syncState').textContent = '背景上傳中…'; return; }
       if (r && !r.error && !r.sent) {
@@ -3655,6 +3660,7 @@
         const sentAt = Date.now();
         const data = await post(cfg.gasUrl, { action: 'sync', deviceKey: cfg.deviceKey, ask: (typeof FarmCore !== 'undefined' && FarmCore.buildAsk) ? await FarmCore.buildAsk() : undefined }).catch(() => null); // R19：問自己手機上的暫存收到了沒
         if (data && data.ok) { // 0.4.91 高1：帶送出時的金鑰，換了帳號就整份丟掉
+          state.lastPullAt = Date.now(); // 第25任 審查第三批：抓成功才算（失敗下一分鐘照樣再抓）
           // R13-01：寫回失敗（空間不足等）不中斷，記住「暫存先別清」、畫面寫提示
           try { await rememberServer(data, sentAt, cfg.deviceKey); } catch (e) { r.syncWarn = FarmCore.SYNC_WARN || '同步資料寫回手機失敗，稍後再同步'; } // R14：暫存清理看後台快取，這裡只要提示
           if (!r.syncWarn && typeof FarmCore !== 'undefined' && FarmCore.oldServer && FarmCore.oldServer(data)) r.syncWarn = FarmCore.OLD_SRV_WARN; // R20（GPT 04）：後台被單獨退回舊版 → 不清理、提示
@@ -3776,7 +3782,7 @@
   /** 加到主畫面的說明（iPhone、Android） */
   function showInstallTips() {
     // 第24任 必改第二批②：iPadOS 13 起冒充 Mac（MacIntel＋觸控）也算；可關閉，記住不再顯示
-    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints) > 1);
+    const isIOS = typeof FarmCore === 'object' && FarmCore.isIOS ? FarmCore.isIOS(navigator.userAgent) : /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints) > 1); // 第25任 審查第二批：共用 FarmCore.isIOS
     const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
     let iosClosed = false; try { iosClosed = localStorage.getItem('farm-ios-tip') === 'off'; } catch (e) { /* 記不了就每次顯示 */ }
     // 第24任 第六批①：說明預設收起，頂端只留一個 📱 圖示，按了才打開（舊頁面沒有圖示就照舊直接顯示）
@@ -3863,7 +3869,7 @@
     const el = $n('storeWarn'); if (!el) return;
     const risky = state.persist === 'denied' || state.persist === 'unsupported';
     el.hidden = !(risky && left > 0);
-    const zh = $n('storeWarnZh'); if (zh && !el.hidden) zh.textContent = '⚠ 這支手機的瀏覽器沒有答應長期保存資料，還有 ' + left + ' 筆沒上傳：請盡快連上網路上傳' + (/iphone|ipad|ipod/i.test(navigator.userAgent || '') ? '；iPhone 請把網頁加到主畫面、只從主畫面圖示打開' : '') + '，上傳前不要清除瀏覽器資料。';
+    const zh = $n('storeWarnZh'); if (zh && !el.hidden) zh.textContent = '⚠ 這支手機的瀏覽器沒有答應長期保存資料，還有 ' + left + ' 筆沒上傳：請盡快連上網路上傳' + ((typeof FarmCore === 'object' && FarmCore.isIOS ? FarmCore.isIOS(navigator.userAgent || '') : /iphone|ipad|ipod/i.test(navigator.userAgent || '')) ? '；iPhone 請把網頁加到主畫面、只從主畫面圖示打開' : '') + '，上傳前不要清除瀏覽器資料。';
   }
   /** 第24任 第六批⑧：執行任務分頁的區塊可收合（標題當開關，鍵盤 Enter／空白鍵也行），收合狀態存在 localStorage farm-todo-fold */
   const TODO_FOLD_DEFAULT = { todoPlanGrow: true, mineFarmers: true };
@@ -4095,7 +4101,7 @@
     // 自動上傳的時機：有網路時、切回這個畫面時、每分鐘一次
     window.addEventListener('online', syncNow);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(); });
-    setInterval(syncNow, 60 * 1000);
+    setInterval(syncNow, 60 * 1000, { auto: true }); // 第25任 審查第三批：第三個參數會傳給 syncNow，標「自動」——有要上傳的照常傳；沒有的話抓最新資料至少隔 AUTO_PULL_MS
     window.addEventListener('offline', () => { $('syncState').textContent = '沒有網路，資料先存在手機裡／အင်တာနက် မရှိ၊ ဖုန်းထဲ သိမ်းထားသည်'; });
   }
   /** 開網頁：補記版本紀錄的帳號，已登入回首頁並上傳，沒登入顯示登入畫面 */
