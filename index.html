@@ -305,6 +305,13 @@ li>.pill{flex:none}
 .progress h3 .who{flex-wrap:wrap;min-width:0;overflow-wrap:anywhere}
 /* 0.5.16 董事長截圖「這個可以隱藏收合」：Android 加到主畫面說明預設收成一行（點開看全文），右邊一顆「知道了」 */
 #androidTip{display:flex;align-items:flex-start;gap:8px;padding:8px 12px;font-size:.92rem}
+#iosTip:not([hidden]){display:flex;align-items:flex-start;gap:8px} #iosTip .tipbody{flex:1;min-width:0} #iosTipClose{flex:none;font-size:.8rem;min-height:32px;max-width:7.5em;text-align:right;line-height:1.3} /* 第24任 必改第二批② */
+#storeWarn .my:empty{display:none} #iosTipClose .my:empty{display:none} /* 緬文等譯者：空的不佔位 */
+/* 第24任 必改第二批④（360 寬走完整拜訪流程看到的小問題）：①錄好音後按鈕的狀態字已經有緬文，原本的「錄音」緬文還留在旁邊、對不齊 → 錄好就藏起來；
+   ②「跟農民聊了什麼」框太矮，緬文範例字被切一半 → 至少 8 行高；③頂端「提供建議」「登出」緬文的上標符號壓到中文 → 緬文往下推一點 */
+.recsmall.done>.my{display:none}
+textarea#note{min-height:8.2em}
+#feedbackBtn .my,#logoutBtn .my{margin-top:3px}
 #androidTip .tipfold{flex:1;min-width:0}
 #androidTip .tipfold summary{cursor:pointer;font-weight:700;min-height:32px;line-height:1.4}
 #androidTip .tipfold summary .my{display:block;font-weight:400;font-size:.72rem}
@@ -313,7 +320,7 @@ li>.pill{flex:none}
 </style>
 </head>
 <body>
-<div class="tip" id="iosTip" hidden>📱 iPhone 請先按下方「分享」→「加入主畫面」，以後<strong>只從主畫面的圖示打開</strong>，離線存的資料才不會不見。<span class="my">iPhone တွင် 「Share」→「Add to Home Screen」 နှိပ်ပြီး နောက်ပိုင်း ပင်မစာမျက်နှာရှိ အိုင်ကွန်မှသာ ဖွင့်ပါ။ ဒါမှ အော့ဖ်လိုင်း မှတ်တမ်း မပျောက်ပါ။</span></div><!-- 0.4.92 中2 加緬文（待校對） -->
+<div class="tip" id="iosTip" hidden><span class="tipbody">📱 iPhone 請先按下方「分享」→「加入主畫面」，以後<strong>只從主畫面的圖示打開</strong>，離線存的資料才不會不見。<span class="my">iPhone တွင် 「Share」→「Add to Home Screen」 နှိပ်ပြီး နောက်ပိုင်း ပင်မစာမျက်နှာရှိ အိုင်ကွန်မှသာ ဖွင့်ပါ။ ဒါမှ အော့ဖ်လိုင်း မှတ်တမ်း မပျောက်ပါ။</span></span><button type="button" class="link" id="iosTipClose">知道了，不再顯示<span class="my" data-tr="待譯"></span></button></div><!-- 0.4.92 中2 加緬文（待校對）；第24任 必改第二批②：可關閉（緬文沿用舊的，關閉鈕的緬文等譯者） -->
 <!-- 0.5.26（董事長：GM 進錯網址要有提示）：主管、總經理用業務打卡網址登入時，showHome 顯示這一條 -->
 <div class="tip" id="bossTip" hidden><b>這是業務打卡頁。</b>你是主管／總經理帳號，要看管理畫面（總覽、任務、帳號、主管匯報）請到主管頁：<a href="boss.html">打開主管頁 →</a><span class="my">ဤသည်မှာ အရောင်းဝန်ထမ်း စာမျက်နှာ ဖြစ်သည်။ မန်နေဂျာ စာမျက်နှာသို့ သွားပါ</span></div>
 <div class="tip" id="androidTip" hidden><details class="tipfold"><summary>📱 Android 加到主畫面（點開看說明）<span class="my">ပင်မစာမျက်နှာသို့ ထည့်နည်း (နှိပ်ပြီး ကြည့်ပါ)</span></summary>請按右上角「⋮」→「加到主畫面」（或「安裝應用程式」），以後<strong>只從主畫面的圖示打開</strong>，用起來比較快，離線存的資料也比較不會不見。<span class="my">Android တွင် ညာဘက်အပေါ် 「⋮」 →「Add to Home screen」(သို့)「Install app」 ကို နှိပ်ပြီး နောက်ပိုင်း ပင်မစာမျက်နှာရှိ အိုင်ကွန်မှသာ ဖွင့်ပါ။</span></details><button type="button" class="link" id="androidTipClose">知道了，不再顯示／နားလည်ပြီ</button></div><!-- 0.4.94 低3：可關閉、記住不再顯示（localStorage）；0.5.16 董事長截圖「可以隱藏收合」：預設收成一行，點開才看完整說明 -->
@@ -349,6 +356,8 @@ li>.pill{flex:none}
   </div></div>
   <header class="homehdr"><h1>田間打卡<span class="my">လယ်ကွင်း မှတ်တမ်း</span></h1><span class="hdr"><button type="button" class="syncbadge" id="syncBadge" hidden></button><span class="sub" id="who"></span><span class="hdracts"><button type="button" id="feedbackBtn">提供建議<span class="my">အကြံပြုရန်</span></button><button type="button" id="logoutBtn">登出<span class="my">ထွက်ရန်</span></button></span></span><!-- 0.5.03 董事長：登出上面加「提供建議」，送到後台「使用者建議」分頁 --><!-- 0.4.75 董事長：登出搬到首頁右上角、看得清楚，按了也通知後台停用這支手機 -->
     <!-- 0.4.73 董事長「試作報告拿掉」：0.4.69 右上角「分享我的報告／觀看其他業務報告」兩顆入口拿掉 --></header>
+  <!-- 第24任 必改第二批②：瀏覽器沒答應長期保存手機資料（storage.persist 被拒或不支援），又有沒上傳的資料 → 提醒快上傳（緬文等譯者，先留空） -->
+  <p class="warn" id="storeWarn" role="alert" hidden><span class="zh" id="storeWarnZh"></span><span class="my" data-tr="待譯"></span></p>
   <!-- 0.4.82 董事長「蔬菜快採收前 10 天要跳通知給業務、要到現場」（選「打開就跳提醒」，不做推播）：後台 home.harvestSoon 有人才出現；
        點了展開清單、點一位開那位的田間打卡；「今天先收起」存在手機，隔天（或多了新的人）再跳 -->
   <div class="hvbar" id="harvestBar" hidden>

@@ -31,7 +31,7 @@
   const md = s => { const d = s2d(s); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
 
   const KEY_NAME = 'farm-boss-key';
-  const MORE_TABS = ['progress', 'map', 'table', 'accounts']; // 收在「更多」底下的分頁（2026-11-12 規劃 C）
+  const MORE_TABS = ['progress', 'map', 'table', 'accounts', 'errors']; // 第24任 必改第二批⑦：錯誤紀錄 // 收在「更多」底下的分頁（2026-11-12 規劃 C）
 
   /* ───── 主管網頁中文＋緬文（2026-11-12 董事長；緬文是示意，待校對）─────
      畫面畫好後掃一遍：文字剛好是下表的詞，就在後面補緬文（小字）；輸入框提示也補。不用改每一段畫面程式 */
@@ -301,10 +301,11 @@
     const unread = state.data.role === '總經理' ? Math.max((state.data.briefs || []).filter(b => !b.read).length, Number(state.data.briefUnread) || 0)
       : (state.data.briefs || []).filter(newReply).length;
     $('briefBadge').hidden = !unread; $('briefBadge').textContent = unread ? String(unread) : '';
-    $('panel').innerHTML = ({ today: renderToday, latest: renderLatest, cal: renderCal, trial: renderTrial, map: renderMap, table: renderTable, reports: renderReports, progress: renderProgress, tasks: renderTasks, accounts: renderAccounts, briefs: renderBriefs })[state.tab]();
+    $('panel').innerHTML = ({ today: renderToday, latest: renderLatest, cal: renderCal, trial: renderTrial, map: renderMap, table: renderTable, reports: renderReports, progress: renderProgress, tasks: renderTasks, accounts: renderAccounts, briefs: renderBriefs, errors: renderErrors })[state.tab]();
     if (state.tab === 'tasks') bindTasks();
     if (state.tab === 'briefs') bindBriefs();
     if (state.tab === 'accounts') bindAccounts();
+    if (state.tab === 'errors') bindErrors();
     if (state.tab === 'trial') bindCustomers();
     bindGo($('panel'));
     biDom($('panel')); biDom($('stats')); // 補緬文
@@ -472,17 +473,19 @@
       return '⏳ 翻譯服務忙碌，' + t + '（緬甸時間）後自動再試／ဘာသာပြန်ဝန်ဆောင်မှု အလုပ်များနေသည်၊ ' + t + ' နောက်ပိုင်း အလိုအလျောက် ထပ်ကြိုးစားမည်';
     }
     if (v.status === '待處理' && v.error && /額度不足|暫時連不上|\b(429|402|503)\b/.test(v.error)) return '⏳ 翻譯額度不足，稍後自動補';
-    if (v.status === '待處理') return v.error ? '⏳ 翻譯延遲（上次失敗，稍後重試）：' + v.error.slice(0, 100) : '翻譯處理中，約 10 分鐘內完成';
-    if (v.status === '處理異常' || v.status === '翻譯異常') return '⚠ 處理失敗' + (v.error ? '：' + v.error.slice(0, 80) : '') + '（原因排除後，到試算表選單「農業CRM → 重新處理「處理異常」的拜訪」，或把狀態改回「待處理」、重試次數改 0）';
+    if (v.status === '待處理') return v.error ? '⏳ 翻譯延遲（上次失敗，稍後自動重試）' : '翻譯處理中，約 10 分鐘內完成'; // 第24任 必改第二批③：原文不直接秀，收進「詳細」（errDetail）
+    if (v.status === '處理異常' || v.status === '翻譯異常') return '⚠ 處理失敗' + '（原因排除後，到試算表選單「農業CRM → 重新處理「處理異常」的拜訪」，或把狀態改回「待處理」、重試次數改 0）';
     const hasStuff = v.audio || (v.photos && v.photos.length) || v.text;
     return hasStuff ? '（沒有翻譯：翻譯功能關閉中，或這筆沒有送翻譯）' : '（沒有需要翻譯的內容）';
   }
+  /** 第24任 必改第二批③：沒有摘要時的錯誤原文（可能是英文技術訊息）收進可展開的「詳細」，平常只看到上面的白話說明 */
+  function errDetail(v) { return !v.summary && v.error ? `<details class="errdet"><summary>詳細</summary><span class="sub pre">${esc(String(v.error).slice(0, 600))}</span></details>` : ''; }
   function visitItem(v) {
     const flag = v.check && v.check !== '現場拍攝' ? ` <span class="pill p-yel">${esc(v.check)}</span>` : '';
     const st = v.summary ? '' : ` <span class="pill ${v.status === '待處理' ? 'p-yel' : 'p-red'}">${esc(v.status)}</span>`;
     const pending = noSummaryText(v);
     return `<li>${catPill(v)}<b><a href="javascript:void 0" data-go="${esc(v.cid)}">${esc(v.name)}</a></b>｜${esc(v.staff)}｜${esc(v.time)}${flag}${st}<br>
-      ${v.summary ? esc(v.summary) + `<br><span class="sub">問題：${esc(v.issue || '—')}　下一步：${esc(v.next || '—')}</span>` : `<span class="sub">${esc(pending)}</span>`}
+      ${v.summary ? esc(v.summary) + `<br><span class="sub">問題：${esc(v.issue || '—')}　下一步：${esc(v.next || '—')}</span>` : `<span class="sub">${esc(pending)}</span>${errDetail(v)}`}
       ${v.closing ? `<br><span class="sub">${esc(v.closing)}</span>` : ''}${v.prices ? `<br><span class="sub pre">價格：${esc(v.prices)}</span>` : ''}
       ${v.plantFail ? `<br><span class="pill p-red">種植失敗</span> <span class="sub">${esc(v.plantFail)}</span>` : ''}
       ${v.noMeet ? `<br><span class="pill p-yel">沒拜訪</span> <span class="sub">${esc(v.noMeet)}</span>` : ''}
@@ -562,7 +565,7 @@
     const msum = m => (m ? [m.variety, m.sampleCount !== '' && m.sampleCount != null ? m.sampleCount + (m.sampleUnit || '') : '', m.weightKg !== '' && m.weightKg != null ? m.weightKg + 'kg' : '', m.husk]
       .filter(x => x !== '' && x != null).join(' ') + (m.days !== '' && m.days != null ? '・' + m.days + ' 天' : '') : '');
     return `<section class="closings"><h3><span class="pill p-red">待確認結案 ${list.length} 筆</span> <span class="sub">業務按了結案，確認後才真的結案；按錯就退回／ဝန်ထမ်း ပိတ်သိမ်းထားသည်၊ အတည်ပြုမှ ပိတ်သိမ်းမည်၊ မှားလျှင် ပြန်ပို့ပါ</span></h3>
-      <ul class="list">${list.map(c => `<li><b><a href="javascript:void 0" data-go="${esc(c.cid)}">${esc(c.name)}</a></b>｜${esc(c.staff)}｜${esc(c.date)}${c.custEnded ? ' <span class="pill p-yel">客戶已經是「已結束」：確認＝維持結束，退回＝不記這筆結案（客戶仍是已結束）</span>' /* 主管BUG(2號)#6 */ : ''}${msum(c.measure) ? ' <span class="pill p-grn">' + esc(msum(c.measure)) + '</span>' : '' /* 0.4.77 採收量測 */}${c.group ? ' <span class="pill">' + esc(c.group) + (c.trialOutcome ? '・' + esc(c.trialCat || (c.group === '推廣農民' ? '推廣' : '試作')) + esc(c.trialOutcome) : '') + '</span>' /* 0.4.74 結案分類、試作結果；0.4.75 複查低3：照後台 trialCat 寫試作或推廣（舊後台沒送就看分類） */ : ''}${c.after && (c.after.visits || c.after.trials) ? '<br><span class="pill p-red">結案之後還有 ' + (c.after.visits || 0) + ' 筆拜訪' + (c.after.trials ? '、' + c.after.trials + ' 件新開始的試作（確認後新試作不會跟著結束）' : '') + '，請先看客戶履歷再決定</span>' /* 結案清單中1 */ : ''}<br>
+      <ul class="list">${list.map(c => `<li><b><a href="javascript:void 0" data-go="${esc(c.cid)}">${esc(c.name || ('客戶 ' + (c.cid || '（沒有編號）')))}</a></b>｜${esc(c.staff || '業務未填')}｜${esc(c.date || '日期未填')}${c.custEnded ? ' <span class="pill p-yel">客戶已經是「已結束」：確認＝維持結束，退回＝不記這筆結案（客戶仍是已結束）</span>' /* 主管BUG(2號)#6 */ : ''}${msum(c.measure) ? ' <span class="pill p-grn">' + esc(msum(c.measure)) + '</span>' : '' /* 0.4.77 採收量測 */}${c.group ? ' <span class="pill">' + esc(c.group) + (c.trialOutcome ? '・' + esc(c.trialCat || (c.group === '推廣農民' ? '推廣' : '試作')) + esc(c.trialOutcome) : '') + '</span>' /* 0.4.74 結案分類、試作結果；0.4.75 複查低3：照後台 trialCat 寫試作或推廣（舊後台沒送就看分類） */ : ''}${c.after && (c.after.visits || c.after.trials) ? '<br><span class="pill p-red">結案之後還有 ' + (c.after.visits || 0) + ' 筆拜訪' + (c.after.trials ? '、' + c.after.trials + ' 件新開始的試作（確認後新試作不會跟著結束）' : '') + '，請先看客戶履歷再決定</span>' /* 結案清單中1 */ : ''}<br>
         <span class="sub">${c.result ? esc(c.result) + (c.result === '已簽約' && c.reason ? '｜說明 ' + esc(c.reason) : '') /* 0.4.42 盤商、種子商洽談成功／失敗；0.4.75 已簽約＋說明 */ : !c.group && !c.trialOutcome && !c.buyer && (c.price === '' || c.price == null) && (c.yield === '' || c.yield == null) ? '洽談結果沒記到（結案分頁少了「結果」欄，請在試算表按「第一次安裝／升級」）' /* 主管BUG#10 */ : /* 0.5.26 抓BUG 中1：失敗結案（種植／試作失敗）可以沒價格產量收購客戶 → 寫「沒有收成」，空白印「—」，不再被當成欄位缺漏 */ (!c.buyer && (c.price === '' || c.price == null) && (c.yield === '' || c.yield == null) ? '沒有收成（種植／試作失敗）' : `賣給 ${esc(c.buyer || '—')}（${esc(c.region || '地區未填')}）｜價格 ${c.price === '' || c.price == null ? '—' : esc(c.price) + ' ' + esc(c.priceUnit || '')}｜產量 ${c.yield === '' || c.yield == null ? '—' : esc(c.yield) + ' ' + esc(c.yieldUnit || '')}`) + `${c.phone ? '｜電話 ' + esc(c.phone) : ''}${c.reason ? '｜原因 ' + esc(c.reason) : ''}${c.progress ? '｜進度 ' + esc(c.progress) : ''}`}</span><br>
         <button class="btn primary" type="button" data-closedecide="confirm" data-vid="${esc(c.visitId)}"${state.closeSending ? ' disabled' : ''}>確認結案</button>
         <button class="btn" type="button" data-closedecide="reject" data-vid="${esc(c.visitId)}"${state.closeSending ? ' disabled' : ''}>退回（不結案）</button></li>`).join('')}</ul>
@@ -749,7 +752,7 @@
         　📷 ${v.check ? esc(v.check) : '現場拍攝'}</div>
         <div class="box"><div class="photos">${v.photos.length ? v.photos.map(id => `<div class="photo" data-photo="${esc(id)}">載入中…</div>`).join('') : '<div class="photo">沒有照片</div>'}</div>
         <dl class="kv"><dt>${dealer ? '行情' : '作物'}</dt><dd>${esc(v.crop || '—')}${myLine(v, 'crop')}</dd><dt>反應</dt><dd>${esc(v.feedback || '—')}${myLine(v, 'feedback')}</dd><dt>問題</dt><dd>${esc(v.issue || '—')}${myLine(v, 'issue')}</dd><dt>下一步</dt><dd>${esc(v.next || '—')}${myLine(v, 'next')}</dd>
-        <dt>摘要</dt><dd>${esc(v.summary || noSummaryText(v))}${myLine(v, 'summary')}</dd>
+        <dt>摘要</dt><dd>${esc(v.summary || noSummaryText(v))}${errDetail(v)}${myLine(v, 'summary')}</dd>
         ${v.noMeet ? `<dt>沒拜訪</dt><dd><span class="pill p-yel">沒拜訪</span> ${esc(v.noMeet)}</dd>` : ''}${v.closing ? `<dt>結案</dt><dd>${esc(v.closing)}</dd>` : ''}${v.plantFail ? `<dt>種植失敗</dt><dd>${esc(v.plantFail)}</dd>` : ''}${v.text ? `<dt>打字</dt><dd class="pre">${esc(v.text)}</dd>` : ''}${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') || '<p class="empty">這位客戶還沒有拜訪紀錄。</p>'}</div>`;
   }
 
@@ -1132,6 +1135,48 @@
     });
   }
 
+  /* ───── 第24任 必改第二批⑦：錯誤紀錄（更多 → 錯誤紀錄）：最新 100 筆，可勾「已處理」，可只看沒處理的、只看某個環境 ───── */
+  function renderErrors() {
+    const e = state.errs;
+    if (!e) { if (!state.errsLoading) loadErrors(); return '<p class="sub">讀取中…</p>'; }
+    if (!e.ok) return `<p class="empty">${esc(e.message || '讀取失敗')}</p><button class="btn" type="button" id="errReload">重新讀取</button>`;
+    const f = state.ef || (state.ef = { open: true, env: '' });
+    const list = e.errors.filter(x => (!f.open || !x.done) && (!f.env || x.env === f.env));
+    const head = `<section><h3><span class="pill p-red">錯誤紀錄</span> <span class="sub">最新 ${e.errors.length} 筆；處理好就勾「已處理」</span></h3>
+      <p class="sub"><label><input type="checkbox" id="errOpen"${f.open ? ' checked' : ''}> 只看還沒處理的</label>
+      ${e.hasEnv ? `　<label>環境 <select id="errEnv"><option value="">全部</option><option value="正式"${f.env === '正式' ? ' selected' : ''}>正式</option><option value="測試"${f.env === '測試' ? ' selected' : ''}>測試</option></select></label>` : '　<span class="sub">（試算表還沒有「環境」欄，按一次「第一次安裝／升級」就會補上）</span>'}
+      　<button class="btn" type="button" id="errReload">重新讀取</button></p>
+      <p class="sub" aria-live="polite">${esc(state.errMsg || '')}</p>`;
+    const rows = list.map(x => `<li><label class="errchk"><input type="checkbox" data-errdone="${x.row}" data-key="${esc(x.key)}"${x.done ? ' checked' : ''}${e.hasDone ? '' : ' disabled'}> 已處理</label>
+      <b>${esc(x.job || '（沒寫工作）')}</b>｜${esc(String(x.time).slice(0, 16))}${x.env ? ' <span class="pill' + (x.env === '測試' ? '' : ' p-yel') + '">' + esc(x.env) + '</span>' : ''}${x.target ? '｜<span class="sub">' + esc(x.target) + '</span>' : ''}
+      <details class="errdet"><summary>${esc(x.msg.slice(0, 60))}${x.msg.length > 60 ? '…' : ''}</summary><span class="sub pre">${esc(x.msg)}</span></details></li>`).join('');
+    return head + `<ul class="list">${rows || '<li class="empty">沒有符合的錯誤紀錄</li>'}</ul></section>`;
+  }
+  async function loadErrors() {
+    state.errsLoading = true;
+    let r;
+    try { r = await api({ action: 'errors', limit: 100 }); } catch (e) { r = { ok: false, message: '連不上伺服器，請按重新讀取' }; }
+    state.errsLoading = false;
+    if (r && (r.code === 'BAD_LOGIN' || r.code === 'NOT_BOSS')) return;
+    state.errs = r && r.ok ? r : { ok: false, message: (r && r.message) || '讀取失敗' };
+    if (state.tab === 'errors') render();
+  }
+  function bindErrors() {
+    const rl = $('errReload'); if (rl) rl.addEventListener('click', () => { state.errs = null; state.errMsg = ''; render(); });
+    const op = $('errOpen'); if (op) op.addEventListener('change', () => { state.ef.open = op.checked; render(); });
+    const ev = $('errEnv'); if (ev) ev.addEventListener('change', () => { state.ef.env = ev.value; render(); });
+    $('panel').querySelectorAll('[data-errdone]').forEach(cb => cb.addEventListener('change', async () => {
+      const row = Number(cb.dataset.errdone), done = cb.checked;
+      cb.disabled = true;
+      let r;
+      try { r = await api({ action: 'errorDone', row, key: cb.dataset.key, done }); } catch (e) { r = { ok: false, message: '連不上伺服器' }; }
+      const it = state.errs && state.errs.errors && state.errs.errors.find(x => x.row === row);
+      if (r && r.ok && it) { it.done = done; state.errMsg = done ? '已標「已處理」' : '已取消「已處理」'; }
+      else { state.errMsg = '⚠ ' + ((r && r.message) || '沒有存成功，請再試一次'); if (r && r.code === 'CHANGED') state.errs = null; }
+      render();
+    }));
+  }
+
   /* ───── 帳號：主管開業務帳號、重設業務密碼；總經理另外能開／重設主管帳號（2026-11-12） ───── */
   function renderAccounts() {
     const gm = isGM();
@@ -1156,6 +1201,7 @@
     const rows = list.map(a => `<li><b>${esc(a.name)}</b>${a.role === '主管' ? ' <span class="pill p-yel">主管</span>' : ''}<span class="sub">${esc(a.account)}${a.region ? '｜' + esc(a.region) : ''}</span>
         ${a.active ? '' : '<span class="pill">停用</span>'}
         <span class="sub">${a.lastLogin ? '最後登入 ' + esc(String(a.lastLogin).slice(5, 16)) : '還沒登入過'}</span>
+        <span class="sub" data-ver>${a.lastVer ? '手機版本 ' + esc(a.lastVer) + (a.lastVerAt ? '（' + esc(String(a.lastVerAt).slice(5, 16)) + '）' : '') : '還沒回報版本'}</span>
         <button class="btn" type="button" data-acctreset="${esc(a.account)}" data-name="${esc(a.name)}">重設密碼</button>
         <button class="btn" type="button" data-acctactive="${a.active ? 'off' : 'on'}" data-acct="${esc(a.account)}" data-name="${esc(a.name)}">${a.active ? '停用' : '啟用'}</button></li>`).join(''); // 主管BUG(2號)#12
     return box + form + `<h3>${gm ? '業務、主管帳號' : '業務帳號'}（${list.length}）</h3><ul class="acctlist">${rows || '<li class="empty">還沒有帳號</li>'}</ul>`;

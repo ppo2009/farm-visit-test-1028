@@ -29,16 +29,22 @@ a{color:var(--paddy)}
 .stat.red b{color:var(--chili)} .stat.yel b{color:var(--turmeric)} .stat.grn b{color:var(--paddy)}
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;margin-bottom:14px}
 .tab{border:1.5px solid transparent;border-bottom:0;border-radius:10px 10px 0 0;margin-bottom:-1px;background:none;padding:10px 14px;cursor:pointer;color:var(--muted);font-weight:700;white-space:nowrap}
-.tab[aria-selected="true"]{color:var(--paddy);border-color:var(--paddy);background:var(--surface)} /* 0.4.28：跟業務手機一樣，選到的分頁加框 */
+.tab[aria-selected="true"]{color:var(--paddy);border-color:var(--paddy);background:var(--surface)}
+.errdet{margin-top:2px} .errdet summary{cursor:pointer;color:var(--muted);font-size:.85rem} .errdet .pre{white-space:pre-wrap;word-break:break-word;display:block} .errchk{float:right;font-size:.85rem;margin-left:8px} /* 第24任 必改第二批③⑦ */ /* 0.4.28：跟業務手機一樣，選到的分頁加框 */
 /* 手機（2026-11-12 逐頁檢查）：分頁原本橫向捲動，只看得到前 4 個，「任務」「主管匯報」「更多」藏在右邊看不到 → 改成折行全部看得到；
    上方 4 個數字卡原本兩兩一排佔半個畫面 → 一排 4 個、字縮小 */
+/* 第24任 必改第二批③（老闆核准）：折行的分頁在 360 寬排成三列、佔掉三分之二個畫面 → 改回單列可橫向滑動；右邊淡出、選到的分頁會捲進畫面（render 裡 scrollIntoView），
+   看得出右邊還有。數字卡改兩欄、數字在左說明在右，緬文一行 */
 @media (max-width:620px){
-  .tabs{flex-wrap:wrap;overflow:visible}
-  .tabs .tab{flex:1 1 30%;padding:8px 6px;white-space:normal}
-  .stats{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
-  .stats .card{padding:8px 6px}
-  .stat b{font-size:1.2rem}
-  .stat .sub{font-size:.7rem;line-height:1.3;display:block}
+  .tabs{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-mask-image:linear-gradient(90deg,#000 86%,transparent);mask-image:linear-gradient(90deg,#000 86%,transparent);padding-right:24px}
+  .tabs::-webkit-scrollbar{display:none}
+  .tabs .tab{flex:0 0 auto;padding:6px 10px;white-space:nowrap;line-height:1.25}
+  .tabs .tab .my{display:block;margin-left:0}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+  .stats .card{padding:6px 10px;display:flex;align-items:center;gap:10px}
+  .stat b{font-size:1.3rem;flex:0 0 auto}
+  .stat .sub{font-size:.78rem;line-height:1.3;display:block;min-width:0}
+  .stat .sub .my{display:block;margin-left:0;margin-top:2px;line-height:1.6} /* 緬文自己一行，太長最多折成兩行（不截斷，字都看得到） */
 }
 section h3{margin:16px 0 8px;font-size:1rem;display:flex;gap:8px;align-items:center}
 section h3>.pill{flex-shrink:0;white-space:nowrap} /* 0.5.18 C5：375 寬「待確認結案 N 筆」原本被擠成一兩個字一行；標籤不縮，說明文字自己換行 */
@@ -207,6 +213,7 @@ footer.wrap{margin-top:24px}
     <button class="tab" role="tab" data-tab="map" aria-selected="false">田區地圖</button>
     <button class="tab" role="tab" data-tab="table" aria-selected="false">拜訪紀錄表</button>
     <button class="tab" role="tab" data-tab="accounts" aria-selected="false">業務帳號</button>
+    <button class="tab" role="tab" data-tab="errors" aria-selected="false">錯誤紀錄</button><!-- 第24任 必改第二批⑦ -->
   </div>
   <main id="panel"></main>
 </div>

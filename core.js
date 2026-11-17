@@ -347,7 +347,14 @@
    * 之後所有自動上傳都不會跑（2026-11-11 第六輪自抓）。上限依資料大小放寬：90 秒起跳，每 16 KB 多 1 秒（慢網路照樣傳得完）。
    * 錯誤分三種：e.timeout（逾時）、e.badResponse（伺服器回的不是 JSON，例如 Google 錯誤頁、額度用完）、其他（沒有網路）。
    */
+  /** 第24任 必改第二批①：這支手機的程式版本（網頁：config.js 的 appVersion＋部署時寫的 appBuild；背景程式：sw.js 的 VERSION），後台只記不擋 */
+  function clientVer() {
+    const c = g.FARM_CONFIG || {};
+    const build = c.appBuild || (typeof VERSION !== 'undefined' ? String(VERSION) : ''); // 背景程式裡沒有 FARM_CONFIG，用 sw.js 的版本戳記
+    return [c.appVersion || '', build].filter(Boolean).join(' ').slice(0, 60);
+  }
   async function post(url, payload) {
+    if (payload && typeof payload === 'object' && !payload.clientVer) { const v = clientVer(); if (v) payload = Object.assign({}, payload, { clientVer: v }); } // 同步、上傳、登入都經過這裡
     const body = JSON.stringify(payload);
     const limit = g.SYNC_TEST_TIMEOUT_MS || Math.max(90000, 60000 + Math.round(body.length / 8192) * 1000); // 0.4.94 中3：照 64 kbps（每秒 8 KB）給時間，原本 16 KB（128 kbps）
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;

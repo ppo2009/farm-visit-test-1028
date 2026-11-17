@@ -1311,7 +1311,6 @@
     const week = s => (isDay(s) ? Math.max(1, Math.ceil(dayDiff(s, today) / 7)) : null);
     // 最後拜訪日：伺服器的＋這支手機自己存的拜訪（還沒同步的也算，剛量完不會還叫你去量）
     const mine = state.myVisitList || await myVisits(); // 低#6（第8任）：只算目前帳號的；0.4.98（第13任 手機9）：只有 renderHome 呼叫，它剛讀過（state.myVisitList），不再整份重讀一次（含沒上傳的照片錄音）
-    const localDay = ms => mmDay(0, ms); // 業務BUG#4：拜訪日也用緬甸日期，跟伺服器的最後拜訪日同一把尺
     const lastOf = cid => { const p0 = people.find(f => f.id === cid) || {}; return latestVisitDay(p0.lastVisit, [cid, p0.tempId], mine); }; // 0.4.91 低2：連臨時編號一起比 // 0.4.84 改用共用的 latestVisitDay（同一套：後台與這支手機取較新）
     /** 量測週：開始後第 2、4、8 週（boss.js 有同一組數字，要改兩邊一起改；2026-11-12 優化 4） */
     const measure = t => {
@@ -3639,6 +3638,7 @@
     const left = [pending.length ? `${pending.length} 筆拜訪` : '', ticks ? `${ticks} 個任務打勾` : ''].filter(Boolean).join('、');
     $('pendingCount').textContent = (left ? `還有 ${left}沒上傳／မတင်ရသေး ${pending.length + ticks}` : '全部都上傳了／အားလုံး တင်ပြီး') + (rejected ? `（另有 ${rejected} 筆被拒，請洽主管／${rejected} ခု ပယ်ခံရ၊ မန်နေဂျာကို မေးပါ）` : '');
     $('pendingCount').className = 'count ' + (left ? 'wait' : 'ok');
+    if (typeof paintStoreWarn === 'function') paintStoreWarn(pending.length + ticks); // 第24任 必改第二批②（舊測試只抽 renderQueue 出來跑）
     // 同一個狀態也放在首頁最上面，隨時看得到（優化 2）
     $('syncBadge').hidden = false;
     $('syncBadge').className = 'syncbadge ' + (left || rejected ? 'wait' : 'ok');
@@ -3699,9 +3699,12 @@
   }
   /** 加到主畫面的說明（iPhone、Android） */
   function showInstallTips() {
-    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    // 第24任 必改第二批②：iPadOS 13 起冒充 Mac（MacIntel＋觸控）也算；可關閉，記住不再顯示
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints) > 1);
     const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-    $('iosTip').hidden = !(isIOS && !standalone);
+    let iosClosed = false; try { iosClosed = localStorage.getItem('farm-ios-tip') === 'off'; } catch (e) { /* 記不了就每次顯示 */ }
+    $('iosTip').hidden = !(isIOS && !standalone && !iosClosed);
+    const ic = $n('iosTipClose'); if (ic) ic.addEventListener('click', () => { $('iosTip').hidden = true; try { localStorage.setItem('farm-ios-tip', 'off'); } catch (e) { /* 記不了：這次先關 */ } });
     // 0.4.94 低3（第11任第五輪）：Android 也說明「加到主畫面」（比照 iPhone）；LINE 等 App 內建瀏覽器不顯示（inapp.js 已叫他換 Chrome）；可關閉，記住不再顯示
     {
       const ua = navigator.userAgent || '';
@@ -3753,7 +3756,29 @@
       }).catch(() => {});
       navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.type === 'synced') { renderQueue(); if (state.view === 'home') renderHome(); if (typeof refreshCloseUnknown === 'function') refreshCloseUnknown(); } }); // R27-4：背景同步完也重新判斷正在填的結案
     }
-    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    if (typeof checkPersist === 'function') checkPersist(); // 第24任 必改第二批②：原本只申請、不看結果（舊測試只抽這個函式出來跑，沙盒裡沒有 checkPersist）
+  }
+  /**
+   * 第24任 必改第二批②：請瀏覽器別清掉這個網站的手機資料，並記下結果 state.persist：granted／denied（被拒）／unsupported（瀏覽器沒有這功能）／unknown（查失敗）。
+   * 沒答應（denied、unsupported）時，有沒上傳的資料就在首頁提醒（renderQueue 畫）：瀏覽器空間不夠或太久沒開，可能把還沒上傳的照片錄音清掉
+   */
+  async function checkPersist() {
+    try {
+      if (!navigator.storage || !navigator.storage.persist) state.persist = 'unsupported';
+      else {
+        let ok = navigator.storage.persisted ? await navigator.storage.persisted() : false;
+        if (!ok) ok = await navigator.storage.persist();
+        state.persist = ok ? 'granted' : 'denied';
+      }
+    } catch (e) { state.persist = 'unknown'; }
+    try { await renderQueue(); } catch (e) { /* 還沒登入、畫面還沒好：下次畫首頁時會照 state.persist 顯示 */ }
+  }
+  /** 首頁的「手機資料可能被清掉」提醒：沒答應長期保存＋有沒上傳的（拜訪或任務打勾）才顯示 */
+  function paintStoreWarn(left) {
+    const el = $n('storeWarn'); if (!el) return;
+    const risky = state.persist === 'denied' || state.persist === 'unsupported';
+    el.hidden = !(risky && left > 0);
+    const zh = $n('storeWarnZh'); if (zh && !el.hidden) zh.textContent = '⚠ 這支手機的瀏覽器沒有答應長期保存資料，還有 ' + left + ' 筆沒上傳：請盡快連上網路上傳' + (/iphone|ipad|ipod/i.test(navigator.userAgent || '') ? '；iPhone 請把網頁加到主畫面、只從主畫面圖示打開' : '') + '，上傳前不要清除瀏覽器資料。';
   }
   /** 首頁：登入登出、建議、拜訪類別卡片與下拉選單、首頁分頁、上傳狀態 */
   function bindHomeMenus() {
