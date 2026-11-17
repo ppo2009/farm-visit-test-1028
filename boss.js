@@ -1203,6 +1203,7 @@
         <span class="sub">${a.lastLogin ? '最後登入 ' + esc(String(a.lastLogin).slice(5, 16)) : '還沒登入過'}</span>
         <span class="sub" data-ver>${a.lastVer ? '手機版本 ' + esc(a.lastVer) + (a.lastVerAt ? '（' + esc(String(a.lastVerAt).slice(5, 16)) + '）' : '') : '還沒回報版本'}</span>
         <button class="btn" type="button" data-acctreset="${esc(a.account)}" data-name="${esc(a.name)}">重設密碼</button>
+        <button class="btn" type="button" data-unlockreset="${esc(a.account)}" data-name="${esc(a.name)}">重設解鎖方式</button><!-- 第24任 必改第四批⑤ -->
         <button class="btn" type="button" data-acctactive="${a.active ? 'off' : 'on'}" data-acct="${esc(a.account)}" data-name="${esc(a.name)}">${a.active ? '停用' : '啟用'}</button></li>`).join(''); // 主管BUG(2號)#12
     return box + form + `<h3>${gm ? '業務、主管帳號' : '業務帳號'}（${list.length}）</h3><ul class="acctlist">${rows || '<li class="empty">還沒有帳號</li>'}</ul>`;
   }
@@ -1244,6 +1245,16 @@
       after(r);
     }));
     // 主管BUG(2號)#12：停用／啟用（離職的業務要能關掉；停用後他的手機全部登出，資料都留著）
+    // 第24任 必改第四批⑤：手機遺失時重設解鎖方式（停用這個人所有手機的登入，要用密碼重新登入；密碼不變、沒上傳的資料留在手機）
+    $('panel').querySelectorAll('[data-unlockreset]').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm('要重設「' + b.dataset.name + '」的解鎖方式嗎？\n他所有的手機都要用密碼重新登入，再重新設定人臉／指紋或九宮格。密碼不變；手機裡還沒上傳的資料不會不見。')) return;
+      b.disabled = true;
+      let r;
+      try { r = await api({ action: 'unlockReset', account: b.dataset.unlockreset }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再試一次' }; }
+      if (r.ok) { setData({ salesAccounts: r.accounts }); state.acctMsg = '已重設解鎖方式：' + r.account + '（' + r.devices + ' 支手機要重新登入）'; }
+      else state.acctMsg = '⚠ ' + (r.message || '沒有完成');
+      render();
+    }));
     $('panel').querySelectorAll('[data-acctactive]').forEach(b => b.addEventListener('click', async () => {
       const on = b.dataset.acctactive === 'on';
       if (!confirm(on ? biText('要重新啟用「' + b.dataset.name + '」嗎？', 'ပြန်ဖွင့်မလား') : biText('要停用「' + b.dataset.name + '」嗎？\n停用後他的手機或電腦會全部登出、不能再登入；拜訪紀錄和客戶都會留著，之後可以再啟用。', 'ပိတ်မလား။ ပိတ်လျှင် ဝင်၍မရတော့ပါ၊ မှတ်တမ်းများ ကျန်ရှိမည်'))) return;

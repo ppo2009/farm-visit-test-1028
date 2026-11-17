@@ -54,12 +54,24 @@
   async function getConfig() { return (await Store.getMeta('config')) || null; }
   /** R24-1：登入資料要被換掉、清掉之前，先替舊格式的快取版本紀錄補記帳號（重新登入同一位時才併得回對照） */
   async function tagOwner() { try { if (Store.tagSrvOwner) await Store.tagSrvOwner(); } catch (e) { /* 補不了：只是重新登入後這一輪少併一次 */ } }
+  /** 第24任 必改第四批：人臉／指紋、九宮格解鎖（unlock.js）。只擋畫面，登入設定（裝置金鑰）照留，背景上傳不停。
+   *  舊頁面、抽函式跑的舊測試沒有 FarmLock 就整個不做（每個用到的地方各自寫 typeof FarmLock === 'object'：抽單一函式跑的舊測試找不到名字；有些舊測試的假環境把不認得的名字都當成空函式，所以要認「是物件」才算有） */
+  function lockHooks() {
+    return {
+      getConfig,
+      getMinutes: async () => { const h = await Store.getMeta('home'); return h && h.unlockMin; }, // 後台「解鎖逾時分鐘」隨首頁資料同步下來；沒有用 10
+      toast: m => toast(m),
+      // 九宮格錯 5 次、或按「用密碼重新登入」：跟登入失效一樣只清掉金鑰回登入頁，沒上傳的拜訪留在手機裡，同一人登入後再送
+      lockout: async msg => { const c = await getConfig(); if (typeof tagOwner === 'function') await tagOwner(); await Store.setMeta('config', { gasUrl: (c || {}).gasUrl }); showLogin(msg); }
+    };
+  }
 
   function show(view) {
     state.view = view;
     ['setup', 'home', 'visit'].forEach(v => { $(v).hidden = v !== view; });
     $('logoutBtn').hidden = view === 'setup';
     const fb = document.getElementById('feedbackBtn'); if (fb) fb.hidden = view === 'setup'; // 0.5.03 舊頁面沒有這個鈕就不管
+    const ul = document.getElementById('unlockBtn'); if (ul) ul.hidden = view === 'setup' || typeof FarmLock !== 'object'; // 第24任 第四批：登入後才有「解鎖方式」
     window.scrollTo(0, 0);
   }
 
@@ -144,6 +156,7 @@
       showHome();
       if (loginWarn) toast('已登入。' + loginWarn);
       syncNow();
+      if (typeof FarmLock === 'object') FarmLock.afterLogin(lockHooks()).catch(() => {}); // 第24任 第四批：剛用密碼登入 → 問要不要啟用人臉／指紋或九宮格
     } catch (err) {
       msg.textContent = answered
         ? '手機存資料失敗（可能空間不足），請先清出空間再登入／ဖုန်းထဲ သိမ်းမရပါ၊ နေရာလွတ် လုပ်ပြီး ပြန်ဝင်ပါ'
@@ -1763,6 +1776,7 @@
     $('photoBtn').classList.remove('busy'); $('albumBtn').classList.remove('busy');
     clearInterval(state.recTimer);
     if (state.rec) { try { state.rec.stop(); } catch (e) { /* 已經停了 */ } state.rec = null; }
+    if (typeof FarmVoice === 'object') FarmVoice.stop(true); // 第24任 必改第五批：語音輸入也停、丟掉還沒回來的字
     $('recBtn').classList.remove('rec', 'done');
     $('recBtn').querySelector('.label').textContent = '錄音';
     state.photos = []; state.audio = null; state.audioSec = 0;
@@ -3010,6 +3024,8 @@
   async function toggleRec() {
     const btn = $('recBtn');
     if (state.rec) { state.rec.stop(); return; }
+    // 第24任 必改第五批④：語音輸入跟錄音用同一個麥克風，不能同時開
+    if (typeof FarmVoice === 'object' && FarmVoice.active()) { toast('正在語音輸入，請先按「■ 停止」，再錄音'); return; }
     // 0.4.87 中5（第11任 0.4.86 清單）：麥克風權限還沒回來時連按兩下會開兩個錄音器，第一個停不掉 → 一進來就設「啟動中」；處理錄音中也不能再開新的
     if (state.recStarting || state.recBusy || state.mediaLocked) return; // 0.4.91 中3：存檔等定位中也不開新錄音
     // 0.4.94（第11任，第五輪審查順帶）：已經有一段錄音時再按，原本直接蓋掉 → 先確認，按取消就保留原本那段
@@ -3507,6 +3523,7 @@
     state.busyPhotos = 0;
     clearInterval(state.recTimer);
     if (state.rec) { try { state.rec.stop(); } catch (e) { /* 已經停了 */ } state.rec = null; }
+    if (typeof FarmVoice === 'object') FarmVoice.stop(true); // 第24任 必改第五批：語音輸入也停、丟掉還沒回來的字
     $('recBtn').classList.remove('rec');
     $('photoBtn').classList.remove('busy'); $('albumBtn').classList.remove('busy');
     state.photos = []; state.audio = null; state.audioSec = 0; state.original = null;
@@ -3796,7 +3813,10 @@
   function bindHomeMenus() {
     $('loginForm').addEventListener('submit', onLogin);
     $('logoutBtn').addEventListener('click', logout);
+    const ub = document.getElementById('unlockBtn'); if (ub) ub.addEventListener('click', () => { if (typeof FarmLock === 'object') FarmLock.openSettings(lockHooks()); }); // 第24任 第四批
     initFeedback(); // 0.5.03 提供建議
+    // 第24任 必改第五批：主要文字欄旁加 🎤 語音輸入（瀏覽器不支援就不顯示）。欄位：跟農民聊了什麼、盤商簽約內容、種植失敗原因、提供建議
+    if (typeof FarmVoice === 'object') FarmVoice.init({ toast: m => toast(m), isRecording: () => !!(state.rec || state.recStarting || state.recBusy), fields: ['note', 'dcNote', 'fReason', 'feedbackText'] });
     document.querySelectorAll('.cat[data-cat]').forEach(b => b.addEventListener('click', () => openVisit(b.dataset.cat)));
     // 首頁兩張大卡直接進打卡畫面；一般／試作／推廣、盤商／種子商在打卡畫面上方切換（優化 1）
     // 0.4.32 董事長：「農民」改成下拉選單（一般拜訪農民／試作農民／推廣農民），選了直接進那一種
@@ -3954,6 +3974,7 @@
         }
         if (cr === 'stale') { showLogin('另一個畫面已經換人登入，請重新整理網頁／အခြား စာမျက်နှာတွင် ဝင်ထားပြီ၊ ပြန်ဖွင့်ပါ'); return; }
       }
+      if (typeof FarmLock === 'object') await FarmLock.start(lockHooks()).catch(() => false); // 第24任 第四批：重開 App 有解鎖設定就先鎖（同步照常）
       await showHome(); syncNow();
     } else showLogin();
   }
