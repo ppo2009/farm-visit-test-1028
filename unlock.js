@@ -13,7 +13,6 @@
   'use strict';
   const KEY = 'farm-unlock', HID = 'farm-unlock-hidden';
   const MAX_FAILS = 5, MIN_POINTS = 4, ITER = 150000, DEFAULT_MIN = 10;
-  const MY = '<span class="my" data-tr="待譯"></span>'; // 緬文等譯者
 
   /* ───── 純計算與儲存（測試直接呼叫） ───── */
   const b64u = buf => { let s = ''; new Uint8Array(buf).forEach(b => { s += String.fromCharCode(b); }); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
@@ -37,10 +36,10 @@
   }
   const validPattern = seq => Array.isArray(seq) && seq.length >= MIN_POINTS && seq.length <= 9 && new Set(seq).size === seq.length && seq.every(n => Number.isInteger(n) && n >= 0 && n <= 8);
   async function setPattern(cfg, seq) {
-    if (!validPattern(seq)) throw new Error('九宮格至少要連 4 個點，同一點不能重複');
+    if (!validPattern(seq)) throw new Error('九宮格至少要連 4 個點，同一點不能重複／ပုံစံကွက် အနည်းဆုံး အစက် ၄ စက် ဆက်ရမည်၊ တစ်စက်တည်း ထပ်မဆက်ရ');
     const salt = b64u(rand(16));
     const c = { method: 'pattern', dk: await keyTag(cfg.deviceKey), salt, iter: ITER, hash: await patternHash(seq, salt, ITER), fails: 0, at: Date.now() };
-    if (!save(c)) throw new Error('手機存不進去（可能空間不足或封鎖了網站資料）');
+    if (!save(c)) throw new Error('手機存不進去（可能空間不足或封鎖了網站資料）／ဖုန်းထဲ သိမ်းမရပါ（နေရာ မလောက်ခြင်း သို့မဟုတ် ဝဘ်ဆိုက် ဒေတာ ပိတ်ထားခြင်း ဖြစ်နိုင်）');
     return c;
   }
   /** 驗證九宮格：回 { ok, fails, locked（錯滿 5 次）} */
@@ -64,9 +63,9 @@
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
       authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
       timeout: 60000, attestation: 'none' } });
-    if (!cred || !cred.rawId) throw new Error('沒有建立成功');
+    if (!cred || !cred.rawId) throw new Error('沒有建立成功／သတ်မှတ်မှု မအောင်မြင်ပါ');
     const c = { method: 'bio', dk: await keyTag(cfg.deviceKey), cred: b64u(cred.rawId), fails: 0, at: Date.now() };
-    if (!save(c)) throw new Error('手機存不進去（可能空間不足或封鎖了網站資料）');
+    if (!save(c)) throw new Error('手機存不進去（可能空間不足或封鎖了網站資料）／ဖုန်းထဲ သိမ်းမရပါ（နေရာ မလောက်ခြင်း သို့မဟုတ် ဝဘ်ဆိုက် ဒေတာ ပိတ်ထားခြင်း ဖြစ်နိုင်）');
     return c;
   }
   /** 驗證人臉／指紋：通過回 true；取消、失敗回 false（不算錯誤次數） */
@@ -88,21 +87,21 @@
     if (el('lockScreen')) return;
     const d = document.createElement('div');
     d.innerHTML = `<div id="lockScreen" class="lockscreen" hidden role="dialog" aria-modal="true" aria-labelledby="lockTitle">
-      <div class="lockcard"><h2 id="lockTitle">🔒 已上鎖${MY}</h2><p class="sub" id="lockWho"></p>
-        <button type="button" class="btn primary" id="lockBio" hidden>用人臉／指紋解鎖${MY}</button>
-        <div id="lockPat" hidden><p class="sub">畫九宮格解鎖${MY}</p><div class="patgrid" id="lockGrid"></div></div>
+      <div class="lockcard"><h2 id="lockTitle">🔒 已上鎖<span class="my">သော့ခတ်ထားသည်</span></h2><p class="sub" id="lockWho"></p>
+        <button type="button" class="btn primary" id="lockBio" hidden>用人臉／指紋解鎖<span class="my">မျက်နှာ／လက်ဗွေဖြင့် ဖွင့်ရန်</span></button>
+        <div id="lockPat" hidden><p class="sub">畫九宮格解鎖<span class="my">ပုံစံကွက် ဆွဲပြီး ဖွင့်ရန်</span></p><div class="patgrid" id="lockGrid"></div></div>
         <p class="sub err" id="lockMsg" aria-live="polite"></p>
-        <p class="sub">背景上傳照常進行，沒上傳的資料不會不見。${MY}</p>
-        <button type="button" class="link" id="lockPw">忘記了，用密碼重新登入${MY}</button></div></div>
+        <p class="sub">背景上傳照常進行，沒上傳的資料不會不見。<span class="my">နောက်ကွယ်မှ ပုံမှန် တင်ပေးနေသည်၊ မတင်ရသေးသော ဒေတာ မပျောက်ပါ။</span></p>
+        <button type="button" class="link" id="lockPw">忘記了，用密碼重新登入<span class="my">မေ့သွားပြီ၊ စကားဝှက်ဖြင့် ပြန်ဝင်မည်</span></button></div></div>
       <div id="unlockSet" class="lockscreen" hidden role="dialog" aria-modal="true" aria-labelledby="unlockSetTitle">
-      <div class="lockcard"><h2 id="unlockSetTitle">解鎖方式${MY}</h2>
-        <p class="sub" id="unlockSetIntro">以後打開 App、或離開一段時間再回來，用人臉／指紋或九宮格解鎖，不用再打密碼。${MY}</p>
-        <button type="button" class="btn primary" id="setBio" hidden>啟用人臉／指紋解鎖${MY}</button>
-        <button type="button" class="btn" id="setPat">設定九宮格${MY}</button>
+      <div class="lockcard"><h2 id="unlockSetTitle">解鎖方式<span class="my">သော့ဖွင့်နည်း</span></h2>
+        <p class="sub" id="unlockSetIntro">以後打開 App、或離開一段時間再回來，用人臉／指紋或九宮格解鎖，不用再打密碼。<span class="my">နောက်ပိုင်း App ဖွင့်လျှင် သို့မဟုတ် ခဏထွက်ပြီး ပြန်ဝင်လျှင် မျက်နှာ／လက်ဗွေ သို့မဟုတ် ပုံစံကွက်ဖြင့် ဖွင့်နိုင်သည်၊ စကားဝှက် ထပ်ရိုက်ရန် မလိုပါ။</span></p>
+        <button type="button" class="btn primary" id="setBio" hidden>啟用人臉／指紋解鎖<span class="my">မျက်နှာ／လက်ဗွေ သော့ဖွင့် ဖွင့်ရန်</span></button>
+        <button type="button" class="btn" id="setPat">設定九宮格<span class="my">ပုံစံကွက် သတ်မှတ်ရန်</span></button>
         <div id="setPatBox" hidden><p class="sub" id="setPatHint"></p><div class="patgrid" id="setGrid"></div></div>
         <p class="sub" id="unlockSetMsg" aria-live="polite"></p>
-        <button type="button" class="btn" id="setOff" hidden>關閉解鎖（不上鎖）${MY}</button>
-        <button type="button" class="link" id="setLater">先不用${MY}</button></div></div>`;
+        <button type="button" class="btn" id="setOff" hidden>關閉解鎖（不上鎖）<span class="my">သော့ခတ်ခြင်း ပိတ်ရန်（သော့မခတ်ပါ）</span></button>
+        <button type="button" class="link" id="setLater">先不用<span class="my">မသုံးသေးပါ</span></button></div></div>`;
     while (d.firstChild) document.body.appendChild(d.firstChild);
   }
   /** 畫一個 3×3 的九宮格：手指滑過或一顆一顆點都可以；放開（或點滿後按完成）呼叫 done(seq) */
@@ -131,7 +130,7 @@
   async function showLock(c) {
     ensureDom(); locked = true;
     const cfg = (await H.getConfig()) || {};
-    el('lockWho').textContent = (cfg.name || cfg.account || '') + (c.method === 'pattern' && c.fails ? `（已錯 ${c.fails} 次，錯 ${MAX_FAILS} 次要用密碼重新登入）` : '');
+    el('lockWho').textContent = (cfg.name || cfg.account || '') + (c.method === 'pattern' && c.fails ? `（已錯 ${c.fails} 次，錯 ${MAX_FAILS} 次要用密碼重新登入）／（${c.fails} ကြိမ် မှားပြီး၊ ${MAX_FAILS} ကြိမ် မှားလျှင် စကားဝှက်ဖြင့် ပြန်ဝင်ရမည်）` : '');
     el('lockMsg').textContent = '';
     el('lockBio').hidden = c.method !== 'bio'; el('lockPat').hidden = c.method !== 'pattern';
     el('lockScreen').hidden = false;
@@ -141,17 +140,17 @@
       let r; try { r = await checkPattern(await H.getConfig(), seq); } finally { checking = false; }
       if (!locked) return; // 驗證途中已經用別的方式解開或登出了
       if (r.ok) return unlock();
-      if (r.locked) return lockout('九宮格錯了 ' + MAX_FAILS + ' 次，請用密碼重新登入（沒上傳的資料還在手機裡）');
-      el('lockWho').textContent = (cfg.name || cfg.account || '') + `（已錯 ${r.fails} 次，錯 ${MAX_FAILS} 次要用密碼重新登入）`; // 第26任 低風險修正3④：上面的「已錯 N 次」原本只在上鎖時寫一次，跟下面「還可以試」對不起來
-      el('lockMsg').textContent = `圖形不對，還可以試 ${MAX_FAILS - r.fails} 次`;
+      if (r.locked) return lockout('九宮格錯了 ' + MAX_FAILS + ' 次，請用密碼重新登入（沒上傳的資料還在手機裡）／ပုံစံကွက် မှားနေသည် ' + MAX_FAILS + ' ကြိမ် မှားပြီ၊ စကားဝှက်ဖြင့် ပြန်ဝင်ပါ（မတင်ရသေးသော ဒေတာ ဖုန်းထဲတွင် ရှိနေသည်）');
+      el('lockWho').textContent = (cfg.name || cfg.account || '') + `（已錯 ${r.fails} 次，錯 ${MAX_FAILS} 次要用密碼重新登入）／（${r.fails} ကြိမ် မှားပြီး၊ ${MAX_FAILS} ကြိမ် မှားလျှင် စကားဝှက်ဖြင့် ပြန်ဝင်ရမည်）`; // 第26任 低風險修正3④：上面的「已錯 N 次」原本只在上鎖時寫一次，跟下面「還可以試」對不起來
+      el('lockMsg').textContent = `圖形不對，還可以試 ${MAX_FAILS - r.fails} 次／ပုံစံ မမှန်ပါ၊ နောက်ထပ် ${MAX_FAILS - r.fails} ကြိမ် စမ်းနိုင်သည်`;
     });
     if (c.method === 'bio') { el('lockBio').onclick = tryBio; tryBio(); }
-    el('lockPw').onclick = () => { if (confirm('要改用帳號密碼重新登入嗎？\n這支手機的解鎖設定會清掉，登入後可以重新設定。沒上傳的資料留在手機裡，登入後會再送出。')) lockout('請用帳號密碼重新登入'); };
+    el('lockPw').onclick = () => { if (confirm('要改用帳號密碼重新登入嗎？\n這支手機的解鎖設定會清掉，登入後可以重新設定。沒上傳的資料留在手機裡，登入後會再送出。\nအကောင့်နှင့် စကားဝှက်ဖြင့် ပြန်ဝင်မလား။ ဤဖုန်း၏ သော့ဖွင့် ဆက်တင် ရှင်းသွားမည်၊ ဝင်ပြီးမှ ပြန်သတ်မှတ်နိုင်သည်။ မတင်ရသေးသော ဒေတာ ကျန်နေပြီး ဝင်ပြီးလျှင် ပြန်ပို့ပေးမည်။')) lockout('請用帳號密碼重新登入／အကောင့်နှင့် စကားဝှက်ဖြင့် ပြန်ဝင်ပါ'); };
   }
   async function tryBio() {
     el('lockMsg').textContent = '';
     if (await checkBio(await H.getConfig())) return unlock();
-    el('lockMsg').textContent = '沒有解鎖（取消了或認不出來），請再按一次；不行就用密碼重新登入';
+    el('lockMsg').textContent = '沒有解鎖（取消了或認不出來），請再按一次；不行就用密碼重新登入／သော့မဖွင့်နိုင်ပါ（ပယ်ဖျက်ခြင်း သို့မဟုတ် မမှတ်မိခြင်း）၊ ထပ်နှိပ်ပါ၊ မရလျှင် စကားဝှက်ဖြင့် ပြန်ဝင်ပါ';
   }
   function unlock() { locked = false; if (el('lockScreen')) el('lockScreen').hidden = true; try { localStorage.removeItem(HID); } catch (e) { /* 記不了沒關係 */ } }
   async function lockout(msg) { save(null); unlock(); await H.lockout(msg); }
@@ -172,26 +171,26 @@
   async function openSettings(intro) {
     ensureDom();
     const cfg = await H.getConfig(); if (!cfg || !cfg.deviceKey) return;
-    if (!(await enabled())) { H.toast('主管已關閉解鎖功能'); return; }
+    if (!(await enabled())) { H.toast('主管已關閉解鎖功能／မန်နေဂျာက သော့ဖွင့် လုပ်ဆောင်ချက်ကို ပိတ်ထားသည်'); return; }
     const cur = await activeFor(cfg), bio = await bioAvailable();
-    el('unlockSetIntro').textContent = intro || (cur ? '目前用' + (cur.method === 'bio' ? '人臉／指紋' : '九宮格') + '解鎖。可以換成另一種，或關閉。' : '以後打開 App、或離開一段時間再回來，用人臉／指紋或九宮格解鎖，不用再打密碼。');
+    el('unlockSetIntro').textContent = intro || (cur ? '目前用' + (cur.method === 'bio' ? '人臉／指紋' : '九宮格') + '解鎖。可以換成另一種，或關閉。／လက်ရှိ သုံးနေသည် ' + (cur.method === 'bio' ? 'မျက်နှာ／လက်ဗွေ' : 'ပုံစံကွက်') + ' သော့ဖွင့်။ အခြားနည်း ပြောင်းနိုင်သည် သို့မဟုတ် ပိတ်နိုင်သည်။' : '以後打開 App、或離開一段時間再回來，用人臉／指紋或九宮格解鎖，不用再打密碼。／နောက်ပိုင်း App ဖွင့်လျှင် သို့မဟုတ် ခဏထွက်ပြီး ပြန်ဝင်လျှင် မျက်နှာ／လက်ဗွေ သို့မဟုတ် ပုံစံကွက်ဖြင့် ဖွင့်နိုင်သည်၊ စကားဝှက် ထပ်ရိုက်ရန် မလိုပါ။');
     el('setBio').hidden = !bio; el('setOff').hidden = !cur; el('setPatBox').hidden = true; el('unlockSetMsg').textContent = '';
     el('unlockSet').hidden = false;
     const close = () => { el('unlockSet').hidden = true; };
     el('setLater').onclick = close;
-    el('setOff').onclick = () => { save(null); close(); H.toast('已關閉解鎖'); };
+    el('setOff').onclick = () => { save(null); close(); H.toast('已關閉解鎖／သော့ဖွင့်ခြင်း ပိတ်ပြီးပါပြီ'); };
     el('setBio').onclick = async () => {
-      el('unlockSetMsg').textContent = '請照手機的提示驗證人臉或指紋…';
-      try { await setBio(await H.getConfig()); close(); H.toast('已啟用人臉／指紋解鎖'); } catch (e) { el('unlockSetMsg').textContent = '沒有啟用成功（' + (e && e.name === 'NotAllowedError' ? '取消了或手機不允許' : (e && e.message) || '不明原因') + '），可以改用九宮格'; }
+      el('unlockSetMsg').textContent = '請照手機的提示驗證人臉或指紋…／ဖုန်း ညွှန်ကြားချက်အတိုင်း မျက်နှာ သို့မဟုတ် လက်ဗွေ စစ်ဆေးပါ…';
+      try { await setBio(await H.getConfig()); close(); H.toast('已啟用人臉／指紋解鎖／မျက်နှာ／လက်ဗွေ သော့ဖွင့် ဖွင့်ပြီးပါပြီ'); } catch (e) { const no = e && e.name === 'NotAllowedError', msg = !no && e && e.message; el('unlockSetMsg').textContent = '沒有啟用成功（' + (no ? '取消了或手機不允許' : msg || '不明原因') + '），可以改用九宮格／ဖွင့်၍ မအောင်မြင်ပါ' + (no ? ' - ပယ်ဖျက်လိုက်ခြင်း သို့မဟုတ် ဖုန်းမှ ခွင့်မပြုခြင်း' : msg ? '' : ' - မသိသော အကြောင်းရင်း') + '၊ ပုံစံကွက် ပြောင်းသုံးနိုင်သည်'; }
     };
     el('setPat').onclick = () => {
       el('setPatBox').hidden = false; let first = null;
-      el('setPatHint').textContent = '畫一個圖形（至少連 4 個點）';
+      el('setPatHint').textContent = '畫一個圖形（至少連 4 個點）／ပုံစံတစ်ခု ဆွဲပါ（အနည်းဆုံး ၄ စက် ဆက်ပါ）';
       const gr = grid(el('setGrid'), async seq => {
-        if (!validPattern(seq)) { el('setPatHint').textContent = '至少要連 4 個點，請重畫'; return; }
-        if (!first) { first = seq; el('setPatHint').textContent = '再畫一次確認'; return; }
-        if (first.join() !== seq.join()) { first = null; el('setPatHint').textContent = '兩次不一樣，請重新畫第一次'; gr.reset(); return; }
-        try { await setPattern(await H.getConfig(), seq); close(); H.toast('已設定九宮格解鎖'); } catch (e) { el('setPatHint').textContent = (e && e.message) || '設定失敗'; }
+        if (!validPattern(seq)) { el('setPatHint').textContent = '至少要連 4 個點，請重畫／အနည်းဆုံး ၄ စက် ဆက်ရမည်၊ ပြန်ဆွဲပါ'; return; }
+        if (!first) { first = seq; el('setPatHint').textContent = '再畫一次確認／အတည်ပြုရန် နောက်တစ်ကြိမ် ထပ်ဆွဲပါ'; return; }
+        if (first.join() !== seq.join()) { first = null; el('setPatHint').textContent = '兩次不一樣，請重新畫第一次／နှစ်ကြိမ် မတူပါ၊ ပထမအကြိမ်မှ ပြန်စဆွဲပါ'; gr.reset(); return; }
+        try { await setPattern(await H.getConfig(), seq); close(); H.toast('已設定九宮格解鎖／ပုံစံကွက် သော့ဖွင့် သတ်မှတ်ပြီးပါပြီ'); } catch (e) { el('setPatHint').textContent = (e && e.message) || '設定失敗／သတ်မှတ်မှု မအောင်မြင်ပါ'; }
       });
     };
   }
@@ -209,7 +208,7 @@
     H = hooks; hookPage();
     const cfg = await H.getConfig(); const c = load();
     if (c && !(await activeFor(cfg))) save(null);
-    if (!(await activeFor(cfg)) && (await enabled())) await openSettings('要用人臉／指紋或九宮格解鎖這支手機嗎？以後打開 App 不用再打密碼。');
+    if (!(await activeFor(cfg)) && (await enabled())) await openSettings('要用人臉／指紋或九宮格解鎖這支手機嗎？以後打開 App 不用再打密碼。／ဤဖုန်းကို မျက်နှာ／လက်ဗွေ သို့မဟုတ် ပုံစံကွက်ဖြင့် ဖွင့်မလား။ နောက်ပိုင်း App ဖွင့်လျှင် စကားဝှက် ရိုက်ရန် မလိုတော့ပါ။');
   }
   /** 第24任 第六批：同步後重畫首頁時呼叫——總開關關了就解開鎖畫面、藏起「解鎖方式」入口 */
   async function refresh(hooks) { H = hooks || H; if (!H) return; const on = await enabled(); const b = el('unlockBtn'); if (b) b.hidden = !on || b.hidden; if (!on && locked) unlock(); }

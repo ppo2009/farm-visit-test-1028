@@ -14,8 +14,8 @@
   'use strict';
   const LANG_KEY = 'farm-voice-lang', LANGS = ['my-MM', 'zh-TW'];
   const LANG_NAME = { 'my-MM': '緬甸語', 'zh-TW': '中文' };
-  const MY = '<span class="my" data-tr="待譯"></span>';
-  const OFFLINE_MSG = '語音輸入需要網路，可以改用錄音';
+  const LANG_MY = { 'my-MM': 'မြန်မာဘာသာ', 'zh-TW': 'တရုတ်' };
+  const OFFLINE_MSG = '語音輸入需要網路，可以改用錄音／အသံဖြင့် စာရိုက်ရန် အင်တာနက် လိုသည်၊ အသံသွင်းခြင်းကို ပြောင်းသုံးနိုင်သည်';
 
   /* ───── 純計算（測試直接呼叫） ───── */
   const SRClass = () => g.SpeechRecognition || g.webkitSpeechRecognition || null;
@@ -33,21 +33,21 @@
   function permHelp(ua, standalone) {
     const ios = typeof FarmCore === 'object' && FarmCore.isIOS ? FarmCore.isIOS(ua || '') : /iphone|ipad|ipod/i.test(ua || ''), android = /android/i.test(ua || ''); // 第25任 審查第二批：iPad 也認得（共用 FarmCore.isIOS）
     if (ios) return standalone
-      ? '麥克風被關掉了：請到 iPhone「設定」→「Safari」→「麥克風」改成「允許」，再回來關掉 App 重開。'
-      : '麥克風被關掉了：請按網址列左邊的「大小」(aA) →「網站設定」→「麥克風」改成「允許」，再重新整理。';
+      ? '麥克風被關掉了：請到 iPhone「設定」→「Safari」→「麥克風」改成「允許」，再回來關掉 App 重開。／မိုက်ခရိုဖုန်း ပိတ်ထားသည် - iPhone 「Settings」 → 「Safari」 → 「Microphone」 ကို 「Allow」 ပြောင်းပြီး App ပိတ်၍ ပြန်ဖွင့်ပါ။'
+      : '麥克風被關掉了：請按網址列左邊的「大小」(aA) →「網站設定」→「麥克風」改成「允許」，再重新整理。／မိုက်ခရိုဖုန်း ပိတ်ထားသည် - လိပ်စာဘား ဘယ်ဘက် 「aA」 → 「Website Settings」 → 「Microphone」 ကို 「Allow」 ပြောင်းပြီး ပြန်ဖွင့်ပါ။';
     if (android) return standalone
-      ? '麥克風被關掉了：請長按主畫面上的「田間打卡」圖示 →「應用程式資訊」或「網站設定」→「麥克風」改成「允許」，再回來重開。'
-      : '麥克風被關掉了：請按網址列左邊的圖示（鎖頭或「⋮」裡的「設定」）→「權限」→「麥克風」改成「允許」，再重新整理。';
-    return '麥克風被關掉了：請到瀏覽器的網站設定，把這個網站的「麥克風」改成「允許」，再重新整理。';
+      ? '麥克風被關掉了：請長按主畫面上的「田間打卡」圖示 →「應用程式資訊」或「網站設定」→「麥克風」改成「允許」，再回來重開。／မိုက်ခရိုဖုန်း ပိတ်ထားသည် - ပင်မစာမျက်နှာပေါ်ရှိ 「လယ်ကွင်း မှတ်တမ်း」 အိုင်ကွန်ကို ဖိနှိပ် → 「App Info」 သို့မဟုတ် 「Site Settings」 → 「Microphone」 ကို 「Allow」 ပြောင်းပြီး ပြန်ဖွင့်ပါ။'
+      : '麥克風被關掉了：請按網址列左邊的圖示（鎖頭或「⋮」裡的「設定」）→「權限」→「麥克風」改成「允許」，再重新整理。／မိုက်ခရိုဖုန်း ပိတ်ထားသည် - လိပ်စာဘား ဘယ်ဘက် အိုင်ကွန်（သော့ သို့မဟုတ် 「⋮」 ထဲရှိ Settings）→ 「Permissions」 → 「Microphone」 ကို 「Allow」 ပြောင်းပြီး ပြန်ဖွင့်ပါ။';
+    return '麥克風被關掉了：請到瀏覽器的網站設定，把這個網站的「麥克風」改成「允許」，再重新整理。／မိုက်ခရိုဖုန်း ပိတ်ထားသည် - Browser ၏ ဝဘ်ဆိုက် ဆက်တင်တွင် ဤဝဘ်ဆိုက်၏ 「Microphone」 ကို 「Allow」 ပြောင်းပြီး ပြန်ဖွင့်ပါ။';
   }
   /** 辨識錯誤代碼 → 給業務看的話 */
   function errorText(code, ua, standalone) {
     if (code === 'not-allowed' || code === 'service-not-allowed') return permHelp(ua, standalone);
     if (code === 'network') return OFFLINE_MSG;
-    if (code === 'no-speech') return '沒有聽到聲音，請靠近手機再按一次 🎤';
-    if (code === 'audio-capture') return '找不到麥克風，或麥克風正被別的程式使用';
-    if (code === 'language-not-supported') return '這支手機不支援這個語言的語音辨識，請切換語言或改用錄音';
-    return '語音輸入沒有成功，請再按一次，或改用錄音';
+    if (code === 'no-speech') return '沒有聽到聲音，請靠近手機再按一次 🎤／အသံ မကြားရပါ၊ ဖုန်းနား ကပ်ပြီး 🎤 ထပ်နှိပ်ပါ';
+    if (code === 'audio-capture') return '找不到麥克風，或麥克風正被別的程式使用／မိုက်ခရိုဖုန်း ရှာမတွေ့ပါ သို့မဟုတ် အခြား App က သုံးနေသည်';
+    if (code === 'language-not-supported') return '這支手機不支援這個語言的語音辨識，請切換語言或改用錄音／ဤဖုန်းသည် ဤဘာသာစကား အသံဖတ်ခြင်း မပံ့ပိုးပါ၊ ဘာသာစကား ပြောင်းပါ သို့မဟုတ် အသံသွင်း သုံးပါ';
+    return '語音輸入沒有成功，請再按一次，或改用錄音／အသံဖြင့် စာရိုက် မအောင်မြင်ပါ၊ ထပ်နှိပ်ပါ သို့မဟုတ် အသံသွင်း သုံးပါ';
   }
 
   /* ───── 畫面 ───── */
@@ -60,9 +60,9 @@
       const on = !!cur && cur.btn === b;
       b.classList.toggle('on', on); b.classList.toggle('off', !online() && !on);
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
-      b.querySelector('.vlabel').textContent = on ? '■ 停止' : '🎤 語音輸入';
+      b.querySelector('.vlabel').textContent = on ? '■ 停止／ရပ်' : '🎤 語音輸入／အသံဖြင့် စာရိုက်';
     });
-    document.querySelectorAll('.voicelang').forEach(b => { b.textContent = '語言：' + LANG_NAME[getLang()]; });
+    document.querySelectorAll('.voicelang').forEach(b => { b.textContent = '語言：' + LANG_NAME[getLang()] + '／ဘာသာစကား：' + LANG_MY[getLang()]; });
     document.querySelectorAll('.voicestat').forEach(s => { if (!cur || s.dataset.for !== cur.field.id) { s.hidden = true; s.textContent = ''; } });
   }
   function status(field, txt) { const s = document.querySelector('.voicestat[data-for="' + field.id + '"]'); if (s) { s.hidden = !txt; s.textContent = txt || ''; } }
@@ -75,7 +75,7 @@
   function start(field, btn) {
     const SR = SRClass(); if (!SR) return;
     if (!online()) { H.toast(OFFLINE_MSG); return; }
-    if (H.isRecording()) { H.toast('正在錄音，請先按一下結束錄音，再用語音輸入'); return; }
+    if (H.isRecording()) { H.toast('正在錄音，請先按一下結束錄音，再用語音輸入／အသံသွင်းနေသည်၊ အသံသွင်းခြင်းကို အရင်ရပ်ပြီးမှ အသံဖြင့် စာရိုက် သုံးပါ'); return; }
     if (cur) stop(false);
     const rec = new SR();
     rec.lang = getLang(); rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
@@ -89,19 +89,19 @@
         field.value = appendText(field.value, fin, max);
         field.dispatchEvent(new Event('input', { bubbles: true }));
       }
-      if (cur === c) status(field, '🔴 正在聽…' + (mid ? '「' + mid + '」' : ''));
+      if (cur === c) status(field, '🔴 正在聽…／နားထောင်နေသည်…' + (mid ? '「' + mid + '」' : ''));
     };
     rec.onerror = e => { if (c.discard) return; const code = e && e.error; if (code !== 'aborted') H.toast(errorText(code, navigator.userAgent, standalone())); };
     rec.onend = () => { if (cur === c) { cur = null; paintAll(); } };
     cur = c;
     try { rec.start(); } catch (e) { cur = null; H.toast(errorText('', navigator.userAgent, standalone())); }
-    paintAll(); if (cur === c) status(field, '🔴 正在聽…（' + LANG_NAME[rec.lang] + '）');
+    paintAll(); if (cur === c) status(field, '🔴 正在聽…（' + LANG_NAME[rec.lang] + '）／နားထောင်နေသည်… - ' + LANG_MY[rec.lang]);
   }
   function attach(id) {
     const field = el(id); if (!field || field.dataset.voice) return;
     field.dataset.voice = '1';
     const bar = document.createElement('div'); bar.className = 'voicebar';
-    bar.innerHTML = `<button type="button" class="voicebtn" aria-pressed="false"><span class="vlabel">🎤 語音輸入</span>${MY}</button>`
+    bar.innerHTML = `<button type="button" class="voicebtn" aria-pressed="false"><span class="vlabel">🎤 語音輸入／အသံဖြင့် စာရိုက်</span></button>`
       + `<button type="button" class="voicelang link" aria-label="切換語音輸入的語言"></button>`
       + `<p class="voicestat sub" data-for="${id}" aria-live="polite" hidden></p>`;
     field.insertAdjacentElement('afterend', bar);
@@ -110,7 +110,7 @@
     bar.querySelector('.voicelang').addEventListener('click', () => {
       setLang(getLang() === 'my-MM' ? 'zh-TW' : 'my-MM');
       if (cur) { const f = cur.field, b = cur.btn; stop(false); start(f, b); } // 聽到一半換語言：用新語言重來
-      paintAll(); H.toast('語音輸入改用' + LANG_NAME[getLang()]);
+      paintAll(); H.toast('語音輸入改用' + LANG_NAME[getLang()] + '／အသံဖြင့် စာရိုက် ပြောင်းသုံး ' + LANG_MY[getLang()]);
     });
   }
   function init(hooks) {

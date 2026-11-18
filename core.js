@@ -466,21 +466,21 @@
     // 手機自己知道沒網路（飛航、沒訊號）：請求根本出不去，就不送，打勾照樣可以取消（R7-02 自我檢查：不然離線時每個打勾都會被鎖住不能改）
     if (g.navigator && g.navigator.onLine === false) {
       await updateTaskDone(list => list.map(t => (t.sending === now ? Object.assign({}, t, { sending: 0 }) : t)));
-      return { left: await countLeft(), error: '任務打勾還沒送出（沒有網路），有網路會自動送' };
+      return { left: await countLeft(), error: '任務打勾還沒送出（沒有網路），有網路會自動送／လုပ်ငန်း အမှန်ခြစ် မပို့ရသေးပါ (အင်တာနက် မရှိ)၊ အင်တာနက်ရလျှင် အလိုအလျောက် ပို့မည်' };
     }
     // uncertain＝請求可能已經到伺服器（斷線、逾時、回應壞掉）：標「結果未確認」，不能取消，下次重送由伺服器確認（GPT-6.1 R7-02）
     const clearSending = uncertain => updateTaskDone(list => list.map(t => (t.sending === now ? Object.assign({}, t, { sending: 0 }, uncertain ? { unconfirmed: true } : {}) : t)));
     let r;
     const revBefore = (await Store.getMeta('cacheRev')) || null; // 0.5.18 B2：送出前的快取記號（同步寫進新資料就會換）
     try { r = await post(cfg.gasUrl, { action: 'taskDone', deviceKey: cfg.deviceKey, done: sent }); }
-    catch (e) { await clearSending(true); return { left: await countLeft(), error: '任務打勾送出後沒收到回覆，稍後自動重送確認' }; }
+    catch (e) { await clearSending(true); return { left: await countLeft(), error: '任務打勾送出後沒收到回覆，稍後自動重送確認／လုပ်ငန်း အမှန်ခြစ် ပို့ပြီး အဖြေ မရသေးပါ၊ နောက်မှ အလိုအလျောက် ထပ်စစ်ပေးမည်' }; }
     // 伺服器明確回錯誤（忙碌、登入失效）：這次沒有處理，但之前若是「未確認」照樣保留
     // 伺服器回錯誤：只有確定「沒有處理」的（忙碌、登入失效、格式錯）才解除、可以取消；
     // 伺服器出錯（SERVER）或不認得的錯誤，可能已經完成了一部分，一律標未確認（GPT-6.1 R8-03）
     if (!r || !r.ok) {
       const notProcessed = !!r && ['BUSY', 'BAD_LOGIN', 'BAD_REQUEST', 'BAD_ACTION'].indexOf(r.code) >= 0;
       await clearSending(!notProcessed);
-      return { left: await countLeft(), error: (r && r.message) || '任務打勾還沒送出，稍後自動重送', code: r && r.code };
+      return { left: await countLeft(), error: (r && r.message) || '任務打勾還沒送出，稍後自動重送／လုပ်ငန်း အမှန်ခြစ် မပို့ရသေးပါ၊ နောက်မှ အလိုအလျောက် ပြန်ပို့မည်', code: r && r.code };
     }
     const got = new Set((r.done || []).concat(r.unknown || [])); // unknown：伺服器沒有這個任務，留著也送不出去
     const sentAt = {};
@@ -495,7 +495,7 @@
     if (Array.isArray(r.tasks) && await sameLogin(cfg.deviceKey)) await Store.setMetaIfRev('tasks', r.tasks, revBefore);
     // 伺服器回成功、卻沒確認其中幾筆（或這次沒送完）：要回錯誤，背景同步才會再試（GPT-6.1 R7-04：原本 error 是空的，卡著沒人重送）
     const miss = sent.filter(s => !got.has(s.id)).length;
-    const error = miss ? `有 ${miss} 個任務打勾伺服器沒確認，稍後自動重送` : skipped ? `還有 ${skipped} 個任務打勾沒送，稍後自動送` : '';
+    const error = miss ? `有 ${miss} 個任務打勾伺服器沒確認，稍後自動重送／လုပ်ငန်း အမှန်ခြစ် ${miss} ခု ဆာဗာမှ အတည်မပြုရသေးပါ၊ နောက်မှ အလိုအလျောက် ပြန်ပို့မည်` : skipped ? `還有 ${skipped} 個任務打勾沒送，稍後自動送／မပို့ရသေးသော လုပ်ငန်း အမှန်ခြစ် ${skipped} ခု ကျန်သေးသည်၊ နောက်မှ အလိုအလျောက် ပို့မည်` : '';
     return { left: await countLeft(), error };
   }
 
@@ -511,8 +511,8 @@
       if (t.unconfirmed || t.sending) { blocked = 'unconfirmed'; return true; }
       return false;
     }));
-    if (blocked === 'sending') return { ok: false, sending: true, message: '這個打勾正在送出，不能取消；送出後主管那邊就是「完成」／ပို့နေဆဲ၊ ပယ်ဖျက်၍ မရ' }; // 0.4.94 中2 加緬文
-    if (blocked) return { ok: false, unconfirmed: true, message: '上次送出沒收到回覆，主管那邊可能已經是「完成」；等連上網路確認後才知道，不能取消／အဖြေ မရသေး၊ အင်တာနက် ချိတ်ပြီး အတည်ပြုမှ သိရမည်၊ ပယ်ဖျက်၍ မရ' };
+    if (blocked === 'sending') return { ok: false, sending: true, message: '這個打勾正在送出，不能取消；送出後主管那邊就是「完成」／ဤအမှန်ခြစ်ကို ပို့နေဆဲ၊ ပယ်ဖျက်၍ မရပါ။ ပို့ပြီးလျှင် မန်နေဂျာဘက်တွင် 「ပြီးပြီ」 ဖြစ်သွားမည်' }; // 0.4.94 中2 加緬文
+    if (blocked) return { ok: false, unconfirmed: true, message: '上次送出沒收到回覆，主管那邊可能已經是「完成」；等連上網路確認後才知道，不能取消／ယခင်ပို့မှု အဖြေ မရသေးပါ၊ မန်နေဂျာဘက်တွင် 「ပြီးပြီ」 ဖြစ်နေနိုင်သည်။ အင်တာနက် ချိတ်ပြီး အတည်ပြုမှ သိရမည်၊ ပယ်ဖျက်၍ မရပါ' };
     return { ok: true };
   }
   /** 畫面用：這個打勾現在不能取消（送出中，或上次送出結果未確認） */
@@ -534,15 +534,15 @@
 
   const NEXT_TRY_MAX_MS = 30 * 60000; // 0.4.87 中2：失敗重試最多排 30 分鐘後（下面 Math.min(30, …) 分鐘），超過就是時間被調過
   const READ_FAIL_MAX = 3; // 0.4.87 中1：同一筆讀檔連續失敗幾次後，先把讀得到的送出去
-  const LOGIN_LOST_MSG = '登入已失效，回首頁重新登入後會自動補傳／ပြန်ဝင်ပြီးလျှင် တင်မည်'; // 0.4.91 中4
+  const LOGIN_LOST_MSG = '登入已失效，回首頁重新登入後會自動補傳／ဝင်ရောက်မှု သက်တမ်းကုန်၊ ပင်မစာမျက်နှာသို့ ပြန်သွားပြီး ပြန်ဝင်လျှင် အလိုအလျောက် တင်ပေးမည်'; // 0.4.91 中4
   const LOGIN_LOST_TAIL = '。沒上傳的資料還在手機裡，重新登入後會自動補傳。／ပြန်ဝင်ပြီးလျှင် ကျန်သော မှတ်တမ်း တင်မည်။'; // 0.5.19 A1：跟 app.js syncNow 給 onLoginExpired 的字一樣
   /** 0.5.19 A1（第18任抓BUG）：確認是同一把金鑰登入失效 → 記在手機裡（loginLost），這一輪停下；背景程式之後看到就不再用這把金鑰整包重送照片錄音（原本只有網頁打開時才記） */
   async function noteLoginLost(cfg, msg) { await Store.setMeta('loginLost', { key: cfg.deviceKey, msg: (msg || '登入已失效') + LOGIN_LOST_TAIL }); }
-  const SYNC_WARN = '同步資料寫回手機失敗（可能空間不足），稍後再同步／ဒေတာ မသိမ်းနိုင်၊ နောက်မှ ထပ်လုပ်မည်'; // R12-01／R13-01
-  const READ_FAIL_MSG = '有拜訪的照片或錄音暫時讀不到（是手機裡的檔案，不是網路問題），稍後自動再試；連續 3 次讀不到會先送文字和其他資料／ဓာတ်ပုံ/အသံ ဖတ်မရသေးပါ၊ အင်တာနက် ပြဿနာ မဟုတ်ပါ';
+  const SYNC_WARN = '同步資料寫回手機失敗（可能空間不足），稍後再同步／စင့်ခ်ဒေတာ ဖုန်းထဲ ပြန်သိမ်းမရပါ (နေရာ မလောက်ခြင်း ဖြစ်နိုင်)၊ နောက်မှ ထပ်စင့်ခ်လုပ်မည်'; // R12-01／R13-01
+  const READ_FAIL_MSG = '有拜訪的照片或錄音暫時讀不到（是手機裡的檔案，不是網路問題），稍後自動再試；連續 3 次讀不到會先送文字和其他資料／ဓာတ်ပုံ သို့မဟုတ် အသံ ယာယီ ဖတ်မရသေးပါ (ဖုန်းထဲက ဖိုင်ပြဿနာ၊ အင်တာနက် မဟုတ်ပါ)၊ နောက်မှ ထပ်စမ်းမည်။ ၃ ကြိမ်ဆက်တိုက် မရလျှင် စာနှင့် အခြားဒေတာ အရင်ပို့မည်';
   let running = false;
   // 0.5.33（第23任抓BUG P1，小助手2）：上傳迴圈裡寫手機失敗（多半是空間不足）不能讓整輪中斷
-  const STORE_FULL_MSG = '手機空間不足，上傳狀態存不進手機（已送到的後台都有收到），請清出空間／ဖုန်းထဲ နေရာ မလောက်ပါ၊ နေရာလွတ် လုပ်ပေးပါ';
+  const STORE_FULL_MSG = '手機空間不足，上傳狀態存不進手機（已送到的後台都有收到），請清出空間／ဖုန်းထဲ နေရာ မလောက်၍ တင်ပြီးအခြေအနေ သိမ်းမရပါ (ပို့ပြီးသည်များ ဆာဗာ ရောက်ပြီး)၊ နေရာလွတ် လုပ်ပေးပါ';
   // 後台已收、「標已上傳」寫不進手機的：記在記憶體（id → 標記要用的欄位），之後每輪先補標、補標前不再重送（這個網頁或背景程式還開著就有效；關掉後重開會再送一次，後台用拜訪編號擋重複）
   const unmarked = new Map();
   // 「排晚點再試」寫不進手機的：記在記憶體的下次再試時間（id → nextTry），照樣不每分鐘整包重送
@@ -656,7 +656,7 @@
   }
 
   // R20（GPT 04）：新版後台只要手機有帶 ask，回應一定有 known；成功的回應卻沒有 known＝後台被單獨退回舊版 → 不猜、不清理暫存，提示管理員（手機網頁和後台要一起回退）
-  const OLD_SRV_WARN = '後台版本比手機舊，暫存先不清；請管理員把手機網頁和後台一起更新或一起回退／ဆာဗာ ဗားရှင်း ဟောင်းနေသည်';
+  const OLD_SRV_WARN = '後台版本比手機舊，暫存先不清；請管理員把手機網頁和後台一起更新或一起回退／ဆာဗာ ဗားရှင်းက ဖုန်းထက် ဟောင်းနေ၍ ယာယီမှတ်တမ်း မဖျက်သေးပါ။ စီမံသူကို ဖုန်းစာမျက်နှာနှင့် ဆာဗာ အတူတူ အပ်ဒိတ်လုပ်ခိုင်းပါ';
   const oldServer = data => !!(data && data.ok && !(data.known && typeof data.known === 'object'));
 
   /* runSyncInner 拆出來的（第15任 2026-11-14 董事長「拆 runSyncInner」）：挑要送的、讀照片錄音、組請求、錯誤訊息、標已上傳、排重試 */
@@ -762,7 +762,7 @@
   /** 送出失敗的訊息：逾時／伺服器回應異常／沒有網路（0.4.94 中2 加緬文） */
   function postError(e) {
     return e.timeout ? '上傳逾時（網路太慢），稍後自動重送／အင်တာနက် နှေးသဖြင့် အချိန်ကုန်၊ နောက်မှ အလိုအလျောက် ထပ်တင်မည်'
-      : e.badResponse ? '伺服器回應異常（可能是 Google 額度用完或部署設定），稍後自動重送；一直出現請告訴主管／ဆာဗာ အဖြေ မမှန်၊ နောက်မှ ထပ်တင်မည်၊ ဆက်ဖြစ်နေလျှင် မန်နေဂျာကို ပြောပါ'
+      : e.badResponse ? '伺服器回應異常（可能是 Google 額度用完或部署設定），稍後自動重送；一直出現請告訴主管／ဆာဗာ အဖြေ မမှန်ပါ (Google ခွဲတမ်းကုန် သို့မဟုတ် ဆက်တင် ပြဿနာ ဖြစ်နိုင်)၊ နောက်မှ ထပ်တင်မည်။ ဆက်ဖြစ်နေလျှင် မန်နေဂျာကို ပြောပါ'
       : '沒有網路或連不上，稍後自動重送／အင်တာနက် မရှိ (သို့) ချိတ်မရ၊ နောက်မှ အလိုအလျောက် ထပ်တင်မည်';
   }
   /** 後台收了：標已上傳、把大檔清掉只留紀錄。寫回拜訪狀態一律在同一個交易裡讀最新的再改（R7-03）：已上傳的不會被降回待上傳或被拒 */
