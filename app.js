@@ -131,26 +131,8 @@
     const account = $('acct').value.trim(), password = $('pw').value;
     if (!account || !password) { msg.innerHTML = (!account ? '請輸入帳號<span class="my">အကောင့် ထည့်ပါ</span>' : '請輸入密碼<span class="my">စကားဝှက် ထည့်ပါ</span>'); msg.className = 'sub err'; $(!account ? 'acct' : 'pw').focus(); return; } // 第24任 第六批⑲（「帳號」「密碼」緬文沿用欄位標籤；句子緬文等譯者）
     const payload = { action: 'login', account, password, deviceId: deviceId(), ask: (typeof FarmCore !== 'undefined' && FarmCore.buildAsk) ? await FarmCore.buildAsk() : undefined }; // R20：登入回應的客戶、試作也只帶這支手機問過的臨時編號
-    if (state.mustChange) {
-      const np = $('newPw').value, np2 = $('newPw2').value;
-      if (np.length < 6) { msg.textContent = '新密碼至少 6 個字／စကားဝှက်အသစ် အနည်းဆုံး ၆ လုံး'; msg.className = 'sub err'; return; }
-      if (np !== np2) { msg.textContent = '兩次輸入的新密碼不一樣／စကားဝှက်နှစ်ခု မတူပါ'; msg.className = 'sub err'; return; }
-      payload.newPassword = np;
-    }
-    // 業務BUG#8：後台比對帳號會去掉所有空白（0.4.39，打「Myint Ko Ko」也能登入 myintkoko），這裡要用同一套，不然被當成別人擋下
-    const acctKey = account.toLowerCase().replace(/\s+/g, '');
-    const others = (await Store.allVisits()).filter(v => v.status === 'pending' && v.account && v.account !== acctKey);
-    // 前一個人還沒送出的任務打勾也要擋：換人後那些打勾永遠送不出去，新的人也登出不了（自行審查 S1）
-    const otherTicks = ((await Store.getMeta('taskDone')) || []).filter(t => t.account && t.account !== acctKey);
-    if (!others.length && otherTicks.length) {
-      msg.textContent = `這支手機還有 ${otherTicks.length} 個「${otherTicks[0].account}」的任務打勾沒上傳，請先用 ${otherTicks[0].account} 登入，等它傳完再換人。／${otherTicks[0].account} ဖြင့် အရင်ဝင်ပြီး မတင်ရသေးသော မှတ်တမ်း တင်ပြီးမှ အကောင့် ပြောင်းပါ။`; // 0.4.92 中2 加緬文
-      msg.className = 'sub err'; return;
-    }
-    if (others.length) {
-      // 換人登入同一支手機：前一個人的資料會被記到新帳號名下，所以先擋（2026-11-11 審查發現）
-      msg.textContent = `這支手機還有 ${others.length} 筆「${others[0].account}」沒上傳的資料，請先用 ${others[0].account} 登入，等資料傳完再換人。／${others[0].account} ဖြင့် အရင်ဝင်ပြီး မတင်ရသေးသော မှတ်တမ်း တင်ပြီးမှ အကောင့် ပြောင်းပါ။`; // 0.4.92 中2 加緬文
-      msg.className = 'sub err'; return;
-    }
+    if (state.mustChange && !loginNewPw(msg, payload)) return;
+    if (await loginOthersPending(msg, account)) return;
     msg.textContent = '確認中… စစ်ဆေးနေသည်'; msg.className = 'sub';
     $('loginBtn').disabled = true;
     let answered = false; // 0.5.24（第21任抓BUG）：後台已經回了才出錯＝手機自己存不進去，不能說成連不上伺服器
@@ -163,42 +145,76 @@
         msg.textContent = data.message; return;
       }
       if (!data.ok) { msg.textContent = data.message || '登入失敗／ဝင်ရောက်မှု မအောင်မြင်'; msg.className = 'sub err'; return; } // 0.4.94 中2 加緬文
-      // 0.4.91 高1：rememberServer 改成一定要帶金鑰、而且要等於現在登入的 → 先寫好這次登入，再存登入回應（用這次拿到的金鑰）
-      if (typeof tagOwner === 'function') await tagOwner(); // R24-1（抽函式跑的舊測試沒有它）
-      // 第 1 期留下、沒有標帳號的待傳資料：歸給這支手機升級後第一個登入的人並標上帳號，
-      // 之後換別人登入會被擋，不會記到別人名下（2026-11-11 GPT-6.1 審查 G03）
-      // 0524R1-1（GPT 中）：改在寫登入設定「之前」標。標到一半失敗（空間不足）→ 整個登入不算成功（還沒有登入設定，不會同步），
-      //   畫面說手機存資料失敗；已標好的歸這個人（換別人登入會被擋），沒標到的下次登入再標，不會被別的帳號帶走
-      for (const v of await Store.allVisits()) if (v.status === 'pending' && !v.account) { v.account = data.account; await Store.putVisit(v); }
-      await Store.setMeta('config', { gasUrl: FARM_CONFIG.gasUrl, deviceKey: data.deviceKey, name: data.name, account: data.account, role: data.role });
-      await Store.setMeta('loginLost', null); state.loginLost = null; state.lockedOut = null; // 0.4.91 中4：重新登入了，先前延後的登入失效作廢（第25任：解鎖鎖死的也作廢）
-      // 0.5.24（第21任抓BUG）：登入已經成功、金鑰也存好了，接著存客戶清單等資料失敗（多半是空間不足）
-      // → 照樣進首頁、跳提示，不停在登入頁讓業務一直重按（每按一次後台就多發一把金鑰）；同步時會再抓一次
-      const warn = (typeof FarmCore !== 'undefined' && FarmCore.SYNC_WARN) || '同步資料寫回手機失敗（可能空間不足），稍後再同步／စင့်ခ်ဒေတာ ဖုန်းထဲ ပြန်သိမ်းမရပါ (နေရာ မလောက်ခြင်း ဖြစ်နိုင်)၊ နောက်မှ ထပ်စင့်ခ်လုပ်မည်';
-      let loginWarn = '';
-      try { await rememberServer(data, sentAt, data.deviceKey); } catch (e) { loginWarn = warn; }
-      // 0.5.25 T1（第21任抓BUG）：寫回失敗時手機上那份後台資料可能是上一位的（首頁、任務、試作、客戶）→ 不是這個帳號的就清掉，
-      //   不讓新登入的人看到、勾到上一位的；清不掉就不進首頁（丟到下面 catch，說手機存資料失敗）
-      // 0525R2（第22任，GPT 0525R1-2）：帶這次登入的金鑰 → 另一個分頁已經換人登入成功時不清（回 'stale'），這個舊的登入程序停下、不進首頁
-      if (loginWarn && Store.clearForeignCache && (await Store.clearForeignCache(data.account, { key: data.deviceKey })) === 'stale') {
-        msg.textContent = '另一個畫面已經換人登入，這次登入作廢，請重新整理網頁／အခြား စာမျက်နှာတွင် ဝင်ထားပြီ၊ ပြန်ဖွင့်ပါ'; msg.className = 'sub err'; return;
-      }
-      ['pw', 'newPw', 'newPw2'].forEach(id => { $(id).value = ''; }); // 密碼不留在畫面上
-      state.mustChange = false; $('newPwBox').hidden = true;
-      showHome();
-      if (loginWarn) toast('已登入。ဝင်ပြီးပါပြီ။ ' + loginWarn);
-      syncNow();
-      if (typeof FarmLock === 'object') FarmLock.afterLogin(lockHooks()).catch(e => { if (typeof noteErr === 'function') noteErr('解鎖設定', e); }); // 第24任 第四批：剛用密碼登入 → 問要不要啟用人臉／指紋或九宮格（第26任：失敗記下來）
+      await loginSucceeded(msg, data, sentAt);
     } catch (err) {
-      msg.textContent = answered
-        ? '手機存資料失敗（可能空間不足），請先清出空間再登入／ဖုန်းထဲ သိမ်းမရပါ၊ နေရာလွတ် လုပ်ပြီး ပြန်ဝင်ပါ'
-        : '連不上伺服器，第一次登入需要網路／ဆာဗာနှင့် မချိတ်နိုင်ပါ၊ ပထမအကြိမ် ဝင်ရန် အင်တာနက်လိုသည်';
-      if (answered && typeof isCodeErr === 'function' && isCodeErr(err)) msg.textContent = '登入途中程式出錯（' + errCode(err) + '），請再按一次；一直出現請告訴主管'; // 第26任：程式錯不說成空間不足
-      if (answered && typeof noteErr === 'function') noteErr('登入', err);
-      msg.className = 'sub err';
+      loginFailed(msg, err, answered);
     } finally {
       $('loginBtn').disabled = false;
     }
+  }
+  /** 登入：後台說帳密對了之後——補標舊資料帳號、存登入設定和後台資料、進首頁（出錯丟給 onLoginInner 的 catch） */
+  async function loginSucceeded(msg, data, sentAt) {
+    // 0.4.91 高1：rememberServer 改成一定要帶金鑰、而且要等於現在登入的 → 先寫好這次登入，再存登入回應（用這次拿到的金鑰）
+    if (typeof tagOwner === 'function') await tagOwner(); // R24-1（抽函式跑的舊測試沒有它）
+    // 第 1 期留下、沒有標帳號的待傳資料：歸給這支手機升級後第一個登入的人並標上帳號，
+    // 之後換別人登入會被擋，不會記到別人名下（2026-11-11 GPT-6.1 審查 G03）
+    // 0524R1-1（GPT 中）：改在寫登入設定「之前」標。標到一半失敗（空間不足）→ 整個登入不算成功（還沒有登入設定，不會同步），
+    //   畫面說手機存資料失敗；已標好的歸這個人（換別人登入會被擋），沒標到的下次登入再標，不會被別的帳號帶走
+    for (const v of await Store.allVisits()) if (v.status === 'pending' && !v.account) { v.account = data.account; await Store.putVisit(v); }
+    await Store.setMeta('config', { gasUrl: FARM_CONFIG.gasUrl, deviceKey: data.deviceKey, name: data.name, account: data.account, role: data.role });
+    await Store.setMeta('loginLost', null); state.loginLost = null; state.lockedOut = null; // 0.4.91 中4：重新登入了，先前延後的登入失效作廢（第25任：解鎖鎖死的也作廢）
+    // 0.5.24（第21任抓BUG）：登入已經成功、金鑰也存好了，接著存客戶清單等資料失敗（多半是空間不足）
+    // → 照樣進首頁、跳提示，不停在登入頁讓業務一直重按（每按一次後台就多發一把金鑰）；同步時會再抓一次
+    const warn = (typeof FarmCore !== 'undefined' && FarmCore.SYNC_WARN) || '同步資料寫回手機失敗（可能空間不足），稍後再同步／စင့်ခ်ဒေတာ ဖုန်းထဲ ပြန်သိမ်းမရပါ (နေရာ မလောက်ခြင်း ဖြစ်နိုင်)၊ နောက်မှ ထပ်စင့်ခ်လုပ်မည်';
+    let loginWarn = '';
+    try { await rememberServer(data, sentAt, data.deviceKey); } catch (e) { loginWarn = warn; }
+    // 0.5.25 T1（第21任抓BUG）：寫回失敗時手機上那份後台資料可能是上一位的（首頁、任務、試作、客戶）→ 不是這個帳號的就清掉，
+    //   不讓新登入的人看到、勾到上一位的；清不掉就不進首頁（丟到下面 catch，說手機存資料失敗）
+    // 0525R2（第22任，GPT 0525R1-2）：帶這次登入的金鑰 → 另一個分頁已經換人登入成功時不清（回 'stale'），這個舊的登入程序停下、不進首頁
+    if (loginWarn && Store.clearForeignCache && (await Store.clearForeignCache(data.account, { key: data.deviceKey })) === 'stale') {
+      msg.textContent = '另一個畫面已經換人登入，這次登入作廢，請重新整理網頁／အခြား စာမျက်နှာတွင် ဝင်ထားပြီ၊ ပြန်ဖွင့်ပါ'; msg.className = 'sub err'; return;
+    }
+    ['pw', 'newPw', 'newPw2'].forEach(id => { $(id).value = ''; }); // 密碼不留在畫面上
+    state.mustChange = false; $('newPwBox').hidden = true;
+    showHome();
+    if (loginWarn) toast('已登入。ဝင်ပြီးပါပြီ။ ' + loginWarn);
+    syncNow();
+    if (typeof FarmLock === 'object') FarmLock.afterLogin(lockHooks()).catch(e => { if (typeof noteErr === 'function') noteErr('解鎖設定', e); }); // 第24任 第四批：剛用密碼登入 → 問要不要啟用人臉／指紋或九宮格（第26任：失敗記下來）
+  }
+  /** 登入：途中出錯（answered＝後台已經回了，錯在手機自己存不進去或程式錯） */
+  function loginFailed(msg, err, answered) {
+    msg.textContent = answered
+      ? '手機存資料失敗（可能空間不足），請先清出空間再登入／ဖုန်းထဲ သိမ်းမရပါ၊ နေရာလွတ် လုပ်ပြီး ပြန်ဝင်ပါ'
+      : '連不上伺服器，第一次登入需要網路／ဆာဗာနှင့် မချိတ်နိုင်ပါ၊ ပထမအကြိမ် ဝင်ရန် အင်တာနက်လိုသည်';
+    if (answered && typeof isCodeErr === 'function' && isCodeErr(err)) msg.textContent = '登入途中程式出錯（' + errCode(err) + '），請再按一次；一直出現請告訴主管'; // 第26任：程式錯不說成空間不足
+    if (answered && typeof noteErr === 'function') noteErr('登入', err);
+    msg.className = 'sub err';
+  }
+  /** 登入：第一次要改密碼——檢查新密碼、放進 payload；不合格寫提示、回 false */
+  function loginNewPw(msg, payload) {
+    const np = $('newPw').value, np2 = $('newPw2').value;
+    if (np.length < 6) { msg.textContent = '新密碼至少 6 個字／စကားဝှက်အသစ် အနည်းဆုံး ၆ လုံး'; msg.className = 'sub err'; return false; }
+    if (np !== np2) { msg.textContent = '兩次輸入的新密碼不一樣／စကားဝှက်နှစ်ခု မတူပါ'; msg.className = 'sub err'; return false; }
+    payload.newPassword = np;
+    return true;
+  }
+  /** 登入：這支手機還有前一個人沒上傳的拜訪、任務打勾 → 寫提示、回 true（擋下） */
+  async function loginOthersPending(msg, account) {
+    // 業務BUG#8：後台比對帳號會去掉所有空白（0.4.39，打「Myint Ko Ko」也能登入 myintkoko），這裡要用同一套，不然被當成別人擋下
+    const acctKey = account.toLowerCase().replace(/\s+/g, '');
+    const others = (await Store.allVisits()).filter(v => v.status === 'pending' && v.account && v.account !== acctKey);
+    // 前一個人還沒送出的任務打勾也要擋：換人後那些打勾永遠送不出去，新的人也登出不了（自行審查 S1）
+    const otherTicks = ((await Store.getMeta('taskDone')) || []).filter(t => t.account && t.account !== acctKey);
+    if (!others.length && otherTicks.length) {
+      msg.textContent = `這支手機還有 ${otherTicks.length} 個「${otherTicks[0].account}」的任務打勾沒上傳，請先用 ${otherTicks[0].account} 登入，等它傳完再換人。／${otherTicks[0].account} ဖြင့် အရင်ဝင်ပြီး မတင်ရသေးသော မှတ်တမ်း တင်ပြီးမှ အကောင့် ပြောင်းပါ။`; // 0.4.92 中2 加緬文
+      msg.className = 'sub err'; return true;
+    }
+    if (others.length) {
+      // 換人登入同一支手機：前一個人的資料會被記到新帳號名下，所以先擋（2026-11-11 審查發現）
+      msg.textContent = `這支手機還有 ${others.length} 筆「${others[0].account}」沒上傳的資料，請先用 ${others[0].account} 登入，等資料傳完再換人。／${others[0].account} ဖြင့် အရင်ဝင်ပြီး မတင်ရသေးသော မှတ်တမ်း တင်ပြီးမှ အကောင့် ပြောင်းပါ။`; // 0.4.92 中2 加緬文
+      msg.className = 'sub err'; return true;
+    }
+    return false;
   }
 
   /** 這支手機目前登入的人自己的任務打勾（沒標帳號的舊資料也算他的，跟 core.js 的 mine 同一個規則） */
@@ -2303,6 +2319,12 @@
     const owner = sel === '__new' ? '' : String(((state.allCustomers || []).find(x => x.id === sel) || {}).staff || '');
     const notMine = !!owner && !!state.myName && owner !== String(state.myName);
     if (notMine) { $('trialStartBtn').hidden = true; $('trialEndBtn').hidden = true; $('trialNow').textContent += `（負責業務：${owner}，開始、結束請由負責業務處理／တာဝန်ခံ ${owner} သာ စတင်၊ ပြီးဆုံးနိုင်သည်）`; }
+    trialBoxMode(sel, cat, t, unk, waitC, notMine);
+    trialBoxOldKind(sel, cat, t, notMine);
+    if (typeof paintNewTrial === 'function') paintNewTrial(); // 0534：新農民改寫框上方說明（不寫「目前沒有進行中」）、品項＝作物、品種那一行
+  }
+  /** 試作框：照這位有沒有進行中的、能不能結束、是不是別人負責，收起或打開開始／結束表單（舊的試作／推廣農民自動打開、帶入作物） */
+  function trialBoxMode(sel, cat, t, unk, waitC, notMine) {
     if ((state.trialMode === 'end' && (!t || unk)) || (state.trialMode === 'start' && t) || (state.trialMode === 'end' && waitC) || (notMine && state.trialMode)) setTrialMode(null);
     else if (sel === '__new' && !state.trialMode) setTrialMode('start'); // 0.5.08 試作／推廣新增農民：直接打開「開始新的」表單（一定要開始，見 trialProblem）
     else if (sel && sel !== '__new' && !t && !notMine && !state.trialMode && state.trialStartAuto !== sel) {
@@ -2317,6 +2339,9 @@
         refreshSave(); // 帶入品項後重新檢查存檔（不然還停在「請填推廣品項」）
       }
     }
+  }
+  /** 試作框：分類就是這一類的舊農民、沒有進行中的 → 按鈕、說明改成「存檔就記成這位的試作／推廣」 */
+  function trialBoxOldKind(sel, cat, t, notMine) {
     // 0.5.26 第24任（董事長截圖 U Nga Shint「舊的農民還是出現推廣」）：上面那段表單已自動打開、品項已帶入，但說明還寫「目前沒有進行中的推廣」、
     //   還顯示「＋ 開始新的推廣」→ 看起來像還要再開始一次。董事長選「拿掉按鈕，改一句說明」：分類就是這一類的舊農民、表單開著、沒有進行中的 → 不顯示按鈕，說明改成存檔就記成這位的推廣／試作
     // 抓BUG第2輪（小助手2）：不再要求表單開著——原本收起後只要重畫一次（同步完、換類別再換回來），oldKindFor 就被清掉，
@@ -2327,7 +2352,6 @@
       if (typeof paintOldKindBtn === 'function') paintOldKindBtn(); else $('trialStartBtn').hidden = true; // 抓BUG第1輪 4（董事長選「加小連結這次不開始」）：按鈕不藏，改「這次不開始（收起）」
       paintOldKind();
     }
-    if (typeof paintNewTrial === 'function') paintNewTrial(); // 0534：新農民改寫框上方說明（不寫「目前沒有進行中」）、品項＝作物、品種那一行
   }
   /**
    * 抓BUG第1輪（小助手2）：舊試作／推廣農民的說明照「現在選的品項」寫。
@@ -3176,25 +3200,42 @@
     // 0.4.94（第11任，第五輪審查順帶）：已經有一段錄音時再按，原本直接蓋掉 → 先確認，按取消就保留原本那段
     if (state.audio && !confirm('會蓋掉剛才的錄音，確定重錄？\nယခင် အသံသွင်းချက် ပျက်သွားမည်။ ပြန်သွင်းမှာ သေချာပါသလား။')) return;
     if (!navigator.mediaDevices || !window.MediaRecorder) { toast('這支手機的瀏覽器不支援錄音／ဤဖုန်း၏ Browser သည် အသံသွင်းခြင်း မပံ့ပိုးပါ'); return; }
+    const m = await recOpenMic();
+    if (!m) return;
+    const { stream, rec, gen } = m;
+    const chunks = [];
+    state.rec = rec; state.audioSec = 0; state.audio = null;
+    rec.ondataavailable = ev => { if (ev.data.size) chunks.push(ev.data); };
+    rec.onstop = recOnStop(rec, stream, chunks, gen, btn);
+    rec.start(1000);
+    btn.classList.add('rec'); btn.classList.remove('done');
+    btn.querySelector('.label').textContent = '錄音中 0 秒・再按一下結束／အသံသွင်းနေ 0 စက္ကန့် ・ ရပ်ရန် ထပ်နှိပ်';
+    // 0.4.94：錄音鈕旁倒數（剩幾秒），最後 10 秒變紅並跳一次提醒；到上限自己停，跟業務說錄滿了、要補充請用打字（原本到 90 秒默默停掉）
+    recCountdown(rec, btn);
+    refreshSave();
+  }
+  /** 錄音：要麥克風權限、建錄音器（啟動中先鎖住儲存鈕，不管怎麼結束都恢復）；不開就回 null，開好回 { stream, rec, gen } */
+  async function recOpenMic() {
     state.recStarting = true;
     if (typeof refreshSave === 'function') refreshSave(); // R32 待確認 1（GPT）：錄音啟動中儲存鈕馬上停用
     let stream, rec;
     const gen = state.formGen, view0 = state.view; // 0.5.24：也記下按錄音時在哪個畫面
     try {
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-      catch (e) { toast('沒有麥克風權限，請到瀏覽器設定允許麥克風／မိုက်ခရိုဖုန်း ခွင့်ပြုချက် ပေးပါ'); return; }
-      if (gen !== state.formGen) { stream.getTracks().forEach(t => t.stop()); return; } // 等權限的途中已經換客戶、回首頁：不開
+      catch (e) { toast('沒有麥克風權限，請到瀏覽器設定允許麥克風／မိုက်ခရိုဖုန်း ခွင့်ပြုချက် ပေးပါ'); return null; }
+      if (gen !== state.formGen) { stream.getTracks().forEach(t => t.stop()); return null; } // 等權限的途中已經換客戶、回首頁：不開
       // 0.5.24（第21任抓BUG）：等權限的途中登入失效跳到登入頁（表單沒換世代）→ 畫面已經不是按錄音時那頁，不開、把麥克風放掉
-      if (state.view !== view0) { stream.getTracks().forEach(t => t.stop()); return; }
+      if (state.view !== view0) { stream.getTracks().forEach(t => t.stop()); return null; }
       // R31 待確認 1（GPT）：等麥克風權限的途中按了儲存（存檔中鎖住拍照、錄音）→ 權限回來也不開錄音、把麥克風放掉，免得錄到一半表單被存走、清掉
-      if (state.mediaLocked) { stream.getTracks().forEach(t => t.stop()); toast('正在存檔，這次沒有開始錄音；存好後再按錄音／သိမ်းနေသည်၊ ယခု အသံမသွင်းရသေးပါ၊ သိမ်းပြီးမှ အသံသွင်းပါ'); return; }
+      if (state.mediaLocked) { stream.getTracks().forEach(t => t.stop()); toast('正在存檔，這次沒有開始錄音；存好後再按錄音／သိမ်းနေသည်၊ ယခု အသံမသွင်းရသေးပါ၊ သိမ်းပြီးမှ အသံသွင်းပါ'); return null; }
       try { rec = new MediaRecorder(stream); }
-      catch (e) { stream.getTracks().forEach(t => t.stop()); toast('這支手機錄不了音，請改用打字／ဤဖုန်း အသံသွင်း မရပါ၊ စာရိုက်၍ သုံးပါ'); return; } // 0.4.87：建錄音器失敗要關麥克風
+      catch (e) { stream.getTracks().forEach(t => t.stop()); toast('這支手機錄不了音，請改用打字／ဤဖုန်း အသံသွင်း မရပါ၊ စာရိုက်၍ သုံးပါ'); return null; } // 0.4.87：建錄音器失敗要關麥克風
     } finally { state.recStarting = false; if (typeof refreshSave === 'function') refreshSave(); } // R32 待確認 1：權限被拒、取消、開不了錄音器時，儲存鈕馬上恢復
-    const chunks = [];
-    state.rec = rec; state.audioSec = 0; state.audio = null;
-    rec.ondataavailable = ev => { if (ev.data.size) chunks.push(ev.data); };
-    rec.onstop = async () => {
+    return { stream, rec, gen };
+  }
+  /** 錄音：按停（或錄滿）之後——關麥克風、轉檔、記下這段錄音；gen＝按錄音時的表單世代（換了就作廢） */
+  function recOnStop(rec, stream, chunks, gen, btn) {
+    return async () => {
       clearInterval(state.recTimer);
       { const rh = $n('recHint'); rh.textContent = `最長 ${MAX_REC_SEC} 秒／အများဆုံး ${MAX_REC_SEC} စက္ကန့်`; if (rh.classList) rh.classList.remove('warn'); } // 0.4.94
       stream.getTracks().forEach(t => t.stop());
@@ -3215,10 +3256,9 @@
         btn.querySelector('.label').innerHTML = `✓ 已錄 ${state.audioSec} 秒<br>${state.audioSec} စက္ကန့် သွင်းပြီး`;
       } finally { if (state.recBusy === rec) state.recBusy = null; refreshSave(); }
     };
-    rec.start(1000);
-    btn.classList.add('rec'); btn.classList.remove('done');
-    btn.querySelector('.label').textContent = '錄音中 0 秒・再按一下結束／အသံသွင်းနေ 0 စက္ကန့် ・ ရပ်ရန် ထပ်နှိပ်';
-    // 0.4.94：錄音鈕旁倒數（剩幾秒），最後 10 秒變紅並跳一次提醒；到上限自己停，跟業務說錄滿了、要補充請用打字（原本到 90 秒默默停掉）
+  }
+  /** 錄音：錄音鈕旁倒數、每秒更新秒數，剩 10 秒提醒、錄滿自動停 */
+  function recCountdown(rec, btn) {
     const hint = $n('recHint');
     const showLeft = () => { const left = Math.max(0, MAX_REC_SEC - state.audioSec); const warn = left <= 10;
       hint.textContent = warn ? `快錄滿了，剩 ${left} 秒／${left} စက္ကန့်သာ ကျန်` : `剩 ${left} 秒／${left} စက္ကန့် ကျန်`; if (hint.classList) hint.classList.toggle('warn', warn); };
@@ -3230,7 +3270,6 @@
       if (MAX_REC_SEC - state.audioSec === 10) toast('錄音只剩 10 秒，要說的請快說完／အသံသွင်းချိန် ၁၀ စက္ကန့်သာ ကျန်တော့သည်၊ ပြောစရာရှိသည်ကို မြန်မြန်ပြောပါ');
       if (state.audioSec >= MAX_REC_SEC) { toast(`已錄滿 ${MAX_REC_SEC} 秒，錄音自動停了；要補充請用打字／${MAX_REC_SEC} စက္ကန့် ပြည့်ပြီ၊ ထပ်ဖြည့်ရန် စာရိုက်ပါ`); rec.stop(); }
     }, 1000);
-    refreshSave();
   }
 
   /* ───── 盤商價格 ───── */
@@ -3460,20 +3499,27 @@
       status: 'pending'
     };
     const metaFns = {};
-    if (visit.trial) {
-      // 試作也先記在手機：開始的（下一次拜訪看得到進行中）、結束的（不要再顯示進行中）
-      const tr = visit.trial, cat = f.cat;
-      metaFns.localTrials = cur => {
-        const lt = (cur || []).slice();
-        if (tr.op === 'start') lt.push({ id: tr.tempId, cid: farmerId, cat, item: tr.item, dosage: tr.dosage, start: tr.start, pending: true, acct: visit.account });
-        else { const i = lt.findIndex(l => l.id === tr.id); if (i >= 0) lt[i] = Object.assign({}, lt[i], { ended: true, by: visit.id, acct: visit.account }); else lt.push({ id: tr.id, ended: true, by: visit.id, acct: visit.account }); } // R17：記哪筆拜訪結束的
-        return lt;
-      };
-      visit.farmerLabel += tr.op === 'start' ? `・開始${cat}` : `・結束${cat}（${tr.outcome}）`;
-    }
+    if (visit.trial) visitTrialMeta(visit, f, farmerId, metaFns);
     if (visit.closing && visit.closing.outcome === '簽約') visit.farmerLabel += '・已簽約'; // 上傳清單看得出是簽約結案
     const ctr = visit.closing && visit.closing.trialResult; // 結案填了試作結果 → 手機這件試作馬上算結束
     if (ctr && ctr.id && !metaFns.localTrials) metaFns.localTrials = cur => { const lt = (cur || []).slice(); const i = lt.findIndex(l => l.id === ctr.id); if (i >= 0) lt[i] = Object.assign({}, lt[i], { ended: true, by: visit.id, acct: visit.account }); else lt.push({ id: ctr.id, ended: true, by: visit.id, acct: visit.account }); return lt; };
+    visitCustomerMeta(visit, f, farmerId, isNew, profile, changed, metaFns);
+    return { visit, metaFns };
+  }
+  /** ① 拜訪帶試作：同一個交易把試作記在手機（開始的、結束的），上傳清單標題加「開始／結束」 */
+  function visitTrialMeta(visit, f, farmerId, metaFns) {
+    // 試作也先記在手機：開始的（下一次拜訪看得到進行中）、結束的（不要再顯示進行中）
+    const tr = visit.trial, cat = f.cat;
+    metaFns.localTrials = cur => {
+      const lt = (cur || []).slice();
+      if (tr.op === 'start') lt.push({ id: tr.tempId, cid: farmerId, cat, item: tr.item, dosage: tr.dosage, start: tr.start, pending: true, acct: visit.account });
+      else { const i = lt.findIndex(l => l.id === tr.id); if (i >= 0) lt[i] = Object.assign({}, lt[i], { ended: true, by: visit.id, acct: visit.account }); else lt.push({ id: tr.id, ended: true, by: visit.id, acct: visit.account }); } // R17：記哪筆拜訪結束的
+      return lt;
+    };
+    visit.farmerLabel += tr.op === 'start' ? `・開始${cat}` : `・結束${cat}（${tr.outcome}）`;
+  }
+  /** ① 新客戶、還沒上傳的暫存客戶改了資料：同一個交易把手機的暫存客戶寫好 */
+  function visitCustomerMeta(visit, f, farmerId, isNew, profile, changed, metaFns) {
     if (isNew) {
       // 還沒上傳前，新客戶先放在手機的選單裡，下一次拜訪也選得到（類別照打卡的類別分）
       const rec = Object.assign({}, profile, { id: farmerId, pending: true, acct: visit.account }, CAT_KIND[f.cat] ? { kind: CAT_KIND[f.cat] } : {});
@@ -3482,7 +3528,6 @@
       // 還沒上傳的新客戶改了資料：手機暫存也寫回，否則下一次拜訪會用舊資料整包重送，蓋掉這次的修改（B-01）
       metaFns.localCustomers = cur => (cur || []).map(l => (l.id === farmerId ? Object.assign({}, l, changed) : l));
     }
-    return { visit, metaFns };
   }
 
   /** ② 存檔前要讀的手機資料：這位暫存客戶（還沒上傳的新客戶才讀）、時差。在最後一次等待之前讀好（R29、R30-1） */
@@ -3579,21 +3624,10 @@
     //   同一個帳號 → 照存；手機上已經沒有人登入（別的分頁登入失效後清掉了）→ 照樣用主人的帳號存進手機（J5，存完回登入頁）；
     //   現在登入的是別人 → 不存、表單留著（J6，不然會記到別人名下）
     const own = state.formOwner;
-    // 表單主人跟現在登入的帳號不同 → 回提示字（同一人、或沒有記主人的舊表單回空字串）
-    // 0533 N1：主人記成 null（openVisit 讀到沒登入；undefined＝沒經過 openVisit 記主人的舊路，照舊）但現在有人登入 → 也算換人，不存、表單留著（原本回空字串不擋，會記在新登入的人名下）
-    const ownerClash = (o, c) => (o === null && c && c.deviceKey && c.account ? '這張表單是沒登入時開始填的，現在登入的是「' + c.account + '」，這次沒有存（表單留著）；請回首頁重新打開打卡再填／' + c.account + ' ဖြင့် ဝင်ထား၍ မသိမ်းရသေးပါ (ဖောင် ကျန်နေမည်)၊ ပင်မစာမျက်နှာမှ ပြန်ဖွင့်ပြီး ဖြည့်ပါ'
-      : !o || !c || !c.account || String(c.account) === o.account ? ''
-      : '這張表單是「' + o.account + '」開始填的，現在登入的是「' + c.account + '」，這次沒有存（表單留著）；請用 ' + o.account + ' 登入再按儲存／ဤဖောင်ကို ' + o.account + ' က စဖြည့်ခဲ့သည်၊ ယခု ဝင်ထားသူ မတူ၍ မသိမ်းရသေးပါ (ဖောင် ကျန်နေမည်)၊ ' + o.account + ' ဖြင့် ဝင်ပြီး သိမ်းပါ');
     const cfg = await getConfig();
     if (!cfg || !cfg.deviceKey) { if (!own) { showLogin('請先登入／အရင် ဝင်ပါ'); return; } }
-    else { const w = ownerClash(own, cfg); if (w) { saveStop(w); return; } }
-    if (gpsStale()) { // 0.5.20 E2：沒有位置，或位置是 2 分鐘以前抓的 → 再抓一次（抓不到就沿用原本的）
-      toast('再抓一次位置… တည်နေရာ ပြန်ရှာနေ');
-      // 等定位時不能再錄音、拍照（save() 整段鎖住、結束時才解鎖，這裡不解鎖）
-      mediaLock(true);
-      await Promise.race([locate({ keep: true }), new Promise(r => setTimeout(r, 15000))]);
-      if (state.gpsAmbig && !moved()) await Promise.race([locate({ keep: true }), new Promise(r => setTimeout(r, 10000))]); // 0520R4 I7：粗略、看不出有沒有移動 → 再給一次機會（只多抓一次）
-    }
+    else { const w = saveOwnerClash(own, cfg); if (w) { saveStop(w); return; } }
+    if (gpsStale()) await saveRelocate(moved);
     let why = saveBusyReason(state);
     if (why) { saveStop(why); return; }
     if (moved()) { saveStop('等定位時換了畫面或客戶，這次沒有存，請再按一次儲存／တည်နေရာ စောင့်နေစဉ် စာမျက်နှာ သို့မဟုတ် ဖောက်သည် ပြောင်းသွား၍ မသိမ်းရသေးပါ၊ ထပ်နှိပ်ပါ'); return; }
@@ -3601,27 +3635,13 @@
     const pre = await readSavePre(sel0);
     if (moved()) { saveStop('讀資料時換了畫面或客戶，這次沒有存，請再按一次儲存／ဒေတာ ဖတ်နေစဉ် စာမျက်နှာ သို့မဟုတ် ဖောက်သည် ပြောင်းသွား၍ မသိမ်းရသေးပါ၊ ထပ်နှိပ်ပါ'); return; }
     if (pre.orphan) { saveStop('這位新客戶之前的資料被後台退回、已不在手機的客戶清單，這次沒有存；請重新選客戶（或重新新增）後再按儲存／ဤဖောက်သည်အသစ်၏ ယခင်ဒေတာ ဆာဗာမှ ပယ်ချခံရ၍ စာရင်းထဲ မရှိတော့ပါ၊ မသိမ်းရသေးပါ၊ ဖောက်သည် ပြန်ရွေး (သို့မဟုတ် အသစ်ထည့်) ပြီး ထပ်နှိပ်ပါ'); return; } // 0521R2 H6
-    // 結案送出前當下重新判斷試作（R26、R27）：有變或必填沒過就先不送，請業務確認後再按
-    if (state.cat === '結案' && !state.dealerClose && !dealerSignOn() && typeof recheckCloseTrial === 'function') {
-      const changed = await recheckCloseTrial(false);
-      if (moved() || state.cat !== '結案') { saveStop('查資料時換了畫面或客戶，這次沒有存，請再按一次儲存／ဒေတာ စစ်နေစဉ် စာမျက်နှာ သို့မဟုတ် ဖောက်သည် ပြောင်းသွား၍ မသိမ်းရသေးပါ၊ ထပ်နှိပ်ပါ'); return; }
-      const cp = closeProblem();
-      if (changed !== false || cp) { saveStop(cp || '這位的試作資料剛更新，請確認後再按儲存／ဒေတာ အသစ်ပြောင်းထားသည်၊ စစ်ပြီး ထပ်နှိပ်ပါ'); return; }
-    }
-    // 0518R4：最後一次等待——結束試作、農民結案前，用當下資料重算「這位有沒有結案在等」（closeWaitNow），試作框、下面的檢查都照它
-    if ((mode0 === 'end' || state.cat === '結案') && typeof closeWaitNow === 'function') {
-      const cw = await closeWaitNow(sel0);
-      if (moved()) { saveStop('查資料時換了畫面或客戶，這次沒有存，請再按一次儲存／ဒေတာ စစ်နေစဉ် စာမျက်နှာ သို့မဟုတ် ဖောက်သည် ပြောင်းသွား၍ မသိမ်းရသေးပါ၊ ထပ်နှိပ်ပါ'); return; }
-      if (applyCloseWait(sel0, cw) === false) { saveStop('這位的結案狀態剛更新，這次沒有存，請確認後再按一次儲存／ပိတ်သိမ်းမှု အခြေအနေ အပ်ဒိတ်ဖြစ်သွား၍ မသိမ်းရသေးပါ၊ စစ်ပြီး ထပ်နှိပ်ပါ'); return; } // 0518R8-1：重算途中有較新的回答
-      // 0518R4-1／G1（GPT、Gemini）：重算之後農民結案再檢查一次（在等主管確認、還在查都擋）；結束試作由下面 trialProblem 檢查
-      if (state.cat === '結案' && !state.dealerClose && !dealerSignOn()) { const cp2 = closeProblem(); if (cp2) { saveStop(cp2); return; } }
-    }
+    if (await saveCloseRecheck(sel0, mode0, moved)) return;
     // 0.5.23 J5、J6：上面等定位、讀資料時，別的分頁可能登出或換人 → 最後一次等待再比一次表單主人
     const cfgNow = await getConfig();
     if (moved()) { saveStop('讀資料時換了畫面或客戶，這次沒有存，請再按一次儲存／ဒေတာ ဖတ်နေစဉ် စာမျက်နှာ သို့မဟုတ် ဖောက်သည် ပြောင်းသွား၍ မသိမ်းရသေးပါ၊ ထပ်နှိပ်ပါ'); return; }
     const noLogin = !cfgNow || !cfgNow.deviceKey;
     if (noLogin && !own) { showLogin('請先登入／အရင် ဝင်ပါ'); return; }
-    { const w = noLogin ? '' : ownerClash(own, cfgNow); if (w) { saveStop(w); return; } }
+    { const w = noLogin ? '' : saveOwnerClash(own, cfgNow); if (w) { saveStop(w); return; } }
     const account = own ? own.account : cfgNow.account;
     const closeExpectVer = state.cat === '結案' && !state.dealerClose && !dealerSignOn() && typeof Store !== 'undefined' && Store.lookupVersion && state.closeVer ? state.closeVer : undefined; // 寫入時再比一次（R37-1）
     // ── 以下是最後一次等待之後：再查一次錄音照片、試作（R30-3、0518R1-1），然後確認、組資料、寫入，中間不再等待 ──
@@ -3634,9 +3654,47 @@
     const ids = newVisitIds(now, tag, rand, isNew ? Math.random().toString(36).slice(2, 6) : '', isNew, new Date(now));
     const { visit, metaFns } = buildVisitRecord(readSaveForm(ids.trialTempId), ids, { account, clockOffset: pre.clockPre, localPre: pre.localPre });
     const res = await writeVisit(visit, metaFns, closeExpectVer, account); // 0523R1-1：寫入的同一個交易裡再比一次登入的人
+    await saveFinish(res, account);
+  }
+  /** ③ 表單主人跟現在登入的帳號不同 → 回提示字（同一人、或沒有記主人的舊表單回空字串）
+   *  0533 N1：主人記成 null（openVisit 讀到沒登入；undefined＝沒經過 openVisit 記主人的舊路，照舊）但現在有人登入 → 也算換人，不存、表單留著（原本回空字串不擋，會記在新登入的人名下） */
+  function saveOwnerClash(o, c) {
+    return (o === null && c && c.deviceKey && c.account ? '這張表單是沒登入時開始填的，現在登入的是「' + c.account + '」，這次沒有存（表單留著）；請回首頁重新打開打卡再填／' + c.account + ' ဖြင့် ဝင်ထား၍ မသိမ်းရသေးပါ (ဖောင် ကျန်နေမည်)၊ ပင်မစာမျက်နှာမှ ပြန်ဖွင့်ပြီး ဖြည့်ပါ'
+      : !o || !c || !c.account || String(c.account) === o.account ? ''
+      : '這張表單是「' + o.account + '」開始填的，現在登入的是「' + c.account + '」，這次沒有存（表單留著）；請用 ' + o.account + ' 登入再按儲存／ဤဖောင်ကို ' + o.account + ' က စဖြည့်ခဲ့သည်၊ ယခု ဝင်ထားသူ မတူ၍ မသိမ်းရသေးပါ (ဖောင် ကျန်နေမည်)၊ ' + o.account + ' ဖြင့် ဝင်ပြီး သိမ်းပါ');
+  }
+  /** ③ 0.5.20 E2：沒有位置，或位置是 2 分鐘以前抓的 → 再抓一次（抓不到就沿用原本的）；moved＝按儲存後換了畫面或客戶 */
+  async function saveRelocate(moved) {
+    toast('再抓一次位置… တည်နေရာ ပြန်ရှာနေ');
+    // 等定位時不能再錄音、拍照（save() 整段鎖住、結束時才解鎖，這裡不解鎖）
+    mediaLock(true);
+    await Promise.race([locate({ keep: true }), new Promise(r => setTimeout(r, 15000))]);
+    if (state.gpsAmbig && !moved()) await Promise.race([locate({ keep: true }), new Promise(r => setTimeout(r, 10000))]); // 0520R4 I7：粗略、看不出有沒有移動 → 再給一次機會（只多抓一次）
+  }
+  /** ③ 結束試作、農民結案送出前的重新判斷；這次不存（已跳提示）回 true */
+  async function saveCloseRecheck(sel0, mode0, moved) {
+    // 結案送出前當下重新判斷試作（R26、R27）：有變或必填沒過就先不送，請業務確認後再按
+    if (state.cat === '結案' && !state.dealerClose && !dealerSignOn() && typeof recheckCloseTrial === 'function') {
+      const changed = await recheckCloseTrial(false);
+      if (moved() || state.cat !== '結案') { saveStop('查資料時換了畫面或客戶，這次沒有存，請再按一次儲存／ဒေတာ စစ်နေစဉ် စာမျက်နှာ သို့မဟုတ် ဖောက်သည် ပြောင်းသွား၍ မသိမ်းရသေးပါ၊ ထပ်နှိပ်ပါ'); return true; }
+      const cp = closeProblem();
+      if (changed !== false || cp) { saveStop(cp || '這位的試作資料剛更新，請確認後再按儲存／ဒေတာ အသစ်ပြောင်းထားသည်၊ စစ်ပြီး ထပ်နှိပ်ပါ'); return true; }
+    }
+    // 0518R4：最後一次等待——結束試作、農民結案前，用當下資料重算「這位有沒有結案在等」（closeWaitNow），試作框、下面的檢查都照它
+    if ((mode0 === 'end' || state.cat === '結案') && typeof closeWaitNow === 'function') {
+      const cw = await closeWaitNow(sel0);
+      if (moved()) { saveStop('查資料時換了畫面或客戶，這次沒有存，請再按一次儲存／ဒေတာ စစ်နေစဉ် စာမျက်နှာ သို့မဟုတ် ဖောက်သည် ပြောင်းသွား၍ မသိမ်းရသေးပါ၊ ထပ်နှိပ်ပါ'); return true; }
+      if (applyCloseWait(sel0, cw) === false) { saveStop('這位的結案狀態剛更新，這次沒有存，請確認後再按一次儲存／ပိတ်သိမ်းမှု အခြေအနေ အပ်ဒိတ်ဖြစ်သွား၍ မသိမ်းရသေးပါ၊ စစ်ပြီး ထပ်နှိပ်ပါ'); return true; } // 0518R8-1：重算途中有較新的回答
+      // 0518R4-1／G1（GPT、Gemini）：重算之後農民結案再檢查一次（在等主管確認、還在查都擋）；結束試作由下面 trialProblem 檢查
+      if (state.cat === '結案' && !state.dealerClose && !dealerSignOn()) { const cp2 = closeProblem(); if (cp2) { saveStop(cp2); return true; } }
+    }
+    return false;
+  }
+  /** ③ 寫入之後：照 writeVisit 的結果（'ok'／'stale'／'owner'／'fail'）提示、回登入頁或回首頁；account＝這筆記在誰名下 */
+  async function saveFinish(res, account) {
     if (res === 'owner') { // 0523R1-1（GPT）：最後一次比對之後（例如確認視窗開著時）別的分頁換人登入 → 不存、表單留著
       // 0523R2-2：用交易當下擋下的帳號組提示（一定跟主人不同）；萬一沒有，也照樣說「這次沒有存」
-      saveStop(ownerClash({ account }, { account: state.ownerClashAcct || '別人' }) || ('這次沒有存（表單留著）；請用 ' + account + ' 登入再按儲存／ယခု မသိမ်းရသေးပါ (ဖောင် ကျန်နေမည်)၊ ' + account + ' ဖြင့် ဝင်ပြီး သိမ်းပါ'));
+      saveStop(saveOwnerClash({ account }, { account: state.ownerClashAcct || '別人' }) || ('這次沒有存（表單留著）；請用 ' + account + ' 登入再按儲存／ယခု မသိမ်းရသေးပါ (ဖောင် ကျန်နေမည်)၊ ' + account + ' ဖြင့် ဝင်ပြီး သိမ်းပါ'));
       return;
     }
     if (res === 'stale') { // 檢查之後資料剛更新 → 不存，重新判斷結案欄，請業務確認後再按（表單留著）
@@ -3766,46 +3824,57 @@
       if (auto && r && !r.error && !r.sent && Date.now() - (state.lastPullAt || 0) < AUTO_PULL_MS) { $('syncState').textContent = r.syncWarn || ''; return; } // 第25任 審查第三批：自動那次、沒東西傳、5 分鐘內抓過 → 不抓不重畫（finally 照樣更新待上傳筆數）
       // 第25任 審查⑪：背景程式正在上傳（拿不到上傳鎖回 busy）不是「沒東西要傳」——原本照樣再抓一次整份資料、把上傳進度字清掉。傳完背景程式會通知畫面重畫
       if (r && r.busy) { $('syncState').textContent = '背景上傳中…／နောက်ကွယ်မှ တင်နေသည်…'; return; }
-      if (r && !r.error && !r.sent) {
-        // 沒有要上傳的，順便抓最新的客戶、選單和首頁數字
-        const sentAt = Date.now();
-        const data = await post(cfg.gasUrl, { action: 'sync', deviceKey: cfg.deviceKey, ask: (typeof FarmCore !== 'undefined' && FarmCore.buildAsk) ? await FarmCore.buildAsk() : undefined }).catch(() => null); // R19：問自己手機上的暫存收到了沒
-        if (data && data.ok) { // 0.4.91 高1：帶送出時的金鑰，換了帳號就整份丟掉
-          state.lastPullAt = Date.now(); // 第25任 審查第三批：抓成功才算（失敗下一分鐘照樣再抓）
-          // R13-01：寫回失敗（空間不足等）不中斷，記住「暫存先別清」、畫面寫提示
-          try { await rememberServer(data, sentAt, cfg.deviceKey); } catch (e) { r.syncWarn = FarmCore.SYNC_WARN || '同步資料寫回手機失敗，稍後再同步／စင့်ခ်ဒေတာ ဖုန်းထဲ ပြန်သိမ်းမရပါ၊ နောက်မှ ထပ်စင့်ခ်လုပ်မည်'; } // R14：暫存清理看後台快取，這裡只要提示
-          if (!r.syncWarn && typeof FarmCore !== 'undefined' && FarmCore.oldServer && FarmCore.oldServer(data)) r.syncWarn = FarmCore.OLD_SRV_WARN; // R20（GPT 04）：後台被單獨退回舊版 → 不清理、提示
-        }
-        else if (data && data.code === 'BAD_LOGIN') { await onLoginExpired(cfg.deviceKey, (data.message || '登入已失效') + '。沒上傳的資料還在手機裡，重新登入後會自動補傳。／ပြန်ဝင်ပြီးလျှင် ကျန်သော မှတ်တမ်း တင်မည်။'); return; } // 0.4.87 高1、中6；0.4.92 中2 比照上傳那條加緬文
-        // 第25任 審查⑫：連不上後台（被擋、逾時）或後台回錯誤，原本 .catch(() => null) 之後什麼都不說，首頁數字一直是舊的。只在上傳狀態列寫一行（每分鐘都會跑，不跳提示）；
-        //   不放進 r.error：後面「同步成功才做」的判斷照舊
-        else r.pullWarn = '抓最新資料失敗，首頁可能不是最新的；一直這樣請改用備用網址／နောက်ဆုံး ဒေတာ ဖတ်မရ၍ ပင်မစာမျက်နှာ မအပ်ဒိတ်သေးနိုင်ပါ၊ ဆက်ဖြစ်နေလျှင် အရန်လိပ်စာ သုံးပါ';
-      }
-      $('syncState').textContent = r && r.error ? r.error : r && r.pullWarn && !r.syncWarn ? r.pullWarn : (r && r.syncWarn) || ''; // R13-01：寫回失敗的提示也顯示（第25任 審查⑫：抓資料失敗的提醒也顯示）
-      // 0.4.81（0.4.80 巡檢中1）：上傳、同步完成 → 種植資料的紀錄切回來要重讀（這裡不馬上重讀，省流量）
-      if (r && !r.error) { const ph = document.getElementById('plHistory'); if (ph) ph._doneCid = null; }
-      // R16-05（GPT 中）：前景抓完最新資料後試作記號也要馬上清理（runSync 的清理在抓資料之前），不然主管退回、待確認的試作要再同步一次才看得到
-      // R18（Gemini 2）：這一輪後台資料寫回手機失敗 → 不清理（快取、known 還是舊的）
-      if (!(r && r.syncWarn)) {
-        if (typeof FarmCore !== 'undefined' && FarmCore.pruneLocalTrials) await FarmCore.pruneLocalTrials();
-        await pruneLocalCustomers();
-      }
-      if (r && !r.error) await plantPendingCheck(); // 0.4.94 中4：同步成功（上傳完或抓完最新客戶）就比對逾時的種植資料：後台已是送出的值 → 提示已存好
-      if (state.view === 'home') await renderHome();
-      // 正在填拜訪而且已經選了客戶，就不重整選單（暫時客戶上傳後會換成正式編號，重整會把選好的清掉；R1-02）
-      if (state.view === 'visit' && !$('farmer').value) { await loadOptions(); await loadFarmers(); }
-      if (typeof refreshCloseUnknown === 'function') await refreshCloseUnknown(); // R26-1：正在填結案時，照同步後的試作快取重新判斷「結案狀態未知」
-      if (r && !r.error && typeof sendErrs === 'function') await sendErrs(cfg); // 第26任：同步成功就順便把手機記下的錯誤送到後台錯誤紀錄
+      if (r && !r.error && !r.sent && await syncPullLatest(cfg, r)) return;
+      await syncAfter(cfg, r);
     } catch (e) {
-      // 0.5.33（第23任抓BUG P1）：上傳途中讀寫手機資料庫丟錯（多半是空間不足），原本只有 try/finally → 畫面停在「上傳中 1/3…」不說原因
-      $('syncState').textContent = '手機存資料失敗（可能空間不足），請清出空間，稍後自動再傳／ဖုန်းထဲ သိမ်းမရပါ (နေရာ မလောက်ခြင်း ဖြစ်နိုင်)၊ နေရာလွတ် လုပ်ပေးပါ၊ နောက်မှ အလိုအလျောက် ပြန်တင်မည်';
-      // 第26任：這段也包住畫首頁、重讀選單 → 程式本身出錯時不說成空間不足（業務會去清空間，問題卻還在），並記下來
-      if (typeof isCodeErr === 'function' && isCodeErr(e)) $('syncState').textContent = '同步途中程式出錯（' + errCode(e) + '），稍後自動再試；一直出現請告訴主管';
-      if (typeof noteErr === 'function') noteErr('同步', e);
+      syncFailed(e);
     } finally {
       syncing = false;
       await renderQueue();
     }
+  }
+  /** 同步：這次沒有要上傳的 → 順便抓最新的客戶、選單和首頁數字（寫回失敗、後台舊版記在 r.syncWarn，抓失敗記在 r.pullWarn）；登入失效回 true（syncNow 就此結束） */
+  async function syncPullLatest(cfg, r) {
+    // 沒有要上傳的，順便抓最新的客戶、選單和首頁數字
+    const sentAt = Date.now();
+    const data = await post(cfg.gasUrl, { action: 'sync', deviceKey: cfg.deviceKey, ask: (typeof FarmCore !== 'undefined' && FarmCore.buildAsk) ? await FarmCore.buildAsk() : undefined }).catch(() => null); // R19：問自己手機上的暫存收到了沒
+    if (data && data.ok) { // 0.4.91 高1：帶送出時的金鑰，換了帳號就整份丟掉
+      state.lastPullAt = Date.now(); // 第25任 審查第三批：抓成功才算（失敗下一分鐘照樣再抓）
+      // R13-01：寫回失敗（空間不足等）不中斷，記住「暫存先別清」、畫面寫提示
+      try { await rememberServer(data, sentAt, cfg.deviceKey); } catch (e) { r.syncWarn = FarmCore.SYNC_WARN || '同步資料寫回手機失敗，稍後再同步／စင့်ခ်ဒေတာ ဖုန်းထဲ ပြန်သိမ်းမရပါ၊ နောက်မှ ထပ်စင့်ခ်လုပ်မည်'; } // R14：暫存清理看後台快取，這裡只要提示
+      if (!r.syncWarn && typeof FarmCore !== 'undefined' && FarmCore.oldServer && FarmCore.oldServer(data)) r.syncWarn = FarmCore.OLD_SRV_WARN; // R20（GPT 04）：後台被單獨退回舊版 → 不清理、提示
+    }
+    else if (data && data.code === 'BAD_LOGIN') { await onLoginExpired(cfg.deviceKey, (data.message || '登入已失效') + '。沒上傳的資料還在手機裡，重新登入後會自動補傳。／ပြန်ဝင်ပြီးလျှင် ကျန်သော မှတ်တမ်း တင်မည်။'); return true; } // 0.4.87 高1、中6；0.4.92 中2 比照上傳那條加緬文
+    // 第25任 審查⑫：連不上後台（被擋、逾時）或後台回錯誤，原本 .catch(() => null) 之後什麼都不說，首頁數字一直是舊的。只在上傳狀態列寫一行（每分鐘都會跑，不跳提示）；
+    //   不放進 r.error：後面「同步成功才做」的判斷照舊
+    else r.pullWarn = '抓最新資料失敗，首頁可能不是最新的；一直這樣請改用備用網址／နောက်ဆုံး ဒေတာ ဖတ်မရ၍ ပင်မစာမျက်နှာ မအပ်ဒိတ်သေးနိုင်ပါ၊ ဆက်ဖြစ်နေလျှင် အရန်လိပ်စာ သုံးပါ';
+    return false;
+  }
+  /** 同步：上傳、抓完之後——上傳狀態列、清理暫存、比對種植資料、重畫首頁或選單、送錯誤紀錄 */
+  async function syncAfter(cfg, r) {
+    $('syncState').textContent = r && r.error ? r.error : r && r.pullWarn && !r.syncWarn ? r.pullWarn : (r && r.syncWarn) || ''; // R13-01：寫回失敗的提示也顯示（第25任 審查⑫：抓資料失敗的提醒也顯示）
+    // 0.4.81（0.4.80 巡檢中1）：上傳、同步完成 → 種植資料的紀錄切回來要重讀（這裡不馬上重讀，省流量）
+    if (r && !r.error) { const ph = document.getElementById('plHistory'); if (ph) ph._doneCid = null; }
+    // R16-05（GPT 中）：前景抓完最新資料後試作記號也要馬上清理（runSync 的清理在抓資料之前），不然主管退回、待確認的試作要再同步一次才看得到
+    // R18（Gemini 2）：這一輪後台資料寫回手機失敗 → 不清理（快取、known 還是舊的）
+    if (!(r && r.syncWarn)) {
+      if (typeof FarmCore !== 'undefined' && FarmCore.pruneLocalTrials) await FarmCore.pruneLocalTrials();
+      await pruneLocalCustomers();
+  }
+  if (r && !r.error) await plantPendingCheck(); // 0.4.94 中4：同步成功（上傳完或抓完最新客戶）就比對逾時的種植資料：後台已是送出的值 → 提示已存好
+  if (state.view === 'home') await renderHome();
+  // 正在填拜訪而且已經選了客戶，就不重整選單（暫時客戶上傳後會換成正式編號，重整會把選好的清掉；R1-02）
+  if (state.view === 'visit' && !$('farmer').value) { await loadOptions(); await loadFarmers(); }
+  if (typeof refreshCloseUnknown === 'function') await refreshCloseUnknown(); // R26-1：正在填結案時，照同步後的試作快取重新判斷「結案狀態未知」
+  if (r && !r.error && typeof sendErrs === 'function') await sendErrs(cfg); // 第26任：同步成功就順便把手機記下的錯誤送到後台錯誤紀錄
+  }
+  /** 同步：途中丟錯 → 上傳狀態列寫原因（空間不足或程式錯），並記下來 */
+  function syncFailed(e) {
+    // 0.5.33（第23任抓BUG P1）：上傳途中讀寫手機資料庫丟錯（多半是空間不足），原本只有 try/finally → 畫面停在「上傳中 1/3…」不說原因
+    $('syncState').textContent = '手機存資料失敗（可能空間不足），請清出空間，稍後自動再傳／ဖုန်းထဲ သိမ်းမရပါ (နေရာ မလောက်ခြင်း ဖြစ်နိုင်)၊ နေရာလွတ် လုပ်ပေးပါ၊ နောက်မှ အလိုအလျောက် ပြန်တင်မည်';
+    // 第26任：這段也包住畫首頁、重讀選單 → 程式本身出錯時不說成空間不足（業務會去清空間，問題卻還在），並記下來
+    if (typeof isCodeErr === 'function' && isCodeErr(e)) $('syncState').textContent = '同步途中程式出錯（' + errCode(e) + '），稍後自動再試；一直出現請告訴主管';
+    if (typeof noteErr === 'function') noteErr('同步', e);
   }
 
 
@@ -3865,7 +3934,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261118-174930'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261118-180605'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
