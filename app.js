@@ -4007,7 +4007,8 @@
     // 第24任 第六批⑧（tomtom 實測：執行任務 6 個區塊、3 個螢幕）：每個區塊按標題可以收合，記在手機；預設收起「主管訂的目標／種植進度」「我負責的客戶」
     initTodoFold();
     // 第24任 必改第五批：主要文字欄旁加 🎤 語音輸入（瀏覽器不支援就不顯示）。欄位：跟農民聊了什麼、盤商簽約內容、種植失敗原因、提供建議
-    if (typeof FarmVoice === 'object') FarmVoice.init({ toast: m => toast(m), isRecording: () => !!(state.rec || state.recStarting || state.recBusy), fields: ['note', 'dcNote', 'fReason', 'feedbackText'] });
+    // 第26任 2026-11-18 董事長「語音輸入拿掉，手機本身就有內建」：設定 voiceInput 不是 true 就不啟動（不畫 🎤、不出現語言切換）
+    if (typeof FarmVoice === 'object' && typeof FARM_CONFIG !== 'undefined' && FARM_CONFIG.voiceInput === true) FarmVoice.init({ toast: m => toast(m), isRecording: () => !!(state.rec || state.recStarting || state.recBusy), fields: ['note', 'dcNote', 'fReason', 'feedbackText'] });
     document.querySelectorAll('.cat[data-cat]').forEach(b => b.addEventListener('click', () => openVisit(b.dataset.cat)));
     // 首頁兩張大卡直接進打卡畫面；一般／試作／推廣、盤商／種子商在打卡畫面上方切換（優化 1）
     // 0.4.32 董事長：「農民」改成下拉選單（一般拜訪農民／試作農民／推廣農民），選了直接進那一種
