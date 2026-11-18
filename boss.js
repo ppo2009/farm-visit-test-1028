@@ -840,7 +840,7 @@
       if (a === 'rejcancel') { R.rej = null; R.rejDraft = null; render(); return; }
       if (a === 'confirm' || a === 'rejsend') {
         const ok = a === 'confirm', v = state.data.visits.find(y => y.id === x.visitId), miss = ok ? closeMissing(x, v) : [];
-        if (ok && !confirm(confirmText(x, miss))) return;
+        if (ok && !confirm(relabelStr(confirmText(x, miss)))) return; // 抓BUG第8輪 主管組3：確認視窗不在畫面裡，換字要自己做
         const reasons = ok ? [] : [...box.querySelectorAll('input[name=rj]:checked')].map(i => i.value), note = ok ? '' : $('rejNote').value.trim();
         box.querySelectorAll('[data-rv]').forEach(y => { y.disabled = true; });
         state.closeSending = x.visitId;
@@ -1747,24 +1747,32 @@
   if (state.key) load(); else showLogin();
 
   /* 第27任 2026-11-18 董事長「試作農民改叫對照農民，主管頁、日報、Word 也一起改」：程式和資料裡照舊叫「試作」（類別值、分頁名稱都不動），
-     只把畫面上看得到的字換成「對照」：畫面每次畫完（MutationObserver），把文字節點和 placeholder／aria-label／title 裡的「試作」換掉。
-     打字欄（textarea、input）裡業務自己打的內容不動。沒有 MutationObserver 的環境（舊瀏覽器、本機假畫面測試）就不換 */
+     只把畫面上看得到的字換成「對照」：畫面每次畫完（MutationObserver），把文字節點和 placeholder／aria-label／title／data-label 裡的「試作」換掉。
+     打字欄（textarea、input）裡業務自己打的內容不動；「測試作物」「嘗試作法」這種跨詞的不換。沒有 MutationObserver 的環境就不換。
+     抓BUG第8輪 主管組1：字串沒變也寫回 → 觀察器又被叫醒、無限循環整頁卡死。改成：換到不再變為止（處理「試作試作」），真的有變才寫回 */
+  const RELABEL_RE = /(^|[^測嘗])試作/g;
+  function relabelStr(s) { let t = String(s), prev; do { prev = t; t = t.replace(RELABEL_RE, (m, q) => q + '對照'); } while (t !== prev); return t; }
+  const RELABEL_ATTRS = ['placeholder', 'aria-label', 'title', 'data-label'];
   function relabelTrial(root) {
     if (!root || typeof document === 'undefined' || !document.createTreeWalker) return;
     const skip = n => { for (let p = n.parentNode; p; p = p.parentNode) { if (p.nodeType === 1 && /^(TEXTAREA|SCRIPT|STYLE|INPUT)$/.test(p.tagName)) return true; } return false; };
-    if (root.nodeType === 3) { if (root.nodeValue.indexOf('試作') >= 0 && !skip(root)) root.nodeValue = root.nodeValue.replace(/試作/g, '對照'); return; }
+    const fixText = n => { if (n.nodeValue.indexOf('試作') < 0 || skip(n)) return; const nv = relabelStr(n.nodeValue); if (nv !== n.nodeValue) n.nodeValue = nv; };
+    const fixAttrs = e => RELABEL_ATTRS.forEach(a => { const v = e.getAttribute && e.getAttribute(a); if (v && v.indexOf('試作') >= 0) { const nv = relabelStr(v); if (nv !== v) e.setAttribute(a, nv); } });
+    if (root.nodeType === 3) { fixText(root); return; }
     if (root.nodeType !== 1 && root.nodeType !== 9) return;
     const w = document.createTreeWalker(root, 4);
     const list = []; for (let n = w.nextNode(); n; n = w.nextNode()) if (n.nodeValue.indexOf('試作') >= 0) list.push(n);
-    list.forEach(n => { if (!skip(n)) n.nodeValue = n.nodeValue.replace(/試作/g, '對照'); });
-    const els = root.nodeType === 1 ? [root].concat(Array.from(root.querySelectorAll('[placeholder],[aria-label],[title]'))) : Array.from(root.querySelectorAll('[placeholder],[aria-label],[title]'));
-    els.forEach(e => ['placeholder', 'aria-label', 'title'].forEach(a => { const v = e.getAttribute && e.getAttribute(a); if (v && v.indexOf('試作') >= 0) e.setAttribute(a, v.replace(/試作/g, '對照')); }));
+    list.forEach(fixText);
+    const sel = RELABEL_ATTRS.map(a => '[' + a + ']').join(',');
+    (root.nodeType === 1 ? [root] : []).concat(Array.from(root.querySelectorAll(sel))).forEach(fixAttrs);
   }
   function startRelabel() {
     if (typeof MutationObserver !== 'function' || typeof document === 'undefined' || !document.body) return;
     relabelTrial(document.body);
-    if (document.title && document.title.indexOf('試作') >= 0) document.title = document.title.replace(/試作/g, '對照');
-    new MutationObserver(ms => ms.forEach(m => { if (m.type === 'characterData') relabelTrial(m.target); else m.addedNodes.forEach(n => relabelTrial(n)); })).observe(document.body, { childList: true, subtree: true, characterData: true });
+    if (document.title && document.title.indexOf('試作') >= 0) document.title = relabelStr(document.title);
+    // 抓BUG第8輪 手機組6：程式事後改的 placeholder（打字範例）也要換 → 也看屬性變動
+    new MutationObserver(ms => ms.forEach(m => { if (m.type === 'characterData') relabelTrial(m.target); else if (m.type === 'attributes') relabelTrial(m.target); else m.addedNodes.forEach(n => relabelTrial(n)); }))
+      .observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: RELABEL_ATTRS });
   }
   startRelabel();
   window.__bossTest = { state, startReview, flagsOf, render, load, logout, measureDue, weekCompare, syncPlayer, stopAudio, mmToday, noSummaryText, planParts }; // 本機測試用（0.4.88 多開幾個給測試；第26任：多給 noSummaryText、planParts，測試整份載入呼叫，不再切原始碼）

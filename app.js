@@ -1865,7 +1865,7 @@
 
   // 業務BUG#1（2號小助手 2026-11-12）：換農民時上一位的打字、照片、錄音、種植失敗會留著，存檔就記到新農民身上
   const FAIL_IDS = ['fWeather', 'fTemp', 'fFert', 'fWater', 'fPest', 'fPestNote', 'fReason'];
-  const visitDirty = () => !!(state.photos.length || state.busyPhotos || state.audio || state.rec || state.recBusy || $('note').value.trim() || $('plantFail').checked); // 0.4.87 高2：錄音處理中也算
+  const visitDirty = () => !!(state.photos.length || state.busyPhotos || state.audio || state.rec || state.recBusy || $('note').value.trim() || $('plantFail').checked || ['cmpNote1', 'cmpNote2', 'cmpNote3', 'cmpCo', 'cmpCrop'].some(id => String(($n(id) || {}).value || '').trim())); // 0.4.87 高2：錄音處理中也算
   /** 業務BUG#5：返回首頁前要確認的「填了東西」——除了照片錄音打字，還有沒見到匯報、新客戶資料、結案欄位、盤商結案說明、價格、試作表單 */
   const filled = id => { const e = $n(id); return e.type === 'checkbox' ? !!e.checked : !!String((e.value) || '').trim(); }; // 0.4.75 勾選框看有沒有勾（value 永遠是 on）
   // 結案七欄＋盤商結案說明（formDirty、換客戶共用）；2號 0.4.70 低3（第8任）：漏了結案地區 cRegion、洽談結果 dcOutcome（兩個下拉，預設空白、不會自動帶值）
@@ -3097,6 +3097,7 @@
     $n('pGps').value = g ? `${g.lat}, ${g.lng}${g.acc ? `（±${g.acc} m）` : ''}` : '沒有定位／တည်နေရာ မရ';
   }
   async function addPhotos(files, source, btn) {
+    const grp0 = state.photoGroup; // 抓BUG第8輪 手機組3：按下時是哪一組就記哪一組（處理途中換組不影響這批）
     const list = [...(files || [])];
     if (!list.length) return;
     if (state.mediaLocked) { toast('正在存檔（等定位），照片等一下再加／သိမ်းနေသည် (တည်နေရာ စောင့်နေ)၊ ဓာတ်ပုံ နောက်မှ ထပ်ထည့်ပါ'); return; } // 0.4.91 中3
@@ -3116,7 +3117,7 @@
       if (gen !== state.formGen) { btn.classList.remove('busy'); return; } // 已經離開這一筆拜訪，照片不要掉進下一筆（計數已在清表單時歸零）
       state.busyPhotos = Math.max(0, state.busyPhotos - 1);
       if (!p) continue;
-      if (cmpOn()) { p.group = CMP_GROUPS.indexOf(state.photoGroup) >= 0 ? state.photoGroup : '自己'; state.photos.push(p); state.photos.sort((x, y) => CMP_GROUPS.indexOf(x.group) - CMP_GROUPS.indexOf(y.group)); } // 第27任 對照農民：照三組排
+      if (cmpOn()) { p.group = CMP_GROUPS.indexOf(grp0) >= 0 ? grp0 : '自己'; state.photos.push(p); state.photos.sort((x, y) => cmpOrder(x) - cmpOrder(y)); } // 第27任 對照農民：照三組排
       else state.photos.push(p);
       if (source === '相機') fillGpsBox(); // 0.4.71 董事長：拍照時 GPS 座標自動帶入（新增客戶表單）
       renderThumbs(); refreshSave();
@@ -3178,7 +3179,10 @@
   const CMP_GROUPS = ['自己', '別家', '別作物'];
   const CMP_TITLE = { 自己: '自己的', 別家: '別間公司', 別作物: '別的作物' };
   const cmpOn = () => state.cat === '試作' && !state.trialMode;
+  const cmpOrder = p => { const i = CMP_GROUPS.indexOf(p.group); return i < 0 ? 99 : i; }; // 抓BUG第8輪 手機組4：沒分組的排最後
   function cmpProblem() {
+    const loose = (state.photos || []).filter(p => CMP_GROUPS.indexOf(p.group) < 0).length;
+    if (loose) return `有 ${loose} 張照片沒分組（在一般畫面拍的），請按照片上的 × 刪掉，再到三組裡拍`;
     const miss = CMP_GROUPS.filter(g => !(state.photos || []).some(p => p.group === g)).map(g => CMP_TITLE[g]);
     if (miss.length) return '對照農民要拍三組照片：還缺「' + miss.join('、') + '」';
     const v = id => String(($n(id) || {}).value || '').trim();
@@ -3189,11 +3193,16 @@
   }
   /** 三段打字＋每組是第幾張照片，合成一份打字內容（寫進 #note） */
   function cmpCompose() {
-    if (!cmpOn()) return;
+    // 抓BUG第8輪 手機組1、2：原本一進三組就整份蓋掉 #note → 一般畫面或開始表單打的字消失。改成：#note 裡不是上次合成的字，先搬進「自己的」那段
+    if (!cmpOn()) { if (state.cmpWasOn && $('note').value === (state.cmpLast || '')) { const n1 = $n('cmpNote1'); $('note').value = String(n1.value || ''); n1.value = ''; state.cmpLast = ''; } state.cmpWasOn = false; return; } // 離開三組：「自己的」那段放回一般打字欄（來回切不會重複、不會不見）
+    const cur = String($('note').value || '');
+    if (cur.trim() && cur !== (state.cmpLast || '')) { const n1 = $n('cmpNote1'); n1.value = n1.value ? n1.value + '\n' + cur : cur; }
+    state.cmpWasOn = true;
     const v = id => String(($n(id) || {}).value || '').trim();
     const nums = g => (state.photos || []).map((p, i) => (p.group === g ? i + 1 : 0)).filter(Boolean);
     const sec = (g, head, body) => { const n = nums(g); return body || n.length ? `【${head}】${n.length ? '（照片 ' + n.join('、') + '）' : ''}${body}` : ''; };
     $('note').value = [sec('自己', '自己的', v('cmpNote1')), sec('別家', '別間公司' + (v('cmpCo') ? '：' + v('cmpCo') : ''), v('cmpNote2')), sec('別作物', '別的作物' + (v('cmpCrop') ? '：' + v('cmpCrop') : ''), v('cmpNote3'))].filter(Boolean).join('\n');
+    state.cmpLast = $('note').value;
   }
   function paintCmp() {
     const box = $n('cmpBox'), on = cmpOn();
@@ -3202,7 +3211,7 @@
     if (!on || !box.querySelectorAll) return;
     box.querySelectorAll('[data-cmpn]').forEach(el => { const n = (state.photos || []).filter(p => p.group === el.dataset.cmpn).length; el.textContent = n ? `已有 ${n} 張` : '還沒有照片'; });
   }
-  function clearCmp() { ['cmpNote1', 'cmpNote2', 'cmpNote3', 'cmpCo', 'cmpCrop'].forEach(id => { const e = $n(id); if (e) e.value = ''; }); state.photoGroup = ''; }
+  function clearCmp() { ['cmpNote1', 'cmpNote2', 'cmpNote3', 'cmpCo', 'cmpCrop'].forEach(id => { const e = $n(id); if (e) e.value = ''; }); state.photoGroup = ''; state.cmpLast = ''; state.cmpWasOn = false; }
   function bindCmp() {
     const box = $n('cmpBox'); if (!box || !box.querySelectorAll) return;
     box.querySelectorAll('[data-cmpcam]').forEach(b => b.addEventListener('click', () => { state.photoGroup = b.dataset.cmpcam; $('photoInput').click(); }));
@@ -3237,7 +3246,7 @@
     const prev = state.thumbUrls || [];
     state.thumbUrls = state.photos.map(p => p.thumbUrl || (p.thumbUrl = URL.createObjectURL(p.blob)));
     prev.forEach(u => { if (state.thumbUrls.indexOf(u) < 0) URL.revokeObjectURL(u); }); // 刪掉的照片、換客戶清掉的照片才釋放
-    $('thumbs').innerHTML = state.photos.map((p, i) => `<div class="thumb"><img src="${state.thumbUrls[i]}" alt="照片 ${i + 1} ဓာတ်ပုံ ${i + 1}"><span class="tag">${p.group ? esc(CMP_TITLE[p.group] || p.group) : p.source === '相簿' ? '相簿 ဓာတ်ပုံ' : '相機 ကင်မရာ'}</span><button type="button" class="del" data-i="${i}" aria-label="刪掉這張 ဤပုံကို ဖျက်မည်">×</button></div>`).join('');
+    $('thumbs').innerHTML = state.photos.map((p, i) => `<div class="thumb"><img src="${state.thumbUrls[i]}" alt="照片 ${i + 1} ဓာတ်ပုံ ${i + 1}"><span class="tag">${p.group ? esc(CMP_TITLE[p.group] || p.group) : cmpOn() ? '沒分組' : p.source === '相簿' ? '相簿 ဓာတ်ပုံ' : '相機 ကင်မရာ'}</span><button type="button" class="del" data-i="${i}" aria-label="刪掉這張 ဤပုံကို ဖျက်မည်">×</button></div>`).join('');
     $('thumbs').querySelectorAll('.del').forEach(b => b.addEventListener('click', () => { if (state.saving) { toast('存檔中，請等存好再刪照片'); return; } state.photos.splice(Number(b.dataset.i), 1); renderThumbs(); refreshSave(); })); // 抓BUG第7輪 手機組1：存檔中（等定位）不能刪照片
     $('photoBtn').classList.toggle('done', state.photos.some(p => p.source === '相機'));
     const ag = typeof document !== 'undefined' && document.getElementById && document.getElementById('againBtn'); if (ag) ag.hidden = !state.photos.some(p => p.source === '相機'); // 第24任 第六批⑮
@@ -4016,7 +4025,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261118-230906'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261118-234818'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -4411,24 +4420,32 @@
   }
 
   /* 第27任 2026-11-18 董事長「試作農民改叫對照農民，主管頁、日報、Word 也一起改」：程式和資料裡照舊叫「試作」（類別值、分頁名稱都不動），
-     只把畫面上看得到的字換成「對照」：畫面每次畫完（MutationObserver），把文字節點和 placeholder／aria-label／title 裡的「試作」換掉。
-     打字欄（textarea、input）裡業務自己打的內容不動。沒有 MutationObserver 的環境（舊瀏覽器、本機假畫面測試）就不換 */
+     只把畫面上看得到的字換成「對照」：畫面每次畫完（MutationObserver），把文字節點和 placeholder／aria-label／title／data-label 裡的「試作」換掉。
+     打字欄（textarea、input）裡業務自己打的內容不動；「測試作物」「嘗試作法」這種跨詞的不換。沒有 MutationObserver 的環境就不換。
+     抓BUG第8輪 主管組1：字串沒變也寫回 → 觀察器又被叫醒、無限循環整頁卡死。改成：換到不再變為止（處理「試作試作」），真的有變才寫回 */
+  const RELABEL_RE = /(^|[^測嘗])試作/g;
+  function relabelStr(s) { let t = String(s), prev; do { prev = t; t = t.replace(RELABEL_RE, (m, q) => q + '對照'); } while (t !== prev); return t; }
+  const RELABEL_ATTRS = ['placeholder', 'aria-label', 'title', 'data-label'];
   function relabelTrial(root) {
     if (!root || typeof document === 'undefined' || !document.createTreeWalker) return;
     const skip = n => { for (let p = n.parentNode; p; p = p.parentNode) { if (p.nodeType === 1 && /^(TEXTAREA|SCRIPT|STYLE|INPUT)$/.test(p.tagName)) return true; } return false; };
-    if (root.nodeType === 3) { if (root.nodeValue.indexOf('試作') >= 0 && !skip(root)) root.nodeValue = root.nodeValue.replace(/試作/g, '對照'); return; }
+    const fixText = n => { if (n.nodeValue.indexOf('試作') < 0 || skip(n)) return; const nv = relabelStr(n.nodeValue); if (nv !== n.nodeValue) n.nodeValue = nv; };
+    const fixAttrs = e => RELABEL_ATTRS.forEach(a => { const v = e.getAttribute && e.getAttribute(a); if (v && v.indexOf('試作') >= 0) { const nv = relabelStr(v); if (nv !== v) e.setAttribute(a, nv); } });
+    if (root.nodeType === 3) { fixText(root); return; }
     if (root.nodeType !== 1 && root.nodeType !== 9) return;
     const w = document.createTreeWalker(root, 4);
     const list = []; for (let n = w.nextNode(); n; n = w.nextNode()) if (n.nodeValue.indexOf('試作') >= 0) list.push(n);
-    list.forEach(n => { if (!skip(n)) n.nodeValue = n.nodeValue.replace(/試作/g, '對照'); });
-    const els = root.nodeType === 1 ? [root].concat(Array.from(root.querySelectorAll('[placeholder],[aria-label],[title]'))) : Array.from(root.querySelectorAll('[placeholder],[aria-label],[title]'));
-    els.forEach(e => ['placeholder', 'aria-label', 'title'].forEach(a => { const v = e.getAttribute && e.getAttribute(a); if (v && v.indexOf('試作') >= 0) e.setAttribute(a, v.replace(/試作/g, '對照')); }));
+    list.forEach(fixText);
+    const sel = RELABEL_ATTRS.map(a => '[' + a + ']').join(',');
+    (root.nodeType === 1 ? [root] : []).concat(Array.from(root.querySelectorAll(sel))).forEach(fixAttrs);
   }
   function startRelabel() {
     if (typeof MutationObserver !== 'function' || typeof document === 'undefined' || !document.body) return;
     relabelTrial(document.body);
-    if (document.title && document.title.indexOf('試作') >= 0) document.title = document.title.replace(/試作/g, '對照');
-    new MutationObserver(ms => ms.forEach(m => { if (m.type === 'characterData') relabelTrial(m.target); else m.addedNodes.forEach(n => relabelTrial(n)); })).observe(document.body, { childList: true, subtree: true, characterData: true });
+    if (document.title && document.title.indexOf('試作') >= 0) document.title = relabelStr(document.title);
+    // 抓BUG第8輪 手機組6：程式事後改的 placeholder（打字範例）也要換 → 也看屬性變動
+    new MutationObserver(ms => ms.forEach(m => { if (m.type === 'characterData') relabelTrial(m.target); else if (m.type === 'attributes') relabelTrial(m.target); else m.addedNodes.forEach(n => relabelTrial(n)); }))
+      .observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: RELABEL_ATTRS });
   }
   startRelabel();
   window.__farmTest = { state, exifInfo }; // 本機測試用
