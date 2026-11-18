@@ -1745,5 +1745,27 @@
   renderMirrors();
   state.key = keyStore.get();
   if (state.key) load(); else showLogin();
+
+  /* 第27任 2026-11-18 董事長「試作農民改叫對照農民，主管頁、日報、Word 也一起改」：程式和資料裡照舊叫「試作」（類別值、分頁名稱都不動），
+     只把畫面上看得到的字換成「對照」：畫面每次畫完（MutationObserver），把文字節點和 placeholder／aria-label／title 裡的「試作」換掉。
+     打字欄（textarea、input）裡業務自己打的內容不動。沒有 MutationObserver 的環境（舊瀏覽器、本機假畫面測試）就不換 */
+  function relabelTrial(root) {
+    if (!root || typeof document === 'undefined' || !document.createTreeWalker) return;
+    const skip = n => { for (let p = n.parentNode; p; p = p.parentNode) { if (p.nodeType === 1 && /^(TEXTAREA|SCRIPT|STYLE|INPUT)$/.test(p.tagName)) return true; } return false; };
+    if (root.nodeType === 3) { if (root.nodeValue.indexOf('試作') >= 0 && !skip(root)) root.nodeValue = root.nodeValue.replace(/試作/g, '對照'); return; }
+    if (root.nodeType !== 1 && root.nodeType !== 9) return;
+    const w = document.createTreeWalker(root, 4);
+    const list = []; for (let n = w.nextNode(); n; n = w.nextNode()) if (n.nodeValue.indexOf('試作') >= 0) list.push(n);
+    list.forEach(n => { if (!skip(n)) n.nodeValue = n.nodeValue.replace(/試作/g, '對照'); });
+    const els = root.nodeType === 1 ? [root].concat(Array.from(root.querySelectorAll('[placeholder],[aria-label],[title]'))) : Array.from(root.querySelectorAll('[placeholder],[aria-label],[title]'));
+    els.forEach(e => ['placeholder', 'aria-label', 'title'].forEach(a => { const v = e.getAttribute && e.getAttribute(a); if (v && v.indexOf('試作') >= 0) e.setAttribute(a, v.replace(/試作/g, '對照')); }));
+  }
+  function startRelabel() {
+    if (typeof MutationObserver !== 'function' || typeof document === 'undefined' || !document.body) return;
+    relabelTrial(document.body);
+    if (document.title && document.title.indexOf('試作') >= 0) document.title = document.title.replace(/試作/g, '對照');
+    new MutationObserver(ms => ms.forEach(m => { if (m.type === 'characterData') relabelTrial(m.target); else m.addedNodes.forEach(n => relabelTrial(n)); })).observe(document.body, { childList: true, subtree: true, characterData: true });
+  }
+  startRelabel();
   window.__bossTest = { state, startReview, flagsOf, render, load, logout, measureDue, weekCompare, syncPlayer, stopAudio, mmToday, noSummaryText, planParts }; // 本機測試用（0.4.88 多開幾個給測試；第26任：多給 noSummaryText、planParts，測試整份載入呼叫，不再切原始碼）
 })();
