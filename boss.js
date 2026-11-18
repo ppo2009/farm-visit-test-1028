@@ -345,6 +345,28 @@
       el.dataset.mbound = '1';
       el.addEventListener('click', () => (el.dataset.play ? playAudio(el) : el.dataset.speak ? speak(el) : downloadReport(el)));
     });
+    // 第26任：客戶履歷「✎ 改階段」的「存」
+    root.querySelectorAll('[data-stsave]:not([data-mbound])').forEach(el => { el.dataset.mbound = '1'; el.addEventListener('click', () => saveStageFix(el)); });
+  }
+  /* 第26任 2026-11-18 董事長「業務填錯生長週期，主管後台要能改」：客戶履歷每筆拜訪（結案那筆除外）可以改生長階段 */
+  const STAGE_LIST = ['播種', '發芽', '長大', '開花', '結果', '採收', '採收後', '剖面圖']; // 跟手機、後台同一份 8 個值
+  function stageFixHtml(v) {
+    const cur = String(v.stage || '');
+    return `<details class="stfix"><summary>✎ 改階段</summary><select data-stsel="${esc(v.id)}" aria-label="生長階段">${cur ? '' : '<option value="" selected>— 選階段 —</option>'}${STAGE_LIST.map(s => `<option value="${s}"${s === cur ? ' selected' : ''}>${s}</option>`).join('')}</select> <button class="btn" type="button" data-stsave="${esc(v.id)}">存</button> <span class="sub" data-stmsg="${esc(v.id)}"></span></details>`;
+  }
+  async function saveStageFix(btn) {
+    const id = btn.dataset.stsave, box = btn.parentNode || btn;
+    const sel = box.querySelector('[data-stsel]'), msg = box.querySelector('[data-stmsg]');
+    const st = sel ? sel.value : '';
+    if (!st) { if (msg) msg.textContent = '請先選階段'; return; } // 抓BUG 後台組：原本沒選就送，後台回「資料格式錯誤」看不懂（緬文待譯 D12）
+    btn.disabled = true; if (msg) msg.textContent = '存檔中…';
+    let r; try { r = await api({ action: 'stageFix', visitId: id, stage: st }); } catch (e) { r = null; }
+    btn.disabled = false;
+    if (!r || !r.ok) { if (msg) msg.textContent = (r && r.message) || '沒有存成功，請再試一次'; return; }
+    // 畫面上的這筆跟著改（總覽、完整履歷兩份都改），再重畫履歷
+    [].concat(state.data.visits || [], ...Object.values(state.hist || {})).forEach(v => { if (v && v.id === id) v.stage = r.stage; });
+    // 抓BUG 後台組：存的途中切到別的分頁 → 原本整頁 render() 會洗掉正在打的匯報、任務文字；履歷還在畫面上才重畫履歷，不在就只改資料（回來時照新值畫）
+    if ($('custDetail')) refreshCustDetail();
   }
   /** 點客戶名字：到客戶頁看他的履歷；窄螢幕時履歷在清單下面，自動捲過去 */
   function bindGo(root) {
@@ -1013,7 +1035,7 @@
         <span class="pill ${t.status === '成功' ? 'p-grn' : t.status === '失敗' ? 'p-red' : 'p-yel'}">${esc(t.status)}</span>
         ${t.hasReport ? ` <button class="btn" type="button" data-report="${esc(t.id)}">⬇ 試作報告（Word）</button>` : ''}
         ${t.conclusion ? `<div class="sub pre" style="margin-top:6px">結論／နိဂုံး：${esc(t.conclusion)}</div>` : ''}</div>`).join('')}
-      <div class="timeline">${list.map(v => `<div class="entry">${catPill(v)}${v.stage ? '<span class="pill p-yel">' + esc(v.stage) + '</span> ' : '' /* 0.4.78 生長階段 */}<b>${esc(v.time)}</b>${!dealer && visitWeek(v) ? `　試作第 ${visitWeek(v)} 週／စမ်းသပ် ${visitWeek(v)} ပတ်မြောက်` : ''} <span class="sub">${esc(v.staff)}</span>
+      <div class="timeline">${list.map(v => `<div class="entry">${catPill(v)}${v.stage ? '<span class="pill p-yel">' + esc(v.stage) + '</span> ' : '' /* 0.4.78 生長階段 */}${!dealer && !v.closing && v.id ? stageFixHtml(v) : '' /* 第26任：主管改階段 */}<b>${esc(v.time)}</b>${!dealer && visitWeek(v) ? `　試作第 ${visitWeek(v)} 週／စမ်းသပ် ${visitWeek(v)} ပတ်မြောက်` : ''} <span class="sub">${esc(v.staff)}</span>
         <div class="sub">${v.lat != null && v.lng != null ? `📍 <a href="${esc(v.nav)}" target="_blank" rel="noopener">${v.lat.toFixed(5)}, ${v.lng.toFixed(5)}（導航／လမ်းညွှန်）</a>` : '📍 <span style="color:var(--chili)">無定位／တည်နေရာ မရှိ</span>'}
         　📷 ${v.check ? esc(v.check) : '現場拍攝／ကွင်းထဲတွင် ရိုက်ထားသည်'}</div>
         <div class="box"><div class="photos">${v.photos.length ? v.photos.map(id => `<div class="photo" data-photo="${esc(id)}">載入中…／ဖတ်နေသည်…</div>`).join('') : '<div class="photo">沒有照片／ဓာတ်ပုံ မရှိပါ</div>'}</div>
