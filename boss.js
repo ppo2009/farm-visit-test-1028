@@ -259,7 +259,7 @@
     if (state.pm && monthsBack(6).indexOf(state.pm) < 0) state.pm = '';
     // 客戶頁沒有指定客戶時，顯示篩選結果的第一位（custSelected），不再固定第一位客戶
     $('login').hidden = true; $('app').hidden = false;
-    $('who').textContent = data.name + (data.role === '總經理' ? '（總經理）' : '（主管／မန်နေဂျာ）');
+    $('who').textContent = data.name + (data.role === '總經理' ? '（總經理／အထွေထွေမန်နေဂျာ）' : '（主管／မန်နေဂျာ）');
     // 總經理的帳號分頁管業務和主管（2026-11-12）；分頁名稱換掉後補一次緬文
     const accTab = document.querySelector('.tab[data-tab="accounts"]');
     if (accTab) { accTab.textContent = data.role === '總經理' ? '業務、主管帳號' : '業務帳號'; biDom(accTab.parentNode); }
@@ -645,7 +645,7 @@
   /* ───── 升級版二：連續審核（待確認結案、可疑拜訪） ───── */
   const nfmt = x => (x === '' || x == null ? '' : isFinite(Number(x)) ? Number(x).toLocaleString('en-US') : String(x));
   const msum7 = m => (m ? [m.variety, m.sampleCount !== '' && m.sampleCount != null ? m.sampleCount + (m.sampleUnit || '') : '', m.weightKg !== '' && m.weightKg != null ? m.weightKg + 'kg' : '', m.husk]
-    .filter(x => x !== '' && x != null).join(' ') + (m.days !== '' && m.days != null ? '・' + m.days + ' 天' : '') : '');
+    .filter(x => x !== '' && x != null).join(' ') + (m.days !== '' && m.days != null ? '・' + m.days + ' 天／' + m.days + ' ရက်' : '') : '');
   /** 結案的分類＋試作／推廣結果（例：推廣農民・推廣成功） */
   const closeGroupTxt = c => (c.group ? c.group + (c.trialOutcome ? '・' + (c.trialCat || (c.group === '推廣農民' ? '推廣' : '試作')) + c.trialOutcome : '') : '');
   /** 審核卡上的提醒標籤：客戶已結束、採收量測、分類、結案後還有拜訪（跟舊的待確認清單同一套字） */
@@ -764,7 +764,7 @@
         if (r.closings) setData({ closings: r.closings });
         R.rej = null;
         if (r.ok) { R.rejDraft = null; state.closeMsg = r.already ? '這筆別人已經處理過了，跳下一筆／ဤတစ်ခုကို အခြားသူ လုပ်ဆောင်ပြီးပါပြီ၊ နောက်တစ်ခုသို့ ကျော်မည်' : ok ? `已確認結案：${x.name}／ပိတ်သိမ်းမှု အတည်ပြုပြီး：${x.name}` : `已退回：${x.name}（原因已傳給業務）／ပြန်ပို့ပြီး：${x.name}（အကြောင်းရင်း ဝန်ထမ်းထံ ပို့ပြီး）`; state.closeMsgSeq = state.loadSeq + 1; render(); load(); return; } // closeMsgSeq：緊接著的重讀不清掉訊息（同舊清單 0.4.88 低7）
-        state.closeMsg = '⚠ ' + (r.message || '處理失敗'); render();
+        state.closeMsg = '⚠ ' + (r.message || '處理失敗／မအောင်မြင်ပါ'); render();
       }
     }));
   }
@@ -1009,7 +1009,7 @@
             + `<span>試作／စမ်းသပ်：${esc(c.trial || '—')}${c.start ? '（' + md(c.start) + ' 開始／စတင်）' : ''}</span>`}<span>負責／တာဝန်ခံ：${esc(c.staff || '—')}</span>
         <span>下次回訪／နောက်တစ်ကြိမ် သွားရန်：${c.nextDue ? md(c.nextDue) : '—'} ${s === 'late' ? '<span class="pill p-red">逾期</span>' : s === 'due' ? '<span class="pill p-yel">今天<span class="my">ယနေ့</span></span>' : s === 'stop' ? `<span class="pill">${esc(c.status)}</span>` : ''}</span>
         ${c.lat != null && c.lng != null ? `<a href="https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}" target="_blank" rel="noopener">田區導航 ↗</a>` : ''}</div>
-      ${(state.data.trials || []).filter(t => t.cid === c.id).map(t => `<div class="card" style="margin-bottom:10px"><b>${esc(t.cat)} ${esc(t.id)}</b>：${esc(t.item || '—')}（${esc(t.start || '')} ～ ${esc(t.end || '進行中')}）
+      ${(state.data.trials || []).filter(t => t.cid === c.id).map(t => `<div class="card" style="margin-bottom:10px"><b>${esc(t.cat)} ${esc(t.id)}</b>：${esc(t.item || '—')}（${esc(t.start || '')} ～ ${esc(t.end || '進行中／လုပ်ဆောင်ဆဲ')}）
         <span class="pill ${t.status === '成功' ? 'p-grn' : t.status === '失敗' ? 'p-red' : 'p-yel'}">${esc(t.status)}</span>
         ${t.hasReport ? ` <button class="btn" type="button" data-report="${esc(t.id)}">⬇ 試作報告（Word）</button>` : ''}
         ${t.conclusion ? `<div class="sub pre" style="margin-top:6px">結論／နိဂုံး：${esc(t.conclusion)}</div>` : ''}</div>`).join('')}
@@ -1164,11 +1164,11 @@
     const goal = (x, i) => { const g = (x.plan || [])[i]; return g ? `${esc(g.label)} <b>${Math.round(Math.max(0, Number(g.pct) || 0))}%</b>（${g.done}／${g.target}）` : '—'; };
     const live = ppl.filter(x => !zero(x)), idle = ppl.filter(zero);
     return sel + `<h3>全員對照（${esc(p.label)}）<span class="my">အားလုံး နှိုင်းယှဉ်（${esc(p.label)}）</span></h3><div class="tbl"><table><thead><tr><th>業務</th><th>拜訪</th>${cats.map(c => `<th>${c === '農戶' ? '一般拜訪' : c}</th>`).join('')}<th>拜訪過的客戶</th><th>新增客戶</th><th>試作 開始／完成</th><th>目標 1<span class="my">ပစ်မှတ် ၁</span></th><th>目標 2<span class="my">ပစ်မှတ် ၂</span></th><th>目標 3<span class="my">ပစ်မှတ် ၃</span></th></tr></thead><tbody>
-      ${live.map(x => `<tr><td data-label="業務"><b>${esc(x.name)}</b></td><td data-label="拜訪">${x.visits}</td>${cats.map(c => `<td data-label="${c === '農戶' ? '一般拜訪' : c}">${(x.byCategory || {})[c] || 0}</td>`).join('')}<td data-label="拜訪過的客戶">${x.customersVisited}</td><td data-label="新增客戶">${x.newCustomers}</td><td data-label="試作 開始／完成">${x.trialsStarted}／${x.trialsEnded}</td><td data-label="目標 1">${goal(x, 0)}</td><td data-label="目標 2">${goal(x, 1)}</td><td data-label="目標 3">${goal(x, 2)}</td></tr>`).join('') || `<tr><td colspan="13" class="empty">${ppl.length ? '本月大家都還沒有紀錄<span class="my">ဤလတွင် အားလုံး မှတ်တမ်း မရှိသေးပါ</span>' : '沒有業務帳號<span class="my">ဝန်ထမ်း အကောင့် မရှိပါ</span>'}</td></tr>`}
+      ${live.map(x => `<tr><td data-label="業務／ဝန်ထမ်း"><b>${esc(x.name)}</b></td><td data-label="拜訪／သွားရောက်">${x.visits}</td>${cats.map(c => `<td data-label="${c === '農戶' ? '一般拜訪／ပုံမှန်သွားရောက်' : c}">${(x.byCategory || {})[c] || 0}</td>`).join('')}<td data-label="拜訪過的客戶／သွားခဲ့သော ဖောက်သည်">${x.customersVisited}</td><td data-label="新增客戶／ဖောက်သည်အသစ်">${x.newCustomers}</td><td data-label="試作 開始／完成／စမ်းသပ် စ／ပြီး">${x.trialsStarted}／${x.trialsEnded}</td><td data-label="目標 1／ပစ်မှတ် ၁">${goal(x, 0)}</td><td data-label="目標 2／ပစ်မှတ် ၂">${goal(x, 1)}</td><td data-label="目標 3／ပစ်မှတ် ၃">${goal(x, 2)}</td></tr>`).join('') || `<tr><td colspan="13" class="empty">${ppl.length ? '本月大家都還沒有紀錄<span class="my">ဤလတွင် အားလုံး မှတ်တမ်း မရှိသေးပါ</span>' : '沒有業務帳號<span class="my">ဝန်ထမ်း အကောင့် မရှိပါ</span>'}</td></tr>`}
       </tbody></table></div>${idle.length ? `<p class="sub notask">本月尚無紀錄／ဤလ မှတ်တမ်း မရှိသေး：${idle.map(x => esc(x.name)).join('、')}</p>` : ''}
       <details class="plandet"><summary>每位業務的目標明細<span class="my">ဝန်ထမ်းတစ်ဦးချင်း ပစ်မှတ် အသေးစိတ်</span></summary><ul class="list">${ppl.map(x => `<li><b>${esc(x.name)}</b> ${planHtml(x.plan)}</li>`).join('')}</ul></details>
       <h3>各地區（${esc(p.label)}）<span class="my">ဒေသအလိုက်（${esc(p.label)}）</span></h3><div class="tbl"><table><thead><tr><th>地區</th><th>農民（目前）<span class="my">လယ်သမား（လက်ရှိ）</span></th><th>盤商（目前）<span class="my">ကုန်သည်（လက်ရှိ）</span></th><th>種子商（目前）<span class="my">မျိုးစေ့ဆိုင်（လက်ရှိ）</span></th><th>${Number(state.pm.slice(5))} 月拜訪<span class="my">${Number(state.pm.slice(5))} လ သွားရောက်မှု</span></th><th>進行中的試作（目前）<span class="my">လုပ်ဆောင်ဆဲ စမ်းသပ်မှု（လက်ရှိ）</span></th></tr></thead><tbody>      ${p.regions.map(r => `<tr><td>${esc(r.area)}</td><td>${r.customers}</td><td>${r.dealers}</td><td>${r.seeds || 0}</td><td>${r.visits}</td><td>${r.trialsActive}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">還沒有客戶<span class="my">ဖောက်သည် မရှိသေးပါ</span></td></tr>'}
-      </tbody></table></div><p class="sub">目標在試算表「計劃」分頁設定：月份空白＝每個月都適用；業務空白＝每位業務各自的目標；指標有拜訪次數、拜訪客戶數、新增客戶、開始試作、完成試作、簽約（盤商、種子商結案「已簽約」；還在等主管確認、被退回的不算；類別空白＝兩種都算）。新增客戶的類別填「農戶」時，會另外列出試作、推廣、一般農民各幾位。</p>`;
+      </tbody></table></div><p class="sub">目標在試算表「計劃」分頁設定：月份空白＝每個月都適用；業務空白＝每位業務各自的目標；指標有拜訪次數、拜訪客戶數、新增客戶、開始試作、完成試作、簽約（盤商、種子商結案「已簽約」；還在等主管確認、被退回的不算；類別空白＝兩種都算）。新增客戶的類別填「農戶」時，會另外列出試作、推廣、一般農民各幾位。<span class="my">ပစ်မှတ်ကို Sheet 「စီမံချက်」 စာမျက်နှာတွင် သတ်မှတ်သည် - လ အလွတ်＝လစဉ် အကျုံးဝင်； ဝန်ထမ်း အလွတ်＝ဝန်ထမ်းတစ်ဦးချင်းစီ၏ ပစ်မှတ်； အညွှန်းများမှာ သွားရောက်မှု အကြိမ်၊ သွားခဲ့သော ဖောက်သည်၊ ဖောက်သည်အသစ်၊ စမ်းသပ် စတင်၊ စမ်းသပ် ပြီးဆုံး၊ စာချုပ်ချုပ် (ကုန်သည်/မျိုးစေ့ဆိုင် စာချုပ်ချုပ်ပြီး； စစ်ဆေးဆဲ/ပြန်ပို့ မပါ； အမျိုးအစား အလွတ်＝နှစ်မျိုးလုံး တွက်သည်)။ ဖောက်သည်အသစ်တွင် 「လယ်သမား」 ဖြည့်ပါက စမ်းသပ်၊ မြှင့်တင်၊ ပုံမှန် အရေအတွက် ထပ်ခွဲပြမည်။</span></p>`;
   }
   /* ───── 任務：主管、總經理派給業務（每條跟著一位農民）；總經理另外派給主管（可以不指定客戶）（2026-11-12）─────
      業務在手機打勾；主管在這裡「我的任務」按「完成了」 */
@@ -1318,7 +1318,7 @@
       <div class="body">${briefTexts(b)}
         <div class="stats-box"><b>系統附上的數字</b><div class="pre">${esc(b.stats)}</div></div>
         ${b.reply ? `<div class="answer"><b>總經理回覆</b><span class="sub">（${esc(b.replyBy)} ${esc(String(b.replyAt).slice(5, 16))}）</span><div class="pre">${esc(b.reply)}</div></div>` : ''}
-        ${gm ? `<form class="reply" data-replyform="${esc(b.id)}"><textarea maxlength="1000" placeholder="${b.reply ? '補充回覆給 ' + esc(b.boss) + '（會接在上一則回覆後面，不會蓋掉）' : '回覆給 ' + esc(b.boss) + '（例如：好，下週先處理 A 區）'}" aria-label="回覆">${esc((state.replyDraft || {})[b.id] || '')}</textarea>
+        ${gm ? `<form class="reply" data-replyform="${esc(b.id)}"><textarea maxlength="1000" placeholder="${b.reply ? '補充回覆給 ' + esc(b.boss) + '（會接在上一則回覆後面，不會蓋掉）／' + esc(b.boss) + ' ထံ ဖြည့်စွက် ပြန်စာ（ယခင် ပြန်စာ နောက်တွင် ဆက်တွဲမည်၊ ဖုံးမသွားပါ）' : '回覆給 ' + esc(b.boss) + '（例如：好，下週先處理 A 區）／' + esc(b.boss) + ' ထံ ပြန်စာ（ဥပမာ - ဟုတ်ကဲ့၊ နောက်အပတ် A ဒေသ အရင်လုပ်ပါမည်）'}" aria-label="回覆">${esc((state.replyDraft || {})[b.id] || '')}</textarea>
           <button class="btn" type="submit">送出回覆</button></form>` : ''}
       </div></details>`;
   }
@@ -1327,7 +1327,7 @@
     const list = d.briefs || [];
     if (!d.briefReady) return '<p class="err">試算表還沒有「主管匯報」分頁，請管理員在試算表按「農業CRM → 第一次安裝／升級」一次。<span class="my">Sheet တွင် 「မန်နေဂျာ အစီရင်ခံစာ」 စာမျက်နှာ မရှိသေးပါ၊ စီမံသူကို Sheet တွင် 「စိုက်ပျိုးရေးCRM → ပထမအကြိမ် တပ်ဆင်／အပ်ဒိတ်」 တစ်ကြိမ် နှိပ်ခိုင်းပါ။</span></p>';
     const msg = state.briefMsg ? `<p class="sub" role="status">${esc(state.briefMsg)}</p>` : '';
-    if (gm) return msg + `<h3>全部匯報 <span class="sub">（${list.filter(b => !b.read).length} 份未讀；打開就算看過）</span></h3>` + (list.map(b => briefItem(b, true)).join('') || '<p class="empty">還沒有</p>');
+    if (gm) return msg + `<h3>全部匯報 <span class="sub">（${list.filter(b => !b.read).length} 份未讀；打開就算看過）<span class="my">（${list.filter(b => !b.read).length} ခု မဖတ်ရသေး၊ ဖွင့်ကြည့်လျှင် ဖတ်ပြီးဟု မှတ်မည်）</span></span></h3>` + (list.map(b => briefItem(b, true)).join('') || '<p class="empty">還沒有</p>');
     const bf = state.bf || (state.bf = { text: '', rid: '', sentText: '' });
     // 送出後沒收到確認（sentText 有值）：內容鎖住不能改，只能用同一個送出代號再送一次確認；
     // 要改內容就按「放棄確認、改成新的一份」（舊的那份可能已經送到）（GPT-6.1 R8-05）
@@ -1397,15 +1397,15 @@
       ta.addEventListener('input', () => { (state.replyDraft || (state.replyDraft = {}))[id] = ta.value; });
       f.addEventListener('submit', async ev => {
         ev.preventDefault();
-        if (!ta.value.trim()) { state.briefMsg = '請先寫回覆內容'; render(); return; }
+        if (!ta.value.trim()) { state.briefMsg = '請先寫回覆內容／ပြန်စာ အကြောင်းအရာ အရင်ရေးပါ'; render(); return; }
         f.querySelector('button').disabled = true;
         // 0.4.88 中1：重送判斷改用送出代號 rid（同匯報、派任務）。同一段內容重按用同一個 rid（網路斷掉再按不會變兩段）；內容改了就換新 rid。
         // 原本後台用「跟上一則最後一行一樣」判斷重送，總經理補一句一樣的話會被吞掉、畫面卻寫已回覆
         const text = ta.value.trim(), rr = state.replyRid || (state.replyRid = {});
         if (!rr[id] || rr[id].text !== text) rr[id] = { rid: newRid(), text: text };
         let r;
-        try { r = await api({ action: 'briefReply', id: id, text: text, rid: rr[id].rid }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再試一次（不會變成兩段）' }; }
-        if (r.ok) { setData({ briefs: r.briefs, briefUnread: briefUnreadOf(r) }); delete state.replyDraft[id]; delete rr[id]; state.briefMsg = '已回覆'; } else state.briefMsg = '⚠ ' + (r.message || '回覆失敗');
+        try { r = await api({ action: 'briefReply', id: id, text: text, rid: rr[id].rid }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再試一次（不會變成兩段）／ဆာဗာနှင့် ချိတ်မရပါ၊ ထပ်ကြိုးစားပါ（နှစ်ပိုင်း ဖြစ်မသွားပါ）' }; }
+        if (r.ok) { setData({ briefs: r.briefs, briefUnread: briefUnreadOf(r) }); delete state.replyDraft[id]; delete rr[id]; state.briefMsg = '已回覆'; } else state.briefMsg = '⚠ ' + (r.message || '回覆失敗／ပြန်စာ ပို့မရပါ');
         render();
       });
     });
@@ -1464,7 +1464,7 @@
         <div>帳號／အကောင့်：<code>${esc(pw.account)}</code></div>
         <p class="sub">密碼就是你剛剛打的那一組，請當面或私訊告訴本人。本人只能用這組密碼，不能自己改；要換密碼請在下面按「重設密碼」。<span class="my">စကားဝှက်မှာ သင် ယခုရိုက်ထည့်လိုက်သော စကားဝှက် ဖြစ်သည်၊ လူကိုယ်တိုင် သို့မဟုတ် မက်ဆေ့ချ်ဖြင့် ပြောပြပါ။ သူ ဤစကားဝှက်သာ သုံးနိုင်ပြီး ကိုယ်တိုင် မပြောင်းနိုင်ပါ၊ ပြောင်းလိုလျှင် အောက်တွင် 「စကားဝှက် ပြန်သတ်မှတ်」 နှိပ်ပါ။</span></p>
         <button class="btn" type="button" id="pwDone">知道了</button></div>` : '';
-    const roleSel = gm ? `<select id="aRole" aria-label="角色"><option value="業務"${f.role !== '主管' ? ' selected' : ''}>業務（用手機）</option><option value="主管"${f.role === '主管' ? ' selected' : ''}>主管（用主管網頁）</option></select>` : '';
+    const roleSel = gm ? `<select id="aRole" aria-label="角色"><option value="業務"${f.role !== '主管' ? ' selected' : ''}>業務（用手機）／ဝန်ထမ်း（ဖုန်းဖြင့် သုံး）</option><option value="主管"${f.role === '主管' ? ' selected' : ''}>主管（用主管網頁）／မန်နေဂျာ（မန်နေဂျာ ဝဘ် သုံး）</option></select>` : '';
     const form = `<h3>${gm ? '開通新帳號' : '開通新的業務帳號'}</h3><form class="taskform" id="acctForm" autocomplete="off">
         ${roleSel}
         <input id="aAcct" maxlength="30" placeholder="帳號（英文小寫或數字，例如 tom）／အကောင့်" value="${esc(f.account)}" autocapitalize="none" spellcheck="false" aria-label="帳號">
@@ -1473,7 +1473,7 @@
         <input id="aPw" maxlength="64" placeholder="密碼（6 個字以上，由你給他）／စကားဝှက်" value="${esc(f.password)}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="密碼">
         <button class="btn" type="submit" id="aAdd">${gm ? '開通帳號' : '開通業務帳號'}</button>
         <span class="sub" id="aMsg" aria-live="polite">${esc(state.acctMsg || '')}</span></form>
-        <p class="sub">${gm ? '總經理帳號請在試算表「農業CRM → 開帳號／重設密碼」開。' : '主管帳號由總經理開。<span class="my">မန်နေဂျာ အကောင့်ကို အထွေထွေမန်နေဂျာက ဖွင့်ပေးရမည်။</span>'}</p>`;
+        <p class="sub">${gm ? '總經理帳號請在試算表「農業CRM → 開帳號／重設密碼」開。<span class="my">အထွေထွေမန်နေဂျာ အကောင့်ကို Sheet 「စိုက်ပျိုးရေးCRM → အကောင့် ဖွင့်／စကားဝှက် ပြန်သတ်မှတ်」 တွင် ဖွင့်ပါ။</span>' : '主管帳號由總經理開。<span class="my">မန်နေဂျာ အကောင့်ကို အထွေထွေမန်နေဂျာက ဖွင့်ပေးရမည်။</span>'}</p>`;
     const rows = list.map(a => `<li><b>${esc(a.name)}</b>${a.role === '主管' ? ' <span class="pill p-yel">主管</span>' : ''}<span class="sub">${esc(a.account)}${a.region ? '｜' + esc(a.region) : ''}</span>
         ${a.active ? '' : '<span class="pill">停用</span>'}
         <span class="sub">${a.lastLogin ? '最後登入／နောက်ဆုံး ဝင်ချိန် ' + esc(String(a.lastLogin).slice(5, 16)) : '還沒登入過<span class="my">မဝင်ဖူးသေးပါ</span>'}</span>
@@ -1566,7 +1566,7 @@
     // 0.4.85 中6：後台只給最近 500 筆（slice(-500)）→ 滿 500 筆時說清楚，不讓主管以為全部都在這裡
     const capNote = rows.length >= VISIT_TABLE_MAX ? `<p class="sub">只顯示最近 ${VISIT_TABLE_MAX} 筆，更早的請看客戶履歷或開試算表<span class="my">နောက်ဆုံး ${VISIT_TABLE_MAX} ခုသာ ပြထားသည်၊ ပိုစောသည်များကို ဖောက်သည် မှတ်တမ်း သို့မဟုတ် Sheet တွင် ကြည့်ပါ</span></p>` : '';
     return capNote + `<div class="tbl"><table><thead><tr><th>拜訪時間</th><th>客戶</th><th>業務</th><th>作物狀況</th><th>問題</th><th>下一步</th><th>狀態</th></tr></thead><tbody>
-      ${rows.map(v => `<tr><td data-label="拜訪時間">${esc(v.time)}</td><td data-label="客戶"><a href="javascript:void 0" data-go="${esc(v.cid)}">${esc(v.name)}</a></td><td data-label="業務">${esc(v.staff)}</td><td data-label="作物狀況">${esc(v.crop || v.summary || '—')}</td><td data-label="問題">${esc(v.issue || '—')}</td><td data-label="下一步">${esc(v.next || '—')}</td><td data-label="狀態">${esc(v.status)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">還沒有拜訪紀錄<span class="my">မှတ်တမ်း မရှိသေး</span></td></tr>'}
+      ${rows.map(v => `<tr><td data-label="拜訪時間／သွားသည့်အချိန်">${esc(v.time)}</td><td data-label="客戶／ဖောက်သည်"><a href="javascript:void 0" data-go="${esc(v.cid)}">${esc(v.name)}</a></td><td data-label="業務／ဝန်ထမ်း">${esc(v.staff)}</td><td data-label="作物狀況／သီးနှံ အခြေအနေ">${esc(v.crop || v.summary || '—')}</td><td data-label="問題／ပြဿနာ">${esc(v.issue || '—')}</td><td data-label="下一步／နောက်တစ်ဆင့်">${esc(v.next || '—')}</td><td data-label="狀態／အခြေအနေ">${esc(v.status)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">還沒有拜訪紀錄<span class="my">မှတ်တမ်း မရှိသေး</span></td></tr>'}
       </tbody></table></div>`;
   }
 

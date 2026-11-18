@@ -414,7 +414,7 @@
     const d = /^\d{4}-\d\d-\d\d$/.test(a) && /^\d{4}-\d\d-\d\d$/.test(t) ? Math.round((Date.parse(t) - Date.parse(a)) / 86400000) : NaN;
     if (!isFinite(d)) return { days: null, lv: 'r', text: '還沒拜訪／မသွားရသေး' };
     const n = Math.max(0, d), lv = n >= 10 ? 'r' : n >= 5 ? 'y' : 'g'; // 手機時間比後台慢、最後拜訪日看起來在明天：當 0 天
-    return { days: n, lv, text: `距上次拜訪 ${n} 天・${AGE_WORD[lv]}／ယခင်သွားရောက်မှုမှ ${n} ရက်` };
+    return { days: n, lv, text: `距上次拜訪 ${n} 天・${AGE_WORD[lv]}／ယခင်သွားရောက်မှုမှ ${n} ရက်・${{ r: 'မသွားဖြစ်သည်မှာ ကြာပြီ', y: 'ပြန်သွားရန် နီးပြီ', g: 'မကြာသေးမီက သွားပြီး' }[lv]}` };
   }
   /** 0.4.84（BUG清單_0.4.83 低1）：最後拜訪日＝後台 lastVisit 跟這支手機自己帳號的拜訪（myVisits，用緬甸日期 mmDay）取比較新的那天。
       有打字、錄音的拜訪，後台要等背景翻譯（最多約 10 分鐘）才更新 lastVisit；這段時間只看後台會還是紅字 */
@@ -933,7 +933,7 @@
     const head = o.showAddr ? `<p class="sub">${addr ? '📍 ' + esc(addr) : ''}${r.address ? `${addr ? '　' : '📍 '}${esc(r.address)}` : ''}${r.phone ? `　📞 ${esc(String(r.phone).replace(/^'/, ''))}` : ''}</p>` : '';
     const tl = o.oldFirst ? (r.trials || []).slice().reverse() : (r.trials || []); // 0.4.77 種植資料頁：由舊到新（從頭到尾）
     const trials = tl.map(t => `<li><span class="pill ${TRIAL_PILL[t.status] || 'wait'}">${esc(t.status || '—')}</span> <b>${esc(catBi(t.cat || '試作'))}</b>：${esc(cropText(t.item || '（未填品項）'))}${t.crop ? '（' + esc(cropText(t.crop)) + '）' : ''}`
-      + `<br><small>${esc(t.start || '?')}～${esc(t.end || (t.status === '進行中' ? '進行中' : '?'))}${t.yield !== '' ? `・產量 အထွက် ${esc(thou(t.yield))} ${esc(t.yieldUnit)}` : ''}${t.comment ? '・農民評價 သုံးသပ်ချက်：' + esc(t.comment) : ''}</small>`
+      + `<br><small>${esc(t.start || '?')}～${esc(t.end || (t.status === '進行中' ? '進行中 လုပ်ဆောင်ဆဲ' : '?'))}${t.yield !== '' ? `・產量 အထွက် ${esc(thou(t.yield))} ${esc(t.yieldUnit)}` : ''}${t.comment ? '・農民評價 သုံးသပ်ချက်：' + esc(t.comment) : ''}</small>`
       + `${t.reason ? `<br><small>失敗原因 မအောင်မြင်သည့် အကြောင်းရင်း：${esc(t.reason)}</small>` : ''}${t.conclusion ? `<br><small>結論 နိဂုံး：${esc(t.conclusion)}</small>` : ''}</li>`).join('');
     const raw = r.visits || [];
     // 0.4.81 董事長「結案通過主管審核過，才能在種植資料顯示」（只有種植資料頁 closeFirst）：待確認、已退回那筆的結案內容先藏起來，拜訪本身照列
@@ -1080,7 +1080,7 @@
     if (has.trial) {
       const n = (cat, kind) => cur.trialList.filter(t => (t.cat === '推廣' ? '推廣' : '試作') === cat && t.kind === kind).length;
       tr.className = 'two';
-      tr.innerHTML = ['試作', '推廣'].map(c => `<span>${c} 開始 ${n(c, '開始')}／完成 ${n(c, '完成')}</span>`).join('');
+      tr.innerHTML = ['試作', '推廣'].map(c => `<span>${c} 開始 ${n(c, '開始')}／完成 ${n(c, '完成')}<span class="my">${{ 試作: 'စမ်းသပ်စိုက်ပျိုး', 推廣: 'မြှင့်တင်ရောင်းချ' }[c]} စတင် ${n(c, '開始')}／ပြီးဆုံး ${n(c, '完成')}</span></span>`).join('');
       lab.innerHTML = '試作、推廣 開始／完成<br>စမ်းသပ်・မြှင့်တင် စတင်／ပြီးဆုံး';
     } else { tr.className = ''; lab.innerHTML = '試作 開始／完成<br>စမ်းသပ် စတင်／ပြီးဆုံး'; } // 數字照舊由 renderHome 寫
     [['new', nb], ['trial', tb]].forEach(([k, box]) => {
@@ -1209,7 +1209,7 @@
     const plan = homeOld ? [] : (h && h.plan) || [];
     const oldWeek = !!(today && h && h.today && weekOf(h.today) && weekOf(today) && weekOf(h.today) !== weekOf(today)); // 舊後台沒有 h.today：照舊
     const staleWeekly = p => oldWeek && p.period === '本週';
-    const partsTxt = p => (p.parts ? '<br><small class="planparts">' + ['試作農民', '推廣農民', '一般農民'].map(k => `${esc(k.replace('農民', ''))} ${esc(String(p.parts[k] || 0))}`).join('・') + '</small>' : '');
+    const partsTxt = p => (p.parts ? '<br><small class="planparts">' + ['試作農民', '推廣農民', '一般農民'].map(k => `${esc(k.replace('農民', ''))} ${esc(String(p.parts[k] || 0))}`).join('・') + '<span class="my">' + [['試作農民', 'စမ်းသပ် လယ်သမား'], ['推廣農民', 'မြှင့်တင် လယ်သမား'], ['一般農民', 'ပုံမှန် လယ်သမား']].map(([k, my]) => `${my} ${esc(String(p.parts[k] || 0))}`).join('・') + '</span></small>' : '');
     return plan.map(p => staleWeekly(p) ? `<li class="plan"><span>${esc(p.label)}<br><small>${esc(p.period)}　連上網路後更新／အင်တာနက်ချိတ်ပြီးမှ ပြမည်</small></span><span class="pill wait">—</span></li>` : `<li class="plan"><span>${esc(p.label)}<br><small>${esc(p.period)}　${p.done}／${p.target}</small>${partsTxt(p)}
       <span class="bar"><i style="width:${Math.max(0, Math.min(100, p.pct))}%"></i></span></span>${p.done >= p.target ? '<span class="pill ok">達成 ပြည့်မီ</span>' : `<span class="pill wait">${esc(String(p.done))}／${esc(String(p.target))}</span>`}</li>`).join('') /* 0.4.82 董事長：不顯示 %，只留 done／target；進度條保留 */
       || `<li class="empty">${homeOld ? '這個月的目標要連上網路後才會更新／ဤလ ပစ်မှတ်သည် အင်တာနက် ချိတ်ပြီးမှ အပ်ဒိတ်ဖြစ်မည်' : h && h.plan ? '這個月沒有訂目標／ဤလ ပစ်မှတ် မရှိ' : '連上網路後會顯示／အင်တာနက်ချိတ်ပြီးမှ ပြမည်'}</li>`; // 舊版留下的首頁資料沒有計劃欄，不能說成沒有目標（第五輪自抓）
@@ -2977,7 +2977,7 @@
     ctx.fillStyle = '#fff';
     lines.forEach((l, i) => ctx.fillText(l, fs * .6, h - fs * .5 - (lines.length - 1 - i) * fs * 1.35));
     const blob = await new Promise(res => cv.toBlob(res, 'image/jpeg', 0.75));
-    if (!blob) throw new Error('壓縮失敗');
+    if (!blob) throw new Error('壓縮失敗／ပုံချုံ့ခြင်း မအောင်မြင်');
     return { blob, check, source };
   }
 

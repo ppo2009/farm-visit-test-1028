@@ -25,14 +25,14 @@
       // R18（GPT 03）：原本 fn 的承諾失敗沒人接——前面已寫的照樣提交、呼叫的人以為成功（寫一半）。
       // 改成：fn 同步丟出或承諾失敗 → 立刻中止交易（這個交易裡已寫的全部作廢），把錯誤傳出去
       let out, failed = null;
-      const fail = e => { if (failed) return; failed = e || new Error('存檔失敗'); try { t.abort(); } catch (_) { /* 已經結束或中止 */ } };
+      const fail = e => { if (failed) return; failed = e || new Error('存檔失敗／သိမ်းဆည်းမှု မအောင်မြင်'); try { t.abort(); } catch (_) { /* 已經結束或中止 */ } };
       let p0;
       try { p0 = Promise.resolve(fn(s)); } catch (e) { p0 = Promise.reject(e); }
       p0.then(v => { out = v; }, fail);
       t.oncomplete = () => { db.close(); if (failed) reject(failed); else resolve(out); };
       t.onerror = () => { db.close(); reject(failed || t.error); };
       // 手機空間不足時交易會被中止（abort），沒有這行畫面會一直卡在儲存中（2026-11-11 審查發現）
-      t.onabort = () => { db.close(); reject(failed || t.error || new Error('存檔被中止')); };
+      t.onabort = () => { db.close(); reject(failed || t.error || new Error('存檔被中止／သိမ်းဆည်းမှု ရပ်ဆိုင်းသွားသည်')); };
     });
   }
   const reqP = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
@@ -51,7 +51,7 @@
       catch (e) { err = e; try { t.abort(); } catch (x) { /* 已經結束 */ } }
       t.oncomplete = () => { db.close(); if (err) reject(err); else resolve(out); };
       t.onerror = () => { db.close(); reject(err || t.error); };
-      t.onabort = () => { db.close(); reject(err || t.error || new Error('存檔被中止')); };
+      t.onabort = () => { db.close(); reject(err || t.error || new Error('存檔被中止／သိမ်းဆည်းမှု ရပ်ဆိုင်းသွားသည်')); };
     });
   }
 
@@ -292,7 +292,7 @@
       const verThenGo = () => {
         if (expectVer === undefined || expectVer === null) { go(); return; }
         readLookupVer(visits, meta, ver => {
-          if (ver !== expectVer) { const e = new Error('結案檢查之後資料剛更新，這次沒有存'); e.code = 'STALE'; fail(e); return; }
+          if (ver !== expectVer) { const e = new Error('結案檢查之後資料剛更新，這次沒有存／ပိတ်သိမ်းမှု စစ်ဆေးပြီးနောက် ဒေတာ အသစ်ပြောင်းသွား၍ ယခု မသိမ်းရသေးပါ'); e.code = 'STALE'; fail(e); return; }
           go();
         }, fail);
       };
@@ -301,7 +301,7 @@
       rc.onerror = () => fail(rc.error);
       rc.onsuccess = () => {
         const c = rc.result;
-        if (c && c.deviceKey && c.account && String(c.account) !== String(expectOwner)) { const e = new Error('換了別人登入，這次沒有存'); e.code = 'OWNER'; e.account = String(c.account); fail(e); return; }
+        if (c && c.deviceKey && c.account && String(c.account) !== String(expectOwner)) { const e = new Error('換了別人登入，這次沒有存／အခြားသူ ဝင်ထား၍ ယခု မသိမ်းရသေးပါ'); e.code = 'OWNER'; e.account = String(c.account); fail(e); return; }
         verThenGo();
       };
     }),
@@ -370,9 +370,9 @@
         signal: ctrl ? ctrl.signal : undefined
       });
       if (!res.ok) { const e = new Error('HTTP ' + res.status); e.badResponse = true; throw e; }
-      try { return await res.json(); } catch (e) { const e2 = new Error('伺服器回應不是 JSON'); e2.badResponse = true; throw e2; }
+      try { return await res.json(); } catch (e) { const e2 = new Error('伺服器回應不是 JSON／ဆာဗာ အဖြေသည် JSON မဟုတ်ပါ'); e2.badResponse = true; throw e2; }
     } catch (e) {
-      if (timedOut) { const e3 = new Error('逾時'); e3.timeout = true; throw e3; }
+      if (timedOut) { const e3 = new Error('逾時／အချိန်ကုန်'); e3.timeout = true; throw e3; }
       throw e;
     } finally {
       if (timer) clearTimeout(timer);
@@ -537,7 +537,7 @@
   const LOGIN_LOST_MSG = '登入已失效，回首頁重新登入後會自動補傳／ဝင်ရောက်မှု သက်တမ်းကုန်၊ ပင်မစာမျက်နှာသို့ ပြန်သွားပြီး ပြန်ဝင်လျှင် အလိုအလျောက် တင်ပေးမည်'; // 0.4.91 中4
   const LOGIN_LOST_TAIL = '。沒上傳的資料還在手機裡，重新登入後會自動補傳。／ပြန်ဝင်ပြီးလျှင် ကျန်သော မှတ်တမ်း တင်မည်။'; // 0.5.19 A1：跟 app.js syncNow 給 onLoginExpired 的字一樣
   /** 0.5.19 A1（第18任抓BUG）：確認是同一把金鑰登入失效 → 記在手機裡（loginLost），這一輪停下；背景程式之後看到就不再用這把金鑰整包重送照片錄音（原本只有網頁打開時才記） */
-  async function noteLoginLost(cfg, msg) { await Store.setMeta('loginLost', { key: cfg.deviceKey, msg: (msg || '登入已失效') + LOGIN_LOST_TAIL }); }
+  async function noteLoginLost(cfg, msg) { await Store.setMeta('loginLost', { key: cfg.deviceKey, msg: (msg || '登入已失效／ဝင်ရောက်မှု သက်တမ်းကုန်ပြီ') + LOGIN_LOST_TAIL }); }
   const SYNC_WARN = '同步資料寫回手機失敗（可能空間不足），稍後再同步／စင့်ခ်ဒေတာ ဖုန်းထဲ ပြန်သိမ်းမရပါ (နေရာ မလောက်ခြင်း ဖြစ်နိုင်)၊ နောက်မှ ထပ်စင့်ခ်လုပ်မည်'; // R12-01／R13-01
   const READ_FAIL_MSG = '有拜訪的照片或錄音暫時讀不到（是手機裡的檔案，不是網路問題），稍後自動再試；連續 3 次讀不到會先送文字和其他資料／ဓာတ်ပုံ သို့မဟုတ် အသံ ယာယီ ဖတ်မရသေးပါ (ဖုန်းထဲက ဖိုင်ပြဿနာ၊ အင်တာနက် မဟုတ်ပါ)၊ နောက်မှ ထပ်စမ်းမည်။ ၃ ကြိမ်ဆက်တိုက် မရလျှင် စာနှင့် အခြားဒေတာ အရင်ပို့မည်';
   let running = false;
