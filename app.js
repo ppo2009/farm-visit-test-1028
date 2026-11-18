@@ -938,7 +938,7 @@
     const short = t => { const s = String(t || ''); return s.length > 80 ? s.slice(0, 80) + '…' : s; };
     const li = STAGES.map(st => { const es = by[st];
       return `<li class="${es.length ? 'has' : ''}"><span class="gst">${st} <span class="my">${STAGE_MY[st]}</span></span>`
-        + (es.length ? es.map(({ v, guessed }) => `<div class="gent"><b>${esc(String(v.time || '').slice(0, 10))}</b>${guessed ? '<small>（推算 ခန့်မှန်း）</small>' : ''}${v.typed || v.text ? '　' + esc(short(v.typed || v.text)) : v.closing ? '　' + esc(short(v.closing)) : '' /* 第27任 董事長「生長過程由業務填寫緬文即可，不用翻成中文」：業務打的原文優先 */}`
+        + (es.length ? es.map(({ v, guessed }) => `<div class="gent"><b>${esc(String(v.time || '').slice(0, 10))}</b>${guessed ? '<small>（推算 ခန့်မှန်း）</small>' : ''}${v.text ? '　' + esc(short(v.text)) : v.closing ? '　' + esc(short(v.closing)) : '' /* 第27任 董事長「生長過程由業務填寫緬文即可，不用翻成中文」：後台 myHistory_ 的 text 已是原文（抓BUG第7輪：改回用 text，typed 沒有錄音逐字稿） */}`
           + `${(v.photos || []).length ? `<div class="pgrid">${v.photos.map((id, i) => `<button type="button" class="btn2 small" data-hph="${esc(id)}">📷 照片 ${i + 1}／ဓာတ်ပုံ ${i + 1}</button>`).join('')}</div>` : ''}</div>`).join('')
           : '<div class="gent"><small>還沒有照片／ဓာတ်ပုံ မရှိသေး</small></div>') + '</li>'; }).join('');
     return `<h3>生長過程／ကြီးထွားမှု အဆင့်ဆင့်</h3>${noPd ? `<p class="sub">有 ${noPd} 筆拜訪沒標階段、也沒有種植日期，無法推算／အဆင့်နှင့် စိုက်ရက် မပါသည့် မှတ်တမ်းများ ရှိ၍ မခန့်မှန်းနိုင်ပါ</p>` : ''}${early ? `<p class="sub">有 ${early} 筆拜訪早於種植日期（上一季），不列在生長過程／စိုက်ရက်မတိုင်မီ (ယခင်ရာသီ) မှတ်တမ်းများ ရှိ၍ ကြီးထွားမှု အဆင့်ဆင့်တွင် မထည့်ပါ</p>` : ''}${badDay ? `<p class="sub">有 ${badDay} 筆拜訪日期不明，無法推算階段／ရက်စွဲ မသိသည့် မှတ်တမ်းများ ရှိ၍ အဆင့် မခန့်မှန်းနိုင်ပါ</p>` : ''}<ol class="growtl">${li}</ol>`;
@@ -2142,11 +2142,12 @@
   /** ① 進度卡內容（top＝標題＋多久沒回訪＋等確認）：最後拜訪、下次回訪、進行中的試作、最近一次拜訪（更早的收進「看更早的」） */
   function progressCardHtml(c, trials, recent, online, top) {
     // 0.5.16 第2輪 低：週數跟「我的試作」同一把尺（緬甸日期相減的天數 ÷ 7），原本用手機現在時刻減 UTC 零點，第 7 天 06:30 後兩邊差一週
-    const wk = s => { const d = Date.parse(String(s || '').slice(0, 10)); return isFinite(d) ? Math.max(1, Math.ceil(Math.round((Date.parse(mmDay(0)) - d) / 86400000) / 7)) : null; };
+    // 第27任 2026-11-18 董事長「打卡畫面第 N 週要改成天」：試作／推廣開始到今天第幾天（開始當天＝第 0 天，同我的試作、主管頁的算法）
+    const wk = s => { const d = Date.parse(String(s || '').slice(0, 10)); return isFinite(d) ? Math.max(0, Math.round((Date.parse(mmDay(0)) - d) / 86400000)) : null; };
     // 0.4.44 進度小卡：作物品種代碼搬到卡片下面一行（renderCropSum），卡片只留最後拜訪、下次回訪
     const head = [c.lastVisit ? `最後拜訪 နောက်ဆုံး သွားရောက်မှု <span class="nw">${esc(c.lastVisit)}</span>` : '', c.nextDue ? `下次回訪 နောက်တစ်ကြိမ် သွားရန် <span class="nw">${esc(c.nextDue)}</span>` : ''].filter(Boolean).join('｜'); // 低#9（第8任）：日期不拆兩行
     // R24-3（GPT）：後台讀不到結案分頁時 held 是 null → 進度卡也寫「結案狀態未知」，不說進行中、不算週數（跟「我的試作」一致）
-    const tr = trials.map(t => t && t.held === null ? `<li><b>${esc(t.cat)}：結案狀態未知，請洽主管</b>：${esc(cropText(t.item || '（未填品項）'))}<span class="my">${esc(t.cat)} - ပိတ်သိမ်းမှု အခြေအနေ မသိ၊ မန်နေဂျာကို မေးပါ - ${esc(cropText(t.item || '（未填品項）'))}</span></li>` : `<li><b>${esc(t.cat)}進行中</b>：${esc(cropText(t.item || '（未填品項）'))}${t.start ? `，${esc(t.start)} 開始${wk(t.start) ? `（第 ${wk(t.start)} 週）` : ''}` : ''}<span class="my">${esc(t.cat)} လုပ်ဆောင်ဆဲ - ${esc(cropText(t.item || '（未填品項）'))}${t.start ? `၊ ${esc(t.start)} စတင်${wk(t.start) ? `（${wk(t.start)} ပတ်မြောက်）` : ''}` : ''}</span></li>`).join('');
+    const tr = trials.map(t => t && t.held === null ? `<li><b>${esc(t.cat)}：結案狀態未知，請洽主管</b>：${esc(cropText(t.item || '（未填品項）'))}<span class="my">${esc(t.cat)} - ပိတ်သိမ်းမှု အခြေအနေ မသိ၊ မန်နေဂျာကို မေးပါ - ${esc(cropText(t.item || '（未填品項）'))}</span></li>` : `<li><b>${esc(t.cat)}進行中</b>：${esc(cropText(t.item || '（未填品項）'))}${t.start ? `，${esc(t.start)} 開始${wk(t.start) != null ? `（第 ${wk(t.start)} 天）` : ''}` : ''}<span class="my">${esc(t.cat)} လုပ်ဆောင်ဆဲ - ${esc(cropText(t.item || '（未填品項）'))}${t.start ? `၊ ${esc(t.start)} စတင်${wk(t.start) != null ? `（${wk(t.start)} ရက်မြောက်）` : ''}` : ''}</span></li>`).join('');
     const vs = recent.map(v => `<li>${esc(v.time)}｜${esc(v.staff)}｜${esc(CAT_LABEL(v.cat))}${v.text ? `：${esc(v.text).replace(/\n/g, '<br>') /* 第26任：業務原文的換行、「🎤 逐字稿」另起一行照樣顯示 */}` : ''}${v.textMy && v.textMy !== v.text ? `<span class="my">${esc(v.textMy)}</span>` : ''}${v.plantFail ? `<br><span class="pill late">種植失敗 စိုက်ပျိုးမှု မအောင်မြင်</span> ${esc(v.plantFail)}` : ''}${v.closing ? `<br>${esc(v.closing)}` : ''}${(v.photos || []).length ? `<div class="pgrid">${v.photos.map((id, i) => `<button type="button" class="btn2 small" data-hph="${esc(id)}">📷 照片 ${i + 1}／ဓာတ်ပုံ ${i + 1}</button>`).join('')}</div>` : ''}</li>`).join(''); // 第26任：上次拜訪的照片（董事長「這邊要有上次拜訪的圖片」）
     // 0.4.44 只露最近一次拜訪，其他收進「看更早的」
     const vItems = vs ? vs.split('</li>').filter(Boolean).map(x => x + '</li>') : [];
@@ -2851,9 +2852,9 @@
     if (state.trialMode === 'start') return ['例：今天開始試作，A 肥料每英畝 2 包，旁邊留一塊不施當對照，秧苗高約 15 公分', 'ဥပမာ - ယနေ့ စမ်းသပ် စတင်၊ A မြေသြဇာ တစ်ဧက ၂ အိတ်၊ ဘေးတွင် နှိုင်းယှဉ်ကွက် ထား၊ ပျိုးပင်အမြင့် ၁၅ စင်တီခန့်'];
     if (state.trialMode === 'end') return ['例：收割了，產量每英畝 60 籃，比對照區多 10 籃，農民願意明年繼續用', 'ဥပမာ - ရိတ်သိမ်းပြီး၊ တစ်ဧက ၆၀ တောင်း၊ နှိုင်းယှဉ်ကွက်ထက် ၁၀ တောင်း ပိုထွက်၊ နောက်နှစ် ဆက်သုံးချင်သည်'];
     if ((state.cat === '試作' || state.cat === '推廣') && t && wk) {
-      if (wk <= 3) return [`例：第 ${wk} 週，株高 30 公分，葉色比對照區綠，沒有病蟲害`, `ဥပမာ - ${wk}ပတ်မြောက်၊ အမြင့် ၃၀ စင်တီ၊ အရွက်စိမ်း၊ ပိုးမွှား မရှိ`];
-      if (wk <= 7) return [`例：第 ${wk} 週，分蘗變多，株高 55 公分，農民很滿意`, `ဥပမာ - ${wk}ပတ်မြောက်၊ အပင်ပွားများ၊ အမြင့် ၅၅ စင်တီ၊ လယ်သမား ကျေနပ်`];
-      return [`例：第 ${wk} 週，抽穗整齊，一穗約 120 粒，預計兩週後收割`, `ဥပမာ - ${wk}ပတ်မြောက်၊ အနှံညီ၊ တစ်နှံ ၁၂၀ စေ့ခန့်၊ ၂ ပတ်အတွင်း ရိတ်မည်`];
+      if (wk <= 3) return [`例：第 ${days} 天，株高 30 公分，葉色比對照區綠，沒有病蟲害`, `ဥပမာ - ${wk}ပတ်မြောက်၊ အမြင့် ၃၀ စင်တီ၊ အရွက်စိမ်း၊ ပိုးမွှား မရှိ`];
+      if (wk <= 7) return [`例：第 ${days} 天，分蘗變多，株高 55 公分，農民很滿意`, `ဥပမာ - ${wk}ပတ်မြောက်၊ အပင်ပွားများ၊ အမြင့် ၅၅ စင်တီ၊ လယ်သမား ကျေနပ်`];
+      return [`例：第 ${days} 天，抽穗整齊，一穗約 120 粒，預計兩週後收割`, `ဥပမာ - ${wk}ပတ်မြောက်၊ အနှံညီ၊ တစ်နှံ ၁၂၀ စေ့ခန့်၊ ၂ ပတ်အတွင်း ရိတ်မည်`];
     }
     if (state.cat === '推廣') return ['例：介紹 A 肥料給 3 位鄰居，大家覺得價格可以，下次帶報價單', 'ဥပမာ - အိမ်နီး ၃ ဦးကို မိတ်ဆက်၊ ဈေးလက်ခံ၊ နောက်တစ်ခါ ဈေးစာရင်း ယူလာမည်'];
     return ['例：作物長得正常，農民問什麼時候追肥，下次回訪帶施肥表', 'ဥပမာ - သီးနှံ ပုံမှန်၊ မြေသြဇာ ထပ်ကျွေးချိန် မေး၊ နောက်တစ်ခါ ဇယား ယူလာမည်'];
@@ -3196,7 +3197,7 @@
     state.thumbUrls = state.photos.map(p => p.thumbUrl || (p.thumbUrl = URL.createObjectURL(p.blob)));
     prev.forEach(u => { if (state.thumbUrls.indexOf(u) < 0) URL.revokeObjectURL(u); }); // 刪掉的照片、換客戶清掉的照片才釋放
     $('thumbs').innerHTML = state.photos.map((p, i) => `<div class="thumb"><img src="${state.thumbUrls[i]}" alt="照片 ${i + 1} ဓာတ်ပုံ ${i + 1}"><span class="tag">${p.source === '相簿' ? '相簿 ဓာတ်ပုံ' : '相機 ကင်မရာ'}</span><button type="button" class="del" data-i="${i}" aria-label="刪掉這張 ဤပုံကို ဖျက်မည်">×</button></div>`).join('');
-    $('thumbs').querySelectorAll('.del').forEach(b => b.addEventListener('click', () => { state.photos.splice(Number(b.dataset.i), 1); renderThumbs(); refreshSave(); }));
+    $('thumbs').querySelectorAll('.del').forEach(b => b.addEventListener('click', () => { if (state.saving) { toast('存檔中，請等存好再刪照片'); return; } state.photos.splice(Number(b.dataset.i), 1); renderThumbs(); refreshSave(); })); // 抓BUG第7輪 手機組1：存檔中（等定位）不能刪照片
     $('photoBtn').classList.toggle('done', state.photos.some(p => p.source === '相機'));
     const ag = typeof document !== 'undefined' && document.getElementById && document.getElementById('againBtn'); if (ag) ag.hidden = !state.photos.some(p => p.source === '相機'); // 第24任 第六批⑮
     $('albumBtn').classList.toggle('done', state.photos.some(p => p.source === '相簿'));
@@ -3404,7 +3405,7 @@
     // 抓BUG第3輪（第24任本機實走：盤商簽約只差簽約內容，卻同時列「至少做一樣」，業務以為還要拍照）：
     //   結案／盤商結案／已簽約這條路，結案內容填好本身就算有內容（hasContent 那串）→ 結案還有問題時不另列「至少做一樣」，等結案填好仍沒內容才會出現
     const closeFillsContent = (state.cat === '結案' || !!state.dealerClose || (typeof dealerSignOn === 'function' && dealerSignOn())) && !!closeProblem();
-    const allP = typeof saveProblems === 'function' && sel && !ok && !(state.saving || state.rec || state.recBusy || state.recStarting || state.busyPhotos) ? saveProblems(nameOk, { signNeed, noContent: !(isNew || hasContent) && !closeFillsContent }) : []; // 抽函式跑的舊測試沒有 saveProblems
+    const allP = typeof saveProblems === 'function' && sel && !ok && !(state.saving || state.rec || state.recBusy || state.recStarting || state.busyPhotos) ? saveProblems(nameOk, { signNeed, noContent: !(isNew || hasContent) && !closeFillsContent && !(typeof photoProblem === 'function' && photoProblem()) }) : []; // 抓BUG第7輪 手機組2：已列「一定要有照片」就不再列「錄音、打字至少做一樣」（互相矛盾） // 抽函式跑的舊測試沒有 saveProblems
     const sh2 = $('saveHint');
     if (sh2 && sh2.style) sh2.style.whiteSpace = allP.length > 1 ? 'pre-line' : '';
     if (allP.length > 1 && sh2) sh2.textContent = allP.map((p, i) => `${i + 1}. ${p}`).join('\n');
@@ -3681,7 +3682,7 @@
     const account = own ? own.account : cfgNow.account;
     const closeExpectVer = state.cat === '結案' && !state.dealerClose && !dealerSignOn() && typeof Store !== 'undefined' && Store.lookupVersion && state.closeVer ? state.closeVer : undefined; // 寫入時再比一次（R37-1）
     // ── 以下是最後一次等待之後：再查一次錄音照片、試作（R30-3、0518R1-1），然後確認、組資料、寫入，中間不再等待 ──
-    why = trialChangedReason(mode0, trial0, state) || saveBusyReason(state) || (state.trialMode === 'end' && typeof trialProblem === 'function' ? trialProblem() : '');
+    why = trialChangedReason(mode0, trial0, state) || saveBusyReason(state) || (state.trialMode === 'end' && typeof trialProblem === 'function' ? trialProblem() : '') || (typeof photoProblem === 'function' ? photoProblem() : ''); // 抓BUG第7輪 手機組1：等定位那幾秒把照片刪光，等完再檢查一次
     if (why) { saveStop(why); return; }
     if (!askSaveConfirm()) { refreshSave(); return; }
     const isNew = $('farmer').value === '__new', now = Date.now();
@@ -3972,7 +3973,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261118-215318'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261118-223642'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');

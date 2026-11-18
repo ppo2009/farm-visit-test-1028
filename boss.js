@@ -291,14 +291,17 @@
   function staffColorMap() {
     if (scCache.d === state.data && scCache.gen === state.dataGen) return scCache.m;
     const d = state.data || {}, set = d.staffColors || {}, pal = (d.colorChoices && d.colorChoices.length ? d.colorChoices : STAFF_COLORS_DEF);
+    // 抓BUG第7輪 主管組1：原本按帳號排序、依名次從「沒被手選的色」挑 → 手選一位或新開帳號，其他自動配色的人全部換色。
+    //   改成穩定：照試算表帳號列的順序（新帳號排最後），每人從「帳號算出的起點」往後找第一個沒被手選、也沒被前面的人配走的色；只有撞到的人會移
     const people = [];
-    (d.staffList || []).concat(d.salesAccounts || [], d.staffOff || []).forEach(x => { const acct = String(x.account || '').toLowerCase(); if (x.name && acct && x.role !== '主管' && !people.some(p => p.acct === acct)) people.push({ acct, name: String(x.name) }); });
-    people.sort((a, b) => a.acct.localeCompare(b.acct));
-    const used = new Set(Object.values(set)), m = {}; let i = 0;
+    (d.salesAccounts || []).concat(d.staffList || []).forEach(x => { const acct = String(x.account || '').toLowerCase(); if (x.name && acct && x.role !== '主管' && !people.some(p => p.acct === acct)) people.push({ acct, name: String(x.name) }); });
+    const used = new Set(Object.values(set)), m = {};
+    const start = acct => { let h = 0; for (let k = 0; k < acct.length; k++) h = (h * 31 + acct.charCodeAt(k)) % 9973; return h % pal.length; };
     people.forEach(p => {
       let c = set[p.acct];
-      if (!c) { const free = pal.filter(x => !used.has(x)); c = free.length ? free[i++ % free.length] : pal[i++ % pal.length]; used.add(c); }
-      m[p.name] = c; m['@' + p.acct] = c;
+      if (!c) { const s0 = start(p.acct); for (let k = 0; k < pal.length && !c; k++) { const x = pal[(s0 + k) % pal.length]; if (!used.has(x)) c = x; } c = c || pal[s0]; used.add(c); }
+      // 抓BUG第7輪 主管組3：同名（試算表手改姓名）時名字只能對到一位；帳號頁改用 '@帳號' 查，不受影響
+      if (!(p.name in m)) m[p.name] = c; m['@' + p.acct] = c;
     });
     scCache = { d: state.data, gen: state.dataGen, m };
     return m;
@@ -1608,7 +1611,7 @@
   }
   /** 第27任：帳號頁每位業務一排色票（點了就存）；「自動」＝拿掉自己選的，由系統配色 */
   function colorPickHtml(a) {
-    const acct = String(a.account || '').toLowerCase(), set = (state.data.staffColors || {})[acct] || '', cur = staffColorOf(a.name);
+    const acct = String(a.account || '').toLowerCase(), set = (state.data.staffColors || {})[acct] || '', cur = staffColorMap()['@' + acct] || ''; // 抓BUG第7輪 主管組3：用帳號查
     const pal = state.data.colorChoices && state.data.colorChoices.length ? state.data.colorChoices : STAFF_COLORS_DEF;
     const taken = c => Object.keys(state.data.staffColors || {}).some(k => k !== acct && state.data.staffColors[k] === c);
     return `<div class="cpick" role="group" aria-label="${esc(a.name)} 的顏色"><span class="sub">顏色：</span>${pal.map((c, i) => `<button type="button" class="sw${c === cur ? ' on' : ''}" style="--sc:${c}" data-scolor="${esc(acct)}" data-c="${c}" aria-pressed="${c === cur}" aria-label="顏色 ${i + 1}${taken(c) ? '（別人選了）' : ''}" title="${taken(c) ? '別人選了' : ''}"></button>`).join('')}<button type="button" class="btn sauto" data-scolor="${esc(acct)}" data-c="" aria-pressed="${!set}">自動</button> <span class="sub" data-scmsg="${esc(acct)}"></span></div>`;
@@ -1619,7 +1622,9 @@
     let r; try { r = await api({ action: 'staffColor', account: acct, color: c }); } catch (e) { r = null; }
     box.querySelectorAll('button').forEach(b => { b.disabled = false; });
     if (!r || !r.ok) { if (msg) msg.textContent = (r && r.message) || '沒有存成功，請再試一次'; return; }
-    setData({ staffColors: r.staffColors || {} });
+    // 抓BUG第7輪 主管組2：連續替兩位選色、回應先後顛倒時，原本整包換掉 → 晚到的舊整包把第二位蓋掉。只改自己這位
+    const sc = Object.assign({}, state.data.staffColors || {}); if (c) sc[acct] = c; else delete sc[acct];
+    setData({ staffColors: sc });
     render();
   }
   function bindAccounts() {
