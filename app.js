@@ -110,6 +110,7 @@
     // 2號 0.4.69 清單低3（第8任）：換帳號後「我的報告」還用上一位的名字篩 → 回到登入畫面就清掉報告清單、範圍、我是誰
     state.me = ''; state.reportScope = 'all'; state.reports = null;
     if (typeof document !== 'undefined' && document.getElementById('bossTip')) document.getElementById('bossTip').hidden = true; // 0.5.26 抓BUG 低3：登出、登入失效回登入頁，主管提示要收起來
+    state.navStack = []; // 第26任：換人登入不帶上一位的「上一頁」
     state.homeMonth = ''; state.homeTop = null; // 0520R4 I3（第19任）：換人登入不要停在上一位點的月份（下一位的首頁照第一次畫的規則）
     // 0.5.23 J4（第21任）：上一位沒送出的建議不留給下一位。原本只在按登出時清，登入失效等其他 4 條回登入頁的路沒清 → 換人登入後用下一位的帳號送出
     if (typeof state.resetFeedback === 'function') state.resetFeedback();
@@ -346,12 +347,27 @@
 
   /* 首頁分頁（0.4.26）：記住上次看的分頁（只存在這支手機；存不了就每次從田間打卡開始） */
   const HOME_TABS = ['punch', 'todo', 'mine', 'close', 'plant']; // 0.4.60 結案獨立一個分頁 // 0.4.59 指派任務併進執行任務清單；第四格改種植資料（舊的「assigned」改開執行任務清單）
-  function setHomeTab(tab) {
+  /** 第26任：首頁左上 ↩ 回上一頁——回到上一個看的分頁；沒有上一頁就回田間打卡；已經在田間打卡又沒上一頁就變灰 */
+  function navBack() {
+    const st = state.navStack || [];
+    let prev = '';
+    while (st.length && !prev) { const t = st.pop(); if (t !== state.homeTab) prev = t; }
+    setHomeTab(prev || 'punch', true);
+    if (typeof window !== 'undefined' && window.scrollTo) window.scrollTo(0, 0);
+  }
+  function refreshNavBack() {
+    const b = typeof document !== 'undefined' && document.getElementById ? document.getElementById('navBack') : null; if (!b) return;
+    b.disabled = !(state.navStack && state.navStack.length) && state.homeTab === 'punch';
+  }
+  function setHomeTab(tab, noHist) {
     if (tab === 'assigned') tab = 'todo'; // 0.4.59 舊的指派任務分頁已併進執行任務清單
     if (HOME_TABS.indexOf(tab) < 0) tab = 'punch';
     // 2號 0.4.63 低#11：舊快取的頁面沒有這一頁（例如 0.4.59 前沒有「結案」）→ 全部分頁都藏起來、首頁空白；頁面上沒有就回田間打卡
     if (typeof document !== 'undefined' && document.getElementById && !document.getElementById('hp-' + tab)) tab = 'punch';
+    // 第26任（董事長「每一頁都要有返回上一頁」）：換到別的分頁前，把原本那頁記下來，左上 ↩ 按了回去；按 ↩ 本身不記（noHist）
+    if (!noHist && state.homeTab && state.homeTab !== tab) { const st = state.navStack || (state.navStack = []); st.push(state.homeTab); if (st.length > 20) st.shift(); }
     state.homeTab = tab;
+    refreshNavBack();
     HOME_TABS.forEach(t => {
       const b = $('htab-' + t), p = $('hp-' + t);
       if (b) b.setAttribute('aria-selected', String(t === tab));
@@ -364,7 +380,8 @@
     let saved = '';
     try { saved = localStorage.getItem('farm-home-tab') || ''; } catch (e) { /* 讀不了 */ }
     document.querySelectorAll('[data-htab]').forEach(b => b.addEventListener('click', () => { setHomeTab(b.dataset.htab); window.scrollTo(0, 0); }));
-    setHomeTab(saved);
+    const nb = document.getElementById('navBack'); if (nb) nb.addEventListener('click', navBack); // 第26任：舊頁面沒有這顆就略過
+    setHomeTab(saved, true);
   }
 
   // 0.4.75 董事長「我的進度要改：一般農民、試作農民、推廣農民、種子商、盤商，都要有下拉選單」：五顆切換，每一類一個看得見的下拉選單

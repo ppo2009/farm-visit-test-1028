@@ -328,6 +328,7 @@ body:not([data-view="home"]) #iosTip,body:not([data-view="home"]) #androidTip{di
 header.homehdr{flex-direction:row;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;text-align:left}
 header.homehdr h1{flex:1;min-width:0;font-size:1.1rem;line-height:1.25} header.homehdr h1 .my{display:inline;margin-left:6px;font-size:.72rem}
 .hdricon{flex:none;min-width:44px;min-height:44px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:inherit;font-size:1.25rem;line-height:1;cursor:pointer}
+.hdricon:disabled{opacity:.35;cursor:default} /* 第26任：↩ 沒有上一頁時變灰 */
 .hdricon[aria-expanded="true"]{background:var(--paddy-soft);border-color:var(--paddy)}
 #hdrWait{flex:none;min-height:44px;font-size:.85rem;padding:2px 10px;line-height:1.2;max-width:9.5em}
 #hdrMenu{display:none} header.homehdr.open #hdrMenu{display:flex;position:absolute;top:100%;right:0;z-index:35;flex-direction:column;align-items:stretch;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:0 6px 18px rgba(0,0,0,.18);min-width:min(260px,calc(100vw - 32px))}
@@ -410,7 +411,7 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
     <button type="button" class="save" id="feedbackSend">送出<span class="my">ပို့မည်</span></button>
     <button type="button" class="btn2" id="feedbackCancel">取消<span class="my">မလုပ်တော့</span></button>
   </div></div>
-  <header class="homehdr" id="homeHdr"><button type="button" class="hdricon" id="tipIcon" hidden aria-label="加到主畫面的說明 ပင်မစာမျက်နှာသို့ ထည့်နည်း" aria-expanded="false">📱</button><h1>田間打卡<span class="my">လယ်ကွင်း မှတ်တမ်း</span></h1><button type="button" class="syncbadge wait" id="hdrWait" hidden></button><button type="button" class="hdricon" id="menuBtn" aria-expanded="false" aria-controls="hdrMenu" aria-label="選單：上傳狀態、提供建議、登出 မီနူး - တင်မှု အခြေအနေ၊ အကြံပြုရန်၊ ထွက်ရန်">☰</button><span class="hdr" id="hdrMenu"><button type="button" class="syncbadge" id="syncBadge" hidden></button><span class="sub" id="who"></span><span class="hdracts"><button type="button" id="feedbackBtn">提供建議<span class="my">အကြံပြုရန်</span></button><button type="button" id="logoutBtn">登出<span class="my">ထွက်ရန်</span></button></span></span><!-- 0.5.03 董事長：登出上面加「提供建議」，送到後台「使用者建議」分頁 --><!-- 0.4.75 董事長：登出搬到首頁右上角、看得清楚，按了也通知後台停用這支手機 -->
+  <header class="homehdr" id="homeHdr"><button type="button" class="hdricon" id="tipIcon" hidden aria-label="加到主畫面的說明 ပင်မစာမျက်နှာသို့ ထည့်နည်း" aria-expanded="false">📱</button><button type="button" class="hdricon" id="navBack" aria-label="回上一頁" title="回上一頁" disabled>↩</button><!-- 第26任 董事長「每一頁都要有返回上一頁，小迴圈標示就好」 --><h1>田間打卡<span class="my">လယ်ကွင်း မှတ်တမ်း</span></h1><button type="button" class="syncbadge wait" id="hdrWait" hidden></button><button type="button" class="hdricon" id="menuBtn" aria-expanded="false" aria-controls="hdrMenu" aria-label="選單：上傳狀態、提供建議、登出 မီနူး - တင်မှု အခြေအနေ၊ အကြံပြုရန်၊ ထွက်ရန်">☰</button><span class="hdr" id="hdrMenu"><button type="button" class="syncbadge" id="syncBadge" hidden></button><span class="sub" id="who"></span><span class="hdracts"><button type="button" id="feedbackBtn">提供建議<span class="my">အကြံပြုရန်</span></button><button type="button" id="logoutBtn">登出<span class="my">ထွက်ရန်</span></button></span></span><!-- 0.5.03 董事長：登出上面加「提供建議」，送到後台「使用者建議」分頁 --><!-- 0.4.75 董事長：登出搬到首頁右上角、看得清楚，按了也通知後台停用這支手機 -->
     <!-- 0.4.73 董事長「試作報告拿掉」：0.4.69 右上角「分享我的報告／觀看其他業務報告」兩顆入口拿掉 --></header>
   <!-- 第24任 必改第二批②：瀏覽器沒答應長期保存手機資料（storage.persist 被拒或不支援），又有沒上傳的資料 → 提醒快上傳（緬文等譯者，先留空） -->
   <p class="warn" id="storeWarn" role="alert" hidden><span class="zh" id="storeWarnZh"></span><span class="my" data-tr="待譯"></span></p>
@@ -653,7 +654,7 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
 
 <!-- 拜訪 -->
 <section id="visit" hidden>
-  <header><button type="button" class="back" id="backBtn">← 首頁 ပင်မ</button><h1 id="visitTitle">試作</h1></header>
+  <header><button type="button" class="back" id="backBtn" aria-label="回上一頁（首頁）">↩ 首頁 ပင်မ</button><h1 id="visitTitle">試作</h1></header>
   <div class="card">
     <!-- 拜訪類別切換：農民＝一般拜訪／試作／推廣，盤商或種子商＝盤商／種子商；首頁少點一層（2026-11-12 董事長同意優化 1） -->
     <div class="catswitch" id="catSwitch" role="group" aria-label="拜訪類別 သွားရောက်မှု အမျိုးအစား"></div>
