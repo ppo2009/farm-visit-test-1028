@@ -758,7 +758,8 @@
     if (rp) {
       const upd = () => {
         R.rejDraft = { id: R.rej, reasons: [...rp.querySelectorAll('input[name=rj]:checked')].map(i => i.value), note: $('rejNote').value }; // 第25任 審查⑤：記下草稿
-        rp.querySelector('[data-rv="rejsend"]').disabled = !(R.rejDraft.reasons.length || R.rejDraft.note.trim());
+        // 抓BUG第3輪 主管組3：送出途中再勾原因，原本又能按「送出退回」（送兩次）→ 送出中一律停用
+        rp.querySelector('[data-rv="rejsend"]').disabled = !(R.rejDraft.reasons.length || R.rejDraft.note.trim()) || !!state.closeSending;
       };
       rp.addEventListener('change', upd); $('rejNote').addEventListener('input', upd);
     }
@@ -775,7 +776,7 @@
         const s = (state.data.staffList || []).find(y => y.name === x.staff);
         // 抓BUG第2輪 主管組2：拜訪的業務沒有啟用中的帳號（停用、離職、名字對不上）→ 原本帶到任務頁時選單沒選到人，瀏覽器預設第一位，按送出就派給別人。改成派不了就留在清單、寫原因（緬文待譯 D13）
         if (!s) { state.closeMsg = `${x.staff || '這位業務'} 沒有啟用中的業務帳號，任務派不出去；請直接聯絡，或到任務頁自己選業務（這筆先留在清單）`; render(); return; }
-        state.tf = { staff: s ? s.account : '', cid: x.cid, text: `請說明 ${x.time.slice(5, 16)} 這筆拜訪：${flagsOf(x).map(f => f.txt.replace(/^\S+ /, '')).join('、')}`, seenVid: x.id }; state.review = null; state.tab = 'tasks'; render(); return; }
+        state.tf = { staff: s ? s.account : '', cid: x.cid, text: `請說明 ${x.time.slice(5, 16)} 這筆拜訪：${flagsOf(x).map(f => f.txt.replace(/^\S+ /, '')).join('、')}`, seenVid: x.id, askStaff: s.account, askCid: x.cid }; state.review = null; state.tab = 'tasks'; render(); return; }
       if (a === 'reject') { R.rej = x.visitId; render(); return; }
       if (a === 'rejcancel') { R.rej = null; R.rejDraft = null; render(); return; }
       if (a === 'confirm' || a === 'rejsend') {
@@ -789,7 +790,8 @@
         // 抓BUG第2輪 主管組3：後台回「已處理過」時原本一律當成功、說「別人處理過了」→ 別人做的跟我相反（我退回、他已確認）也看不出來。
         //   後台有帶 state（已確認／已退回）：跟我這次要做的一樣才當成功；不一樣就寫出實際結果、不跳下一筆（緬文待譯 D14）
         if (r && r.code === 'DONE_ALREADY') r = !r.state || r.state === (ok ? '已確認' : '已退回') ? Object.assign({}, r, { ok: true, already: true })
-          : Object.assign({}, r, { message: `這筆已經被別人「${r.state}」，跟你這次要做的（${ok ? '確認結案' : '退回'}）不一樣，請看清楚再處理` });
+          // 抓BUG第3輪 主管組2：那筆已不在清單，畫面會換成下一筆 → 訊息只寫「這筆」會被看成眼前那筆；改成寫出是哪一位、已從清單移除（緬文待譯 D14 改這句）
+          : Object.assign({}, r, { message: `「${x.name}」已經被別人「${r.state}」，跟你這次要做的（${ok ? '確認結案' : '退回'}）不一樣，已從清單移除；請到客戶履歷看清楚` });
         if (r.closings) setData({ closings: r.closings });
         R.rej = null;
         if (r.ok) { R.rejDraft = null; state.closeMsg = r.already ? '這筆別人已經處理過了，跳下一筆／ဤတစ်ခုကို အခြားသူ လုပ်ဆောင်ပြီးပါပြီ၊ နောက်တစ်ခုသို့ ကျော်မည်' : ok ? `已確認結案：${x.name}／ပိတ်သိမ်းမှု အတည်ပြုပြီး：${x.name}` : `已退回：${x.name}（原因已傳給業務）／ပြန်ပို့ပြီး：${x.name}（အကြောင်းရင်း ဝန်ထမ်းထံ ပို့ပြီး）`; state.closeMsgSeq = state.loadSeq + 1; render(); load(); return; } // closeMsgSeq：緊接著的重讀不清掉訊息（同舊清單 0.4.88 低7）
@@ -1279,7 +1281,7 @@
     if (form) {
       // 0.4.85 高2（第11任 0.4.84 清單）：keep() 原本整個換掉 state.tf，送出時第一步就呼叫 → rid、ridKey 被清，斷線後再按每次都是新代號（後台認不出、派成兩條）
       // → 只更新三個欄位，原本的 rid、ridKey 留著（內容改了，送出時 ridKey 對不上才換新代號）
-      const keep = () => { const o = state.tf || {}; state.tf = { staff: $('tStaff').value, cid: $('tFarmer').value, text: $('tText').value, rid: o.rid || '', ridKey: o.ridKey || '' }; if (o.seenVid) state.tf.seenVid = o.seenVid; };
+      const keep = () => { const o = state.tf || {}; state.tf = { staff: $('tStaff').value, cid: $('tFarmer').value, text: $('tText').value, rid: o.rid || '', ridKey: o.ridKey || '' }; if (o.seenVid) Object.assign(state.tf, { seenVid: o.seenVid, askStaff: o.askStaff, askCid: o.askCid }); };
       ['tFarmer', 'tText'].forEach(id => $(id).addEventListener('input', keep));
       // 換對象（業務 ↔ 主管）時客戶選單不一樣，重畫；原本選的客戶清掉
       $('tStaff').addEventListener('change', () => { keep(); state.tf.cid = ''; state.taskMsg = ''; render(); });
@@ -1294,9 +1296,12 @@
         if (!state.tf.rid || state.tf.ridKey !== key) { state.tf.rid = newRid(); state.tf.ridKey = key; }
         let r;
         // 第26任 老闆裁定「只給現任負責人看」：一般農民任務只能派給負責業務；審核卡帶過來的追問（seenVid）帶 ask，後台准派給拜訪的那位業務
-        try { r = await api({ action: 'taskAdd', staff: state.tf.staff, cid: state.tf.cid, text: state.tf.text.trim(), rid: state.tf.rid, ask: !!state.tf.seenVid }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再按一次（不會派成兩條）／ဆာဗာနှင့် ချိတ်မရပါ၊ ထပ်နှိပ်ပါ（နှစ်ခု ဖြစ်မသွားပါ）' }; }
+        // 抓BUG第3輪 主管組1：追問帶到任務頁後主管換了業務／農民（改派別的事），原本照樣帶 ask、還把那筆可疑拜訪標「看過」
+        //   → 業務和農民都還是追問帶來的那一組才算追問
+        const isAsk = !!(state.tf.seenVid && state.tf.staff === state.tf.askStaff && state.tf.cid === state.tf.askCid);
+        try { r = await api({ action: 'taskAdd', staff: state.tf.staff, cid: state.tf.cid, text: state.tf.text.trim(), rid: state.tf.rid, ask: isAsk }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再按一次（不會派成兩條）／ဆာဗာနှင့် ချိတ်မရပါ၊ ထပ်နှိပ်ပါ（နှစ်ခု ဖြစ်မသွားပါ）' }; }
         if (r.ok) { setData({ tasks: r.tasks }); state.tf.text = ''; state.tf.rid = ''; state.tf.ridKey = ''; state.taskMsg = toBoss ? '已派出（主管打開主管網頁「任務」就會看到）／ပေးပို့ပြီး (မန်နေဂျာ ဝဘ် 「လုပ်ငန်း」 တွင် မြင်ရမည်)' : '已派出（業務手機下次同步就會看到）／ပေးပို့ပြီး (ဝန်ထမ်းဖုန်း နောက်တစ်ကြိမ် စင့်ခ်လုပ်လျှင် မြင်ရမည်)'; }
-        if (r.ok && state.tf.seenVid) { markSeen(state.tf.seenVid); state.tf.seenVid = ''; } // 第26任 低風險修正3①：追問的任務真的派出去，那筆可疑拜訪才標「看過」
+        if (r.ok && isAsk) { markSeen(state.tf.seenVid); state.tf.seenVid = ''; state.tf.askStaff = ''; state.tf.askCid = ''; } // 第26任 低風險修正3①：追問的任務真的派出去，那筆可疑拜訪才標「看過」
         // 第26任 抓BUG第2輪 主管組1（高）：原本 else 接在上一行「成功且是追問」後面 → 一般派任務成功也被蓋成「⚠ 派發失敗」，主管重按就派出兩條。改成只有真的失敗才寫失敗
         if (!r.ok) state.taskMsg = '⚠ ' + (r.message || '派發失敗／မပေးနိုင်ပါ');
         render();

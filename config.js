@@ -2,7 +2,7 @@
    第 2 期起改用帳號密碼登入，不再需要 Google 登入的 OAuth Client ID。 */
 self.FARM_CONFIG = {
   gasUrl: 'https://script.google.com/macros/s/AKfycbwZ36Ob8Nxf8Ss618KqmlF9YWPgjW7WRrGvSIgu8T5ENQpD5oG0Jwgg5Y-R8PhrOLtjgA/exec', // 交付包一律留佔位字；部署時用 部署打卡網頁.ps1 -GasUrl 指定，只寫進部署複本（GPT-6.1 R5-06）
-  appVersion: '0.5.26', appBuild: 'build-20261118-180605',
+  appVersion: '0.5.26', appBuild: 'build-20261118-182324',
   // 第26任 2026-11-18 董事長「語音輸入拿掉，手機本身就有內建」：文字欄旁的 🎤 語音輸入關掉（voice.js 留著）；要恢復改成 true
   voiceInput: false,
   // 備用網址（0.4.30）：緬甸網路常擋某些網站主機，同一份網頁放在不同公司的主機，業務頁、主管頁的「網址打不開時改用這個」都讀這份。
