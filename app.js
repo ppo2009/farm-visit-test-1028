@@ -1005,7 +1005,8 @@
     // 第27任 2026-11-18 董事長「上面已經有歷史紀錄了，這邊移除」：打卡畫面只留生長過程，不再列一次過往紀錄
     // 第28任 2026-11-19 董事長「補回」：生長過程下面補回過去試作（對照）成敗，和之前拜訪的錄音（只列有錄音的那幾筆：日期、分類、業務、錄音鈕，不再列整段文字）
     if (o.timelineOnly) {
-      const auds = all.filter(v => v.audio && v.closeHidden !== '待確認');
+      // 抓BUG第9輪 手機組2（第28任）：closeHidden 只有種植資料頁才標，打卡畫面永遠沒有 → 改用跟生長過程同一套判斷（closeStateOf），還在等主管確認的結案錄音不列
+      const auds = all.filter(v => v.audio && v.closeHidden !== '待確認' && !(v.closing && closeStateOf(v) === '待確認'));
       return tlTop
         + (trials ? `<p class="sub">試作／推廣（成功、失敗）／စမ်းသပ်／မြှင့်တင် ရလဒ်（အောင်မြင်・မအောင်မြင်）：</p><ul>${trials}</ul>` : (o.showTrials ? '<p class="sub">沒有試作、推廣紀錄／စမ်းသပ်မှု မရှိ</p>' : ''))
         + (auds.length ? `<h3>之前的錄音</h3><ul>${auds.map(v => `<li><b>${esc(v.time)}</b>｜${esc(histCatBi(v.cat))}${v.staff ? '｜' + esc(v.staff) : ''} <button type="button" class="btn2 small" data-hau="${esc(v.audio)}">🔊 錄音 အသံဖိုင်</button></li>`).join('')}</ul>` : '');
@@ -2048,7 +2049,9 @@
     };
     const btns = Array.from(box.querySelectorAll('[data-hph]'));
     btns.forEach(b => b.addEventListener('click', () => load(b, true)));
-    btns.filter(b => !(b.closest && b.closest('details'))).forEach(b => load(b, false)); // 最近一次那筆（不在「看更早的」裡）自動載入
+    // 最近一次那筆（不在「看更早的」裡）自動載入。抓BUG第9輪 手機組1（第28任）：照片上限調到 12 後一次同時下載 12 張，網路慢時每張都等到逾時、一張都出不來 → 改成一張一張排隊下載；換了農民（按鈕已不在畫面上）就停
+    const auto = btns.filter(b => !(b.closest && b.closest('details')));
+    (async () => { for (const b of auto) { if (b.isConnected === false) break; await load(b, false); } })();
   }
   /* renderProgress 拆出來的（第15任 2026-11-14 董事長「拆 renderProgress」）：① 純計算／組 HTML（不碰畫面、不碰手機資料） ② 記下後台回答
      放在 renderProgress 後面、「試作（2B）」之前：舊測試從 renderProgress 切到那行，會自動一起帶到 */
@@ -3110,7 +3113,7 @@
     if (state.mediaLocked) { toast('正在存檔（等定位），照片等一下再加／သိမ်းနေသည် (တည်နေရာ စောင့်နေ)၊ ဓာတ်ပုံ နောက်မှ ထပ်ထည့်ပါ'); return; } // 0.4.91 中3
     if (source === '相機' && gpsStale()) locate({ keep: true }); // 0.5.20 E2：位置舊了，背景補抓（不等；這批照片浮水印用目前的，存檔時會再確認）；0520R4 I2：打開畫面時沒抓到（沒有位置）也補抓，原本要等按儲存才抓、照片全寫無定位
     const gen = state.formGen;
-    const room = MAX_PHOTOS - state.photos.length - state.busyPhotos; // 0.4.87 中4：還在處理的也要扣（兩批同時處理會超過 6 張，後台只收前 6 張）
+    const room = MAX_PHOTOS - state.photos.length - state.busyPhotos; // 0.4.87 中4：還在處理的也要扣（兩批同時處理會超過上限，後台只收前 MAX_PHOTOS 張）
     if (room <= 0) { toast(`一次拜訪最多 ${MAX_PHOTOS} 張照片／ဓာတ်ပုံ အများဆုံး ${MAX_PHOTOS} ပုံ`); return; }
     if (list.length > room) toast(`最多 ${MAX_PHOTOS} 張，只取前 ${room} 張／အများဆုံး အရေအတွက် ကျော်လွန်၍ ပထမ ${room} ပုံသာ ယူမည်`);
     btn.classList.add('busy');
@@ -4032,7 +4035,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261119-001555'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261119-004155'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');

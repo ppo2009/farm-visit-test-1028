@@ -97,6 +97,7 @@
   const state = { key: null, data: null, tab: 'today', trial: null, photos: {}, audios: {}, mustChange: false,
     hist: {},        // 客戶完整履歷（總覽只帶最近 500 筆，點進客戶時另外拿）
     histReq: {},     // 正在拿的履歷
+    histErr: {},     // 抓BUG第9輪 主管組2（第28任）：完整履歷沒讀到的原因（畫面要說「沒讀到」，不能說「還沒有拜訪紀錄」）
     rf: {},          // 試作報告篩選
     pm: '',          // 工作進度看哪個月
     prog: {},        // 各月份的工作進度（後台算好的）
@@ -205,7 +206,7 @@
     state.key = null; keyStore.set(null); state.data = null;
     clearMustChange();
     // 讀取中標記與快取也清掉：換人後舊請求的回應會被丟掉（S7），標記不清就永遠是「讀取中」、新的人讀不到（第二輪自行審查 T5）
-    Object.assign(state, { progReq: {}, histReq: {}, photoReq: {}, prog: {}, hist: {}, photos: {}, audios: {}, areq: {}, cacheGen: (state.cacheGen || 0) + 1 }); // areq：登出後舊請求的回應會被丟掉，「正在做」要一起清，不然下一位登入按鈕一直停用
+    Object.assign(state, { progReq: {}, histReq: {}, histErr: {}, photoReq: {}, prog: {}, hist: {}, photos: {}, audios: {}, areq: {}, cacheGen: (state.cacheGen || 0) + 1 }); // areq：登出後舊請求的回應會被丟掉，「正在做」要一起清，不然下一位登入按鈕一直停用
     Object.assign(state, { tab: 'today', trial: null, briefOpen: '', bf: null, replyDraft: {}, tf: null, af: null, newPw: null,
       taskMsg: '', briefMsg: '', acctMsg: '', moreOpen: false, cf: { q: '', staff: '', area: '', type: '', show: 'attn' },
       closeMsg: '', rf: {}, pm: '', grpOpen: {}, lastTab: '', replyRid: {}, loadedAt: 0, closeMsgSeq: 0 }); // 主管BUG#9：換人登入不留上一位的結案訊息、篩選、月份、展開狀態
@@ -251,7 +252,7 @@
     }
     hideBoot();
     // 0.5.24（第21任抓BUG）：連「正在拿」的標記一起換新、換世代：重讀前發出去的履歷／進度晚到就丟掉，重讀後馬上重拿（原本會被標記擋住、存進舊的）
-    Object.assign(state, { hist: {}, prog: {}, histReq: {}, progReq: {}, cacheGen: (state.cacheGen || 0) + 1 });
+    Object.assign(state, { hist: {}, prog: {}, histReq: {}, histErr: {}, progReq: {}, cacheGen: (state.cacheGen || 0) + 1 }); // 第28任：按「重新整理」也清掉「沒讀到」，重拿一次
     state.data = data;
     state.loadedAt = Date.now(); // 0.4.88 低8：切回頁面時判斷要不要重讀
     if (seq > (state.closeMsgSeq || 0)) state.closeMsg = ''; // 0.4.88 低7：讀完新資料，上一次結案的提示清掉（按完確認緊接著那次重讀不清，才看得到「已確認結案」）
@@ -438,12 +439,18 @@
   /** 客戶履歷：總覽只有最近 500 筆，舊客戶的早期拜訪會不見，點進來時拿完整的（2026-11-11 抓到） */
   async function loadHistory() {
     const c = custSelected();
-    if (!c || state.hist[c.id] || state.histReq[c.id]) return; // 已經有、或正在拿，不重複要
+    if (!c || state.hist[c.id] || state.histReq[c.id] || (state.histErr || {})[c.id]) return; // 已經有、或正在拿，不重複要；第28任：沒讀到的不自動一直重拿（每次重畫都會叫），按「重新整理」才重拿
     const gen = state.cacheGen, req = state.histReq, dgen = state.dataGen; // 0.5.24：記下出發時的世代和標記表；抓BUG第6輪 主管組1：也記畫面資料版本
     req[c.id] = true;
     let r;
     try { r = await api({ action: 'history', cid: c.id }); } catch (e) { r = null; } finally { delete req[c.id]; }
-    if (gen !== state.cacheGen || !r || !r.ok) return;
+    if (gen !== state.cacheGen) return;
+    if (!r || !r.ok) { // 第28任 抓BUG第9輪 主管組2：原本讀失敗什麼都不說，畫面寫「還沒有拜訪紀錄」
+      (state.histErr = state.histErr || {})[c.id] = (r && r.message) || '網路不穩';
+      const now0 = state.tab === 'trial' && custSelected();
+      if (now0 && now0.id === c.id) { if ($('custDetail')) refreshCustDetail(); else render(); }
+      return;
+    }
     if (dgen !== state.dataGen) { loadHistory(); return; } // 出發後主管改過打字、階段等（可能是改之前的資料）→ 不採用，重拿一次
     state.hist[c.id] = r.visits;
     const now = state.tab === 'trial' && custSelected();
@@ -518,7 +525,7 @@
     if (!v || !('speechSynthesis' in window)) { btn.textContent = '這個瀏覽器不支援朗讀／ဤ Browser သည် အသံထွက် ဖတ်ပြခြင်း မပံ့ပိုးပါ'; return; }
     stopAudio(); // 0.4.88 中7：朗讀先停錄音
     speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(`${v.name}。${v.summary}。問題：${v.issue || '無'}。下一步：${v.next || '無'}。`);
+    const u = new SpeechSynthesisUtterance(relabelStr(`${v.name}。${v.summary}。問題：${v.issue || '無'}。下一步：${v.next || '無'}。`)); // 抓BUG第9輪 主管組3（第28任）：朗讀不在畫面上，換字要自己做（同確認視窗）
     u.lang = 'zh-TW'; u.rate = 0.95;
     speechSynthesis.speak(u);
   }
@@ -651,7 +658,9 @@
     const m = ck.match(/位置不符（(\d+(?:\.\d+)?) 公尺）/);
     if (m) { const n = Number(m[1]); out.push({ k: 'loc', txt: '📍 位置不符 ' + (n >= 1000 ? (n / 1000).toFixed(1) + ' 公里' : n + ' 公尺') }); }
     if (/無定位/.test(ck)) out.push({ k: 'nogps', txt: '📍 無定位' });
-    if (old) out.push({ k: 'old', txt: '📷 ' + old + ' 張非當下拍攝' });
+    // 抓BUG第9輪 主管組1（第28任）：寫出是第幾張（檢查原文「第7張（相簿）：非當下拍攝」），主管才找得到那一張；舊資料沒寫張號就照舊只寫張數
+    const oldNos = ck.split('｜').map(p => p.trim()).filter(p => /非當下拍攝|非現場即時拍攝/.test(p)).map(p => (p.match(/^第(\d+)張/) || [])[1]).filter(Boolean);
+    if (old) out.push({ k: 'old', txt: oldNos.length === old ? '📷 第 ' + oldNos.join('、') + ' 張非當下拍攝' : '📷 ' + old + ' 張非當下拍攝' });
     if (/照片.{0,8}(無關|不相關)|與田間無關/.test(String(v.issue || '') + String(v.summary || ''))) out.push({ k: 'ai', txt: '🤖 AI：照片與田間無關' });
     if (/^【簡易翻譯】/.test(String(v.summary || ''))) out.push({ k: 'simple', txt: '🔤 簡易翻譯' });
     ck.split('｜').map(p => p.trim()).filter(p => p && !/非當下拍攝|非現場即時拍攝|位置不符|無定位|^現場拍攝$|^第\d+張（[^）]*）：/.test(p)).forEach(p => out.push({ k: 'other', txt: '⚠ ' + p.slice(0, 40) }));
@@ -755,8 +764,9 @@
   }
   /** 審核卡的照片：這筆的照片；沒有就用這位客戶最近一筆有照片的拜訪（最多 3 張） */
   function reviewPhotos(cid, v) {
-    if (v && v.photos && v.photos.length) return v.photos.slice(0, 3);
-    const w = visitsOf(cid).find(x => x.photos && x.photos.length); return w ? w.photos.slice(0, 3) : [];
+    // 抓BUG第9輪 主管組1（第28任）：原本最多 3 張（照片上限 6 時代），上限 12 後有問題的第 7 張主管看不到 → 全放
+    if (v && v.photos && v.photos.length) return v.photos.slice();
+    const w = visitsOf(cid).find(x => x.photos && x.photos.length); return w ? w.photos.slice() : [];
   }
   function reviewItems() {
     const R = state.review; if (!R) return [];
@@ -773,7 +783,7 @@
     if (R.i >= items.length) R.i = items.length - 1;
     const x = items[R.i], close = R.kind === 'close';
     const v = close ? state.data.visits.find(y => y.id === x.visitId) : x;
-    const cu = custOf(x.cid), photos = close ? reviewPhotos(x.cid, v) : (x.photos || []).slice(0, 3);
+    const cu = custOf(x.cid), photos = close ? reviewPhotos(x.cid, v) : (x.photos || []).slice(); // 抓BUG第9輪 主管組1：可疑拜訪也全放
     const flags = v ? flagsOf(v) : [];
     const pos = `${close ? '待確認結案<span class="my">အတည်ပြုစောင့်ဆဲ ပိတ်သိမ်းမှု</span>' : '可疑拜訪<span class="my">သံသယရှိဖွယ် သွားရောက်မှု</span>'} ${R.i + 1}／${items.length}`;
     const head = close ? `<h2 class="rh">${esc(x.name || '客戶 ' + (x.cid || '（沒有編號／နံပါတ် မရှိ）'))}・${esc(cu.type || x.group || '')}${cu.crop ? '・' + esc(cropText(cu.crop)) : ''}</h2><p class="sub">${staffTag(x.staff, '業務未填／ဝန်ထမ်း မဖြည့်ရသေး')}・送出／ပို့ပြီး ${esc(x.date || '日期未填／ရက်စွဲ မဖြည့်ရသေး')}${isTestStaff(x.staff) ? ' <span class="pill">測試<span class="my">စမ်းသပ်</span></span>' : ''}</p>`
@@ -1131,7 +1141,7 @@
         <div class="box"><div class="photos">${v.photos.length ? v.photos.map((id, i) => `<figure class="pfig"><div class="photo" data-photo="${esc(id)}">載入中…／ဖတ်နေသည်…</div><figcaption>照片 ${i + 1}</figcaption></figure>`).join('') /* 第27任 董事長「要，加編號」：對照農民打字寫「照片 N」，格子下面標第幾張 */ : '<div class="photo">沒有照片／ဓာတ်ပုံ မရှိပါ</div>'}</div>
         <dl class="kv"><dt>${dealer ? '行情' : '作物'}</dt><dd>${esc(v.crop || '—')}${myLine(v, 'crop')}</dd><dt>反應</dt><dd>${esc(v.feedback || '—')}${myLine(v, 'feedback')}</dd><dt>問題</dt><dd>${esc(v.issue || '—')}${myLine(v, 'issue')}</dd><dt>下一步</dt><dd>${esc(v.next || '—')}${myLine(v, 'next')}</dd>
         <dt>摘要</dt><dd>${esc(v.summary || noSummaryText(v))}${errDetail(v)}${myLine(v, 'summary')}</dd>
-        ${v.noMeet ? `<dt>沒拜訪<span class="my">မသွားဖြစ်ပါ</span></dt><dd><span class="pill p-yel">沒拜訪<span class="my">မသွားဖြစ်ပါ</span></span> ${esc(v.noMeet)}</dd>` : ''}${v.closing ? `<dt>結案</dt><dd>${esc(v.closing)}</dd>` : ''}${v.plantFail ? `<dt>種植失敗<span class="my">စိုက်ပျိုးမှု မအောင်မြင်</span></dt><dd>${esc(v.plantFail)}</dd>` : ''}${v.text ? `<dt>打字</dt><dd class="pre">${esc(v.text)}${v.id ? fixBoxHtml('text:' + v.id, '改內容', `<textarea data-fixin maxlength="3000" rows="4" aria-label="打字內容">${esc(v.text)}</textarea>`) : '' /* 第27任：主管改業務打錯的字 */}</dd>` : ''}${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') || '<p class="empty">這位客戶還沒有拜訪紀錄。<span class="my">ဤဖောက်သည်တွင် သွားရောက်မှု မှတ်တမ်း မရှိသေးပါ။</span></p>'}</div>`;
+        ${v.noMeet ? `<dt>沒拜訪<span class="my">မသွားဖြစ်ပါ</span></dt><dd><span class="pill p-yel">沒拜訪<span class="my">မသွားဖြစ်ပါ</span></span> ${esc(v.noMeet)}</dd>` : ''}${v.closing ? `<dt>結案</dt><dd>${esc(v.closing)}</dd>` : ''}${v.plantFail ? `<dt>種植失敗<span class="my">စိုက်ပျိုးမှု မအောင်မြင်</span></dt><dd>${esc(v.plantFail)}</dd>` : ''}${v.text ? `<dt>打字</dt><dd class="pre">${esc(v.text)}${v.id ? fixBoxHtml('text:' + v.id, '改內容', `<textarea data-fixin maxlength="3000" rows="4" aria-label="打字內容">${esc(v.text)}</textarea>`) : '' /* 第27任：主管改業務打錯的字 */}</dd>` : ''}${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') || ((state.histErr || {})[c.id] ? `<p class="err">完整拜訪紀錄沒讀到（${esc(state.histErr[c.id])}），請按上方「重新整理」再試。</p>` : !(state.hist || {})[c.id] && (state.histReq || {})[c.id] ? '<p class="sub">讀取完整拜訪紀錄中…</p>' : '<p class="empty">這位客戶還沒有拜訪紀錄。<span class="my">ဤဖောက်သည်တွင် သွားရောက်မှု မှတ်တမ်း မရှိသေးပါ။</span></p>') /* 抓BUG第9輪 主管組2（第28任）：沒讀到、讀取中不能說「還沒有紀錄」 */}</div>`;
   }
 
   /** 一張照片只下載一次（下載中的也共用同一個請求）；換了畫面，舊畫面的迴圈就停，不再下載別的客戶的照片（2026-11-11 抓到） */

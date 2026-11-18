@@ -526,7 +526,7 @@
     let lost = 0, audio = '', audioLost = false;
     for (const p of list) {
       if (!p || !p.blob) continue;
-      try { photos.push({ data: await blobToBase64(p.blob), check: p.check || '', source: p.source || '相機' }); } catch (e) { lost++; }
+      try { photos.push({ data: await blobToBase64(p.blob), check: p.check || '', source: p.source || '相機', no: list.indexOf(p) + 1 }); } catch (e) { lost++; } // 抓BUG第9輪 後台組3（第28任）：帶這張原本是第幾張（no），中間有一張讀不到時後面的不往前移，重送時後台不會把別張當成已存過的舊檔
     }
     if (v.audio) { try { audio = await blobToBase64(v.audio); } catch (e) { audioLost = true; } }
     return { photos, audio, lost, audioLost };
