@@ -205,6 +205,7 @@ footer.wrap{margin-top:24px}
 .rsum{display:flex;gap:8px;align-items:flex-start;margin:8px 0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 .rmiss{background:#fff4c4;border:1.5px solid #e0b100;border-radius:10px;padding:8px 12px;font-weight:700;margin:8px 0}
 .rbtns{display:flex;gap:12px;max-width:760px;width:100%;margin:0 auto} .rbtns .btn{flex:1;min-height:48px;font-size:1rem;font-weight:700}
+.rbtns .btn .my{display:block;margin-left:0} /* 第26任 抓BUG第2輪 主管組6：360 寬「退回（寫原因）」的緬文被從字中間折斷 → 緬文自己一行（同 .rtop 的寫法、AGENTS.md 已知的坑） */
 .review>.rbtns{position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--line);max-width:none}
 .rejpanel{border:1.5px solid var(--chili);border-radius:12px;margin:10px 0 0;padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px} .rejpanel legend{font-weight:700;color:var(--chili)}
 .rjc{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 10px;border:1px solid var(--line);border-radius:99px;cursor:pointer} .rjc input{width:20px;height:20px}

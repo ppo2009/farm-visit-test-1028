@@ -3865,7 +3865,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = '0.5.26'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261118-171927'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -4052,7 +4052,20 @@
     refreshSave(); toast('已帶入上次填的內容，照主管說的改好再送：ယခင် ဖြည့်ထားသည်ကို ထည့်ပြီးပါပြီ၊ မန်နေဂျာ ပြောသည့်အတိုင်း ပြင်ပြီး ထပ်ပို့ပါ：' + (x.reason || ''));
   }
   /** 首頁：登入登出、建議、拜訪類別卡片與下拉選單、首頁分頁、上傳狀態 */
+  /** 首頁的按鈕接線（第26任 2026-11-18 老闆「把冗長的函數拆解」：70 行拆成四段，只搬位置、內容一字不改、接線順序不變；test-init拆分 逐字比對拆前紀錄）
+   *  ① 登入、密碼眼睛、登出、☰ 選單、解鎖 ② 建議、收合區塊 ③ 語音輸入 ④ 首頁兩張大卡（農民／盤商選單）→ 分頁、上傳狀態 */
   function bindHomeMenus() {
+    bindLoginAndHeader();
+    initFeedback(); // 0.5.03 提供建議
+    // 第24任 第六批⑧（tomtom 實測：執行任務 6 個區塊、3 個螢幕）：每個區塊按標題可以收合，記在手機；預設收起「主管訂的目標／種植進度」「我負責的客戶」
+    initTodoFold();
+    startVoiceInput();
+    bindHubCards();
+    initHomeTabs();
+    $('syncBadge').addEventListener('click', () => { setHomeTab('punch'); const q = document.querySelector('.queue'); if (q && q.scrollIntoView) q.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
+  }
+  /** 拆自 bindHomeMenus ①：登入表單、密碼眼睛、登出、☰ 選單（點外面收起）、解鎖方式 */
+  function bindLoginAndHeader() {
     $('loginForm').addEventListener('submit', onLogin);
     // 第24任 第六批⑨：密碼欄的「👁 顯示」（按一下顯示、再按隱藏）
     document.querySelectorAll('.pweye').forEach(b => b.addEventListener('click', () => { const i = document.getElementById(b.dataset.for); if (!i) return; const show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.setAttribute('aria-pressed', show ? 'true' : 'false'); b.firstChild.textContent = show ? '🙈 隱藏' : '👁 顯示'; const sp = b.querySelector ? b.querySelector('.my') : null; if (sp) sp.textContent = show ? 'ဖျောက်ရန်' : 'ပြရန်'; }));
@@ -4065,12 +4078,14 @@
       const hw = document.getElementById('hdrWait'); if (hw) hw.addEventListener('click', () => $('syncBadge').click());
     }
     const ub = document.getElementById('unlockBtn'); if (ub) ub.addEventListener('click', () => { if (typeof FarmLock === 'object') FarmLock.openSettings(lockHooks()); }); // 第24任 第四批
-    initFeedback(); // 0.5.03 提供建議
-    // 第24任 第六批⑧（tomtom 實測：執行任務 6 個區塊、3 個螢幕）：每個區塊按標題可以收合，記在手機；預設收起「主管訂的目標／種植進度」「我負責的客戶」
-    initTodoFold();
-    // 第24任 必改第五批：主要文字欄旁加 🎤 語音輸入（瀏覽器不支援就不顯示）。欄位：跟農民聊了什麼、盤商簽約內容、種植失敗原因、提供建議
-    // 第26任 2026-11-18 董事長「語音輸入拿掉，手機本身就有內建」：設定 voiceInput 不是 true 就不啟動（不畫 🎤、不出現語言切換）
+  }
+  /** 拆自 bindHomeMenus ③：第24任 必改第五批：主要文字欄旁加 🎤 語音輸入（瀏覽器不支援就不顯示）。欄位：跟農民聊了什麼、盤商簽約內容、種植失敗原因、提供建議
+   *  第26任 2026-11-18 董事長「語音輸入拿掉，手機本身就有內建」：設定 voiceInput 不是 true 就不啟動（不畫 🎤、不出現語言切換） */
+  function startVoiceInput() {
     if (typeof FarmVoice === 'object' && typeof FARM_CONFIG !== 'undefined' && FARM_CONFIG.voiceInput === true) FarmVoice.init({ toast: m => toast(m), isRecording: () => !!(state.rec || state.recStarting || state.recBusy), fields: ['note', 'dcNote', 'fReason', 'feedbackText'] });
+  }
+  /** 拆自 bindHomeMenus ④：首頁兩張大卡（農民、盤商或種子商）的選單和下拉，選了直接進打卡畫面 */
+  function bindHubCards() {
     document.querySelectorAll('.cat[data-cat]').forEach(b => b.addEventListener('click', () => openVisit(b.dataset.cat)));
     // 首頁兩張大卡直接進打卡畫面；一般／試作／推廣、盤商／種子商在打卡畫面上方切換（優化 1）
     // 0.4.32 董事長：「農民」改成下拉選單（一般拜訪農民／試作農民／推廣農民），選了直接進那一種
@@ -4119,8 +4134,6 @@
       if (cat !== '農戶') state.catManual = true;
     });
     hubSel('dealerSel', async cat => { state.lockNext = true; await openVisit(cat); });
-    initHomeTabs();
-    $('syncBadge').addEventListener('click', () => { setHomeTab('punch'); const q = document.querySelector('.queue'); if (q && q.scrollIntoView) q.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
   }
   /** 打卡畫面：返回、選客戶、客戶資料欄、結案欄、照片錄音、儲存 */
   function bindVisitForm() {

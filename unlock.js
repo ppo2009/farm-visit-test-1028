@@ -13,6 +13,7 @@
   'use strict';
   const KEY = 'farm-unlock', HID = 'farm-unlock-hidden';
   const MAX_FAILS = 5, MIN_POINTS = 4, ITER = 150000, DEFAULT_MIN = 10;
+  const RELOGIN_MSG = '請用帳號密碼重新登入／အကောင့်နှင့် စကားဝှက်ဖြင့် ပြန်ဝင်ပါ'; // 用密碼重新登入（「用密碼重新登入」那顆、登入已失效共用）
 
   /* ───── 純計算與儲存（測試直接呼叫） ───── */
   const b64u = buf => { let s = ''; new Uint8Array(buf).forEach(b => { s += String.fromCharCode(b); }); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
@@ -140,16 +141,21 @@
       let r; try { r = await checkPattern(await H.getConfig(), seq); } finally { checking = false; }
       if (!locked) return; // 驗證途中已經用別的方式解開或登出了
       if (r.ok) return unlock();
+      // 第26任 抓BUG第2輪 手機組1：鎖畫面開著時登入失效（主管重設密碼、背景同步收到 BAD_LOGIN，金鑰被清掉）→ 找不到這把金鑰的解鎖設定（none）。
+      //   原本當成「圖形不對」，畫對也一直說不對、次數不減、出不去 → 改成直接帶去用密碼重新登入（同「用密碼重新登入」那顆）
+      if (r.none) return lockout(RELOGIN_MSG);
       if (r.locked) return lockout('九宮格錯了 ' + MAX_FAILS + ' 次，請用密碼重新登入（沒上傳的資料還在手機裡）／ပုံစံကွက် မှားနေသည် ' + MAX_FAILS + ' ကြိမ် မှားပြီ၊ စကားဝှက်ဖြင့် ပြန်ဝင်ပါ（မတင်ရသေးသော ဒေတာ ဖုန်းထဲတွင် ရှိနေသည်）');
       el('lockWho').textContent = (cfg.name || cfg.account || '') + `（已錯 ${r.fails} 次，錯 ${MAX_FAILS} 次要用密碼重新登入）／（${r.fails} ကြိမ် မှားပြီး၊ ${MAX_FAILS} ကြိမ် မှားလျှင် စကားဝှက်ဖြင့် ပြန်ဝင်ရမည်）`; // 第26任 低風險修正3④：上面的「已錯 N 次」原本只在上鎖時寫一次，跟下面「還可以試」對不起來
       el('lockMsg').textContent = `圖形不對，還可以試 ${MAX_FAILS - r.fails} 次／ပုံစံ မမှန်ပါ၊ နောက်ထပ် ${MAX_FAILS - r.fails} ကြိမ် စမ်းနိုင်သည်`;
     });
     if (c.method === 'bio') { el('lockBio').onclick = tryBio; tryBio(); }
-    el('lockPw').onclick = () => { if (confirm('要改用帳號密碼重新登入嗎？\n這支手機的解鎖設定會清掉，登入後可以重新設定。沒上傳的資料留在手機裡，登入後會再送出。\nအကောင့်နှင့် စကားဝှက်ဖြင့် ပြန်ဝင်မလား။ ဤဖုန်း၏ သော့ဖွင့် ဆက်တင် ရှင်းသွားမည်၊ ဝင်ပြီးမှ ပြန်သတ်မှတ်နိုင်သည်။ မတင်ရသေးသော ဒေတာ ကျန်နေပြီး ဝင်ပြီးလျှင် ပြန်ပို့ပေးမည်။')) lockout('請用帳號密碼重新登入／အကောင့်နှင့် စကားဝှက်ဖြင့် ပြန်ဝင်ပါ'); };
+    el('lockPw').onclick = () => { if (confirm('要改用帳號密碼重新登入嗎？\n這支手機的解鎖設定會清掉，登入後可以重新設定。沒上傳的資料留在手機裡，登入後會再送出。\nအကောင့်နှင့် စကားဝှက်ဖြင့် ပြန်ဝင်မလား။ ဤဖုန်း၏ သော့ဖွင့် ဆက်တင် ရှင်းသွားမည်၊ ဝင်ပြီးမှ ပြန်သတ်မှတ်နိုင်သည်။ မတင်ရသေးသော ဒေတာ ကျန်နေပြီး ဝင်ပြီးလျှင် ပြန်ပို့ပေးမည်။')) lockout(RELOGIN_MSG); };
   }
   async function tryBio() {
     el('lockMsg').textContent = '';
-    if (await checkBio(await H.getConfig())) return unlock();
+    const cfg = await H.getConfig();
+    if (!(await activeFor(cfg))) return lockout(RELOGIN_MSG); // 第26任 抓BUG第2輪 手機組1：登入已失效（找不到這把金鑰的設定）→ 直接用密碼重新登入，不說「認不出來」
+    if (await checkBio(cfg)) return unlock();
     el('lockMsg').textContent = '沒有解鎖（取消了或認不出來），請再按一次；不行就用密碼重新登入／သော့မဖွင့်နိုင်ပါ（ပယ်ဖျက်ခြင်း သို့မဟုတ် မမှတ်မိခြင်း）၊ ထပ်နှိပ်ပါ၊ မရလျှင် စကားဝှက်ဖြင့် ပြန်ဝင်ပါ';
   }
   function unlock() { locked = false; if (el('lockScreen')) el('lockScreen').hidden = true; try { localStorage.removeItem(HID); } catch (e) { /* 記不了沒關係 */ } }

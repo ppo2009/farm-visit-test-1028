@@ -740,11 +740,12 @@
   /** 設計版 C：退回原因面板（常用原因可複選＋自己寫，至少一項） */
   const REJ_REASONS = ['價格不合理', '缺照片', '照片非現場', '位置不符', '資料不完整', '其他'];
   function rejectPanel() {
+    // 抓BUG第2輪 主管組4：送出途中畫面重畫（照片載完、切回分頁重讀），「送出退回」原本又能按 → 送出中（closeSending）一律停用
     // 第25任 審查⑤：勾選和說明記在 state.review.rejDraft，畫面重讀（切回來超過 10 分鐘、跨午夜）後照樣帶回，不會寫到一半就清空
     const R = state.review, d0 = R && R.rejDraft, dr = d0 && d0.id === R.rej ? d0 : { reasons: [], note: '' }, can = dr.reasons.length || dr.note.trim(); // 草稿跟著那一筆（換到別筆不帶過去）
     return `<fieldset class="rejpanel"><legend>退回原因（至少選一項或寫說明）<span class="my">ပြန်ပို့သည့် အကြောင်းရင်း（အနည်းဆုံး တစ်ခု ရွေးပါ သို့မဟုတ် စာရေးပါ）</span></legend>${REJ_REASONS.map(r => `<label class="rjc"><input type="checkbox" name="rj" value="${esc(r)}"${dr.reasons.indexOf(r) >= 0 ? ' checked' : ''}> ${esc(r)}</label>`).join('')}
       <textarea id="rejNote" maxlength="300" placeholder="寫給業務看的說明（例：價格比市價低一半，請確認單位）">${esc(dr.note)}</textarea>
-      <div class="rbtns"><button class="btn" type="button" data-rv="rejcancel">取消</button><button class="btn primary" type="button" data-rv="rejsend"${can ? '' : ' disabled'}>送出退回<span class="my">ပြန်ပို့မှု ပေးပို့</span></button></div></fieldset>`;
+      <div class="rbtns"><button class="btn" type="button" data-rv="rejcancel">取消</button><button class="btn primary" type="button" data-rv="rejsend"${can && !state.closeSending ? '' : ' disabled'}>送出退回<span class="my">ပြန်ပို့မှု ပေးပို့</span></button></div></fieldset>`;
   }
   function bindReview() {
     const box = $('panel').querySelector ? $('panel').querySelector('#reviewCard') : null; if (!box) return; // 舊測試的假畫面沒有 querySelector
@@ -771,7 +772,10 @@
       // 第26任 低風險修正3①：原本一按就標「看過」→ 盤商、種子商（任務只能派給農民）或已結束的客戶派不出去，這筆可疑拜訪卻已經從清單消失；
       //   改成：派不了就留在清單、寫原因；派得了就帶到任務頁，任務真的派出去才標「看過」
       if (a === 'ask') { const cu = (state.data.customers || []).find(c => c.id === x.cid); if (!cu || (cu.type || '農民') !== '農民' || cu.status === '已結束') { state.closeMsg = `這位客戶${cu ? '是' + (cu.status === '已結束' ? '已結束的客戶' : cu.type) : '找不到'}，任務只能派給往來中的農民；請直接聯絡 ${x.staff || '業務'}（這筆先留在清單）`; render(); return; }
-        const s = (state.data.staffList || []).find(y => y.name === x.staff); state.tf = { staff: s ? s.account : '', cid: x.cid, text: `請說明 ${x.time.slice(5, 16)} 這筆拜訪：${flagsOf(x).map(f => f.txt.replace(/^\S+ /, '')).join('、')}`, seenVid: x.id }; state.review = null; state.tab = 'tasks'; render(); return; }
+        const s = (state.data.staffList || []).find(y => y.name === x.staff);
+        // 抓BUG第2輪 主管組2：拜訪的業務沒有啟用中的帳號（停用、離職、名字對不上）→ 原本帶到任務頁時選單沒選到人，瀏覽器預設第一位，按送出就派給別人。改成派不了就留在清單、寫原因（緬文待譯 D13）
+        if (!s) { state.closeMsg = `${x.staff || '這位業務'} 沒有啟用中的業務帳號，任務派不出去；請直接聯絡，或到任務頁自己選業務（這筆先留在清單）`; render(); return; }
+        state.tf = { staff: s ? s.account : '', cid: x.cid, text: `請說明 ${x.time.slice(5, 16)} 這筆拜訪：${flagsOf(x).map(f => f.txt.replace(/^\S+ /, '')).join('、')}`, seenVid: x.id }; state.review = null; state.tab = 'tasks'; render(); return; }
       if (a === 'reject') { R.rej = x.visitId; render(); return; }
       if (a === 'rejcancel') { R.rej = null; R.rejDraft = null; render(); return; }
       if (a === 'confirm' || a === 'rejsend') {
@@ -782,7 +786,10 @@
         state.closeSending = x.visitId;
         let r;
         try { r = await api(Object.assign({ action: 'closeDecide', visitId: x.visitId, decision: ok ? 'confirm' : 'reject' }, ok ? {} : { reasons, note })); } catch (e) { r = { ok: false, message: '連不上伺服器／ဆာဗာနှင့် ချိတ်မရပါ' }; } finally { state.closeSending = null; }
-        if (r && r.code === 'DONE_ALREADY') r = Object.assign({}, r, { ok: true, already: true });
+        // 抓BUG第2輪 主管組3：後台回「已處理過」時原本一律當成功、說「別人處理過了」→ 別人做的跟我相反（我退回、他已確認）也看不出來。
+        //   後台有帶 state（已確認／已退回）：跟我這次要做的一樣才當成功；不一樣就寫出實際結果、不跳下一筆（緬文待譯 D14）
+        if (r && r.code === 'DONE_ALREADY') r = !r.state || r.state === (ok ? '已確認' : '已退回') ? Object.assign({}, r, { ok: true, already: true })
+          : Object.assign({}, r, { message: `這筆已經被別人「${r.state}」，跟你這次要做的（${ok ? '確認結案' : '退回'}）不一樣，請看清楚再處理` });
         if (r.closings) setData({ closings: r.closings });
         R.rej = null;
         if (r.ok) { R.rejDraft = null; state.closeMsg = r.already ? '這筆別人已經處理過了，跳下一筆／ဤတစ်ခုကို အခြားသူ လုပ်ဆောင်ပြီးပါပြီ၊ နောက်တစ်ခုသို့ ကျော်မည်' : ok ? `已確認結案：${x.name}／ပိတ်သိမ်းမှု အတည်ပြုပြီး：${x.name}` : `已退回：${x.name}（原因已傳給業務）／ပြန်ပို့ပြီး：${x.name}（အကြောင်းရင်း ဝန်ထမ်းထံ ပို့ပြီး）`; state.closeMsgSeq = state.loadSeq + 1; render(); load(); return; } // closeMsgSeq：緊接著的重讀不清掉訊息（同舊清單 0.4.88 低7）
@@ -1180,6 +1187,7 @@
     const planHtml = list => list.length ? `<div class="plans">${list.map(x => `<span>${esc(x.label)}（${esc(x.period)}）<span class="bar"><i style="width:${Math.max(0, Math.min(100, x.pct))}%"></i></span>${x.done}／${x.target}${x.done >= x.target ? ' <span class="pill p-grn">達成</span>' : ''}${planParts(x)}</span>`).join('')}</div>` : '<span class="sub">沒有目標<span class="my">ပစ်မှတ် မရှိပါ</span></span>';
     const cats = ['試作', '推廣', '農戶', '盤商', '種子商']; // 「農戶」顯示成「一般拜訪」；盤商、種子商分開算（2026-11-11 董事長）
     // 0.4.85 中5：各地區表選過去月份時只有拜訪數照月份，客戶數、進行中試作是今天的 → 表頭寫所選月份、那幾欄標（目前）
+    // 第26任 抓BUG第2輪 主管組5：各地區表預設排除測試帳號（後台 regions），勾「顯示測試資料」才用含測試帳號的 regionsAll（舊後台沒有就照用 regions）
     // 第24任 第七批設計版 K：一張全員對照表（一列一人：拜訪、新客戶、試作、三個目標達成率）；全部是 0 的人收到表格下面一行；測試帳號預設不列
     const ppl = p.staff.filter(x => state.showTest || !isTestStaff(x.name));
     const zero = x => !x.visits && !x.newCustomers && !x.trialsStarted && !x.trialsEnded && !(x.plan || []).some(y => y.done);
@@ -1189,7 +1197,7 @@
       ${live.map(x => `<tr><td data-label="業務／ဝန်ထမ်း"><b>${esc(x.name)}</b></td><td data-label="拜訪／သွားရောက်">${x.visits}</td>${cats.map(c => `<td data-label="${c === '農戶' ? '一般拜訪／ပုံမှန်သွားရောက်' : c}">${(x.byCategory || {})[c] || 0}</td>`).join('')}<td data-label="拜訪過的客戶／သွားခဲ့သော ဖောက်သည်">${x.customersVisited}</td><td data-label="新增客戶／ဖောက်သည်အသစ်">${x.newCustomers}</td><td data-label="試作 開始／完成／စမ်းသပ် စ／ပြီး">${x.trialsStarted}／${x.trialsEnded}</td><td data-label="目標 1／ပစ်မှတ် ၁">${goal(x, 0)}</td><td data-label="目標 2／ပစ်မှတ် ၂">${goal(x, 1)}</td><td data-label="目標 3／ပစ်မှတ် ၃">${goal(x, 2)}</td></tr>`).join('') || `<tr><td colspan="13" class="empty">${ppl.length ? '本月大家都還沒有紀錄<span class="my">ဤလတွင် အားလုံး မှတ်တမ်း မရှိသေးပါ</span>' : '沒有業務帳號<span class="my">ဝန်ထမ်း အကောင့် မရှိပါ</span>'}</td></tr>`}
       </tbody></table></div>${idle.length ? `<p class="sub notask">本月尚無紀錄／ဤလ မှတ်တမ်း မရှိသေး：${idle.map(x => esc(x.name)).join('、')}</p>` : ''}
       <details class="plandet"><summary>每位業務的目標明細<span class="my">ဝန်ထမ်းတစ်ဦးချင်း ပစ်မှတ် အသေးစိတ်</span></summary><ul class="list">${ppl.map(x => `<li><b>${esc(x.name)}</b> ${planHtml(x.plan)}</li>`).join('')}</ul></details>
-      <h3>各地區（${esc(p.label)}）<span class="my">ဒေသအလိုက်（${esc(p.label)}）</span></h3><div class="tbl"><table><thead><tr><th>地區</th><th>農民（目前）<span class="my">လယ်သမား（လက်ရှိ）</span></th><th>盤商（目前）<span class="my">ကုန်သည်（လက်ရှိ）</span></th><th>種子商（目前）<span class="my">မျိုးစေ့ဆိုင်（လက်ရှိ）</span></th><th>${Number(state.pm.slice(5))} 月拜訪<span class="my">${Number(state.pm.slice(5))} လ သွားရောက်မှု</span></th><th>進行中的試作（目前）<span class="my">လုပ်ဆောင်ဆဲ စမ်းသပ်မှု（လက်ရှိ）</span></th></tr></thead><tbody>      ${p.regions.map(r => `<tr><td>${esc(r.area)}</td><td>${r.customers}</td><td>${r.dealers}</td><td>${r.seeds || 0}</td><td>${r.visits}</td><td>${r.trialsActive}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">還沒有客戶<span class="my">ဖောက်သည် မရှိသေးပါ</span></td></tr>'}
+      <h3>各地區（${esc(p.label)}）<span class="my">ဒေသအလိုက်（${esc(p.label)}）</span></h3><div class="tbl"><table><thead><tr><th>地區</th><th>農民（目前）<span class="my">လယ်သမား（လက်ရှိ）</span></th><th>盤商（目前）<span class="my">ကုန်သည်（လက်ရှိ）</span></th><th>種子商（目前）<span class="my">မျိုးစေ့ဆိုင်（လက်ရှိ）</span></th><th>${Number(state.pm.slice(5))} 月拜訪<span class="my">${Number(state.pm.slice(5))} လ သွားရောက်မှု</span></th><th>進行中的試作（目前）<span class="my">လုပ်ဆောင်ဆဲ စမ်းသပ်မှု（လက်ရှိ）</span></th></tr></thead><tbody>      ${(state.showTest && p.regionsAll ? p.regionsAll : p.regions).map(r => `<tr><td>${esc(r.area)}</td><td>${r.customers}</td><td>${r.dealers}</td><td>${r.seeds || 0}</td><td>${r.visits}</td><td>${r.trialsActive}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">還沒有客戶<span class="my">ဖောက်သည် မရှိသေးပါ</span></td></tr>'}
       </tbody></table></div><p class="sub">目標在試算表「計劃」分頁設定：月份空白＝每個月都適用；業務空白＝每位業務各自的目標；指標有拜訪次數、拜訪客戶數、新增客戶、開始試作、完成試作、簽約（盤商、種子商結案「已簽約」；還在等主管確認、被退回的不算；類別空白＝兩種都算）。新增客戶的類別填「農戶」時，會另外列出試作、推廣、一般農民各幾位。<span class="my">ပစ်မှတ်ကို Sheet 「စီမံချက်」 စာမျက်နှာတွင် သတ်မှတ်သည် - လ အလွတ်＝လစဉ် အကျုံးဝင်； ဝန်ထမ်း အလွတ်＝ဝန်ထမ်းတစ်ဦးချင်းစီ၏ ပစ်မှတ်； အညွှန်းများမှာ သွားရောက်မှု အကြိမ်၊ သွားခဲ့သော ဖောက်သည်၊ ဖောက်သည်အသစ်၊ စမ်းသပ် စတင်၊ စမ်းသပ် ပြီးဆုံး၊ စာချုပ်ချုပ် (ကုန်သည်/မျိုးစေ့ဆိုင် စာချုပ်ချုပ်ပြီး； စစ်ဆေးဆဲ/ပြန်ပို့ မပါ； အမျိုးအစား အလွတ်＝နှစ်မျိုးလုံး တွက်သည်)။ ဖောက်သည်အသစ်တွင် 「လယ်သမား」 ဖြည့်ပါက စမ်းသပ်၊ မြှင့်တင်၊ ပုံမှန် အရေအတွက် ထပ်ခွဲပြမည်။</span></p>`;
   }
   /* ───── 任務：主管、總經理派給業務（每條跟著一位農民）；總經理另外派給主管（可以不指定客戶）（2026-11-12）─────
@@ -1288,7 +1296,8 @@
         try { r = await api({ action: 'taskAdd', staff: state.tf.staff, cid: state.tf.cid, text: state.tf.text.trim(), rid: state.tf.rid }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再按一次（不會派成兩條）／ဆာဗာနှင့် ချိတ်မရပါ၊ ထပ်နှိပ်ပါ（နှစ်ခု ဖြစ်မသွားပါ）' }; }
         if (r.ok) { setData({ tasks: r.tasks }); state.tf.text = ''; state.tf.rid = ''; state.tf.ridKey = ''; state.taskMsg = toBoss ? '已派出（主管打開主管網頁「任務」就會看到）／ပေးပို့ပြီး (မန်နေဂျာ ဝဘ် 「လုပ်ငန်း」 တွင် မြင်ရမည်)' : '已派出（業務手機下次同步就會看到）／ပေးပို့ပြီး (ဝန်ထမ်းဖုန်း နောက်တစ်ကြိမ် စင့်ခ်လုပ်လျှင် မြင်ရမည်)'; }
         if (r.ok && state.tf.seenVid) { markSeen(state.tf.seenVid); state.tf.seenVid = ''; } // 第26任 低風險修正3①：追問的任務真的派出去，那筆可疑拜訪才標「看過」
-        else state.taskMsg = '⚠ ' + (r.message || '派發失敗／မပေးနိုင်ပါ');
+        // 第26任 抓BUG第2輪 主管組1（高）：原本 else 接在上一行「成功且是追問」後面 → 一般派任務成功也被蓋成「⚠ 派發失敗」，主管重按就派出兩條。改成只有真的失敗才寫失敗
+        if (!r.ok) state.taskMsg = '⚠ ' + (r.message || '派發失敗／မပေးနိုင်ပါ');
         render();
       });
     }

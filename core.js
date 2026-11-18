@@ -806,6 +806,51 @@
     return syncTodo(all, cfg, now).filter(v => !skip.has(v.id) && !memWait(v, now));
   }
 
+  /* 第26任 2026-11-18（老闆「把冗長的函數拆解」）：runSyncInner 80 行拆出「送出出錯」「收到回應」兩段，內容只搬位置；
+     計數（連續逾時、連續伺服器失敗）和 break／continue 仍留在迴圈裡，兩個函式只回這筆的結果 */
+  /** 拆自 runSyncInner：送出時出錯 → 'retried'（排了重試，這筆不算剩下）／'timeout'／'bad'（錯誤頁）／'stop'（沒網路，這輪先停） */
+  async function onSendError(e, v, report) {
+    report.error = postError(e);
+    // 0.4.94 中3（第11任第五輪）：一筆大檔（長錄音＋多張照片）在慢網路逾時，原本 break → 後面的小筆全被它卡住，每次都從它重來。
+    // 改成：這筆照一般失敗排 nextTry（退避 1、2、4…最多 30 分鐘），先送後面的；連續 2 筆都逾時多半是網路整個太慢，這輪先停（省流量）。後台用拜訪編號防重複：逾時那筆其實已收到的話，重送回成功，不會多一筆
+    if (e.timeout) {
+      if (await retryLater(v, nextFail, report)) { report.left--; return 'retried'; }
+      return 'timeout';
+    }
+    if (e.badResponse) { if (await retryLater(v, nextFail, report)) { report.left--; return 'retried'; } return 'bad'; } // 0.5.33 P2：錯誤頁（非 JSON／HTTP 錯誤）原本跟沒網路一樣 break，同一筆每次錯誤頁就整個佇列卡住 → 比照伺服器處理失敗：排晚點再試、先送下一筆（連續 2 筆才停）
+    return 'stop'; // 沒網路：這一輪先停，下次再從這筆開始
+  }
+  /** 拆自 runSyncInner：後台有回應 → 'done'（收了或確定收不了）／'retried'（排了重試）／'failed'（伺服器失敗、沒排到重試）／'stop'（登入失效、伺服器忙） */
+  async function applyReply(v, data, media, sentAt, cfg, report) {
+    // 0.4.87 高1：送出後換了帳號就整份丟掉（拜訪本身的上傳狀態照記）
+    // 0.5.16 第2輪 中：寫回客戶清單、首頁等失敗（例如手機空間不足）時不能跳出整個上傳迴圈——後台已經收了，這筆照樣要標「已上傳」，不然每輪整包重送照片錄音
+    // R12-01～R14-02：寫回失敗時暫存客戶、試作不會被清——清理改成看後台快取裡有沒有它（見 pruneLocalCustomers），寫回失敗快取就沒有它
+    try { await rememberServer(data, sentAt, cfg.deviceKey); } catch (e) { report.syncWarn = SYNC_WARN; }
+    if (!report.syncWarn && oldServer(data)) report.syncWarn = OLD_SRV_WARN; // R20（GPT 04）
+    // 寫回拜訪狀態一律在同一個交易裡讀最新的再改（R7-03）：已上傳的不會被降回待上傳或被拒
+    if (data && data.ok) {
+      await markSent(v, data, media, report); // 0.5.33 P1：寫不進手機不中斷，見 markSent
+      report.sent++; report.left--;
+      return 'done';
+    }
+    if (data && data.code === 'BAD_LOGIN') {
+      // 0.4.87 高1：上一位的金鑰被登出停用、回「登入失效」時，現在已經換人登入 → 不回 BAD_LOGIN（不然新帳號會被踢回登入頁）
+      report.error = data.message; if (await sameLogin(cfg.deviceKey)) { report.code = 'BAD_LOGIN'; await noteLoginLost(cfg, data.message); } return 'stop'; // 資料留在手機，重新登入後會接著傳；0.5.19 A1 記下失效
+    }
+    if (data && (data.code === 'BAD_ID' || data.code === 'BAD_REQUEST')) {
+      // 伺服器確定收不了的（格式錯）：標成被拒、留在手機，不再重送，也不擋後面的
+      try { await Store.updateVisit(v.id, cur => (cur && cur.status === 'uploaded' ? null : Object.assign({}, cur || v, { status: 'rejected', rejectReason: data.message || data.code }))); } catch (e) { noteStoreFull(report); } // 0.5.33 P1：寫不進去不中斷
+      report.left--;
+      return 'done';
+    }
+    if (data && data.code === 'BUSY') { report.error = data.message; return 'stop'; } // 伺服器忙，整批晚點再來
+    // 其他錯誤（伺服器處理失敗）：這筆留著下次重送，先換下一筆，免得一筆壞資料卡住全部（2026-11-11 審查發現）。
+    // 連續 2 筆都失敗，多半是伺服器整個出問題，就先停，省流量。
+    // 別的同步（網頁或背景程式）已經傳好的，不要用舊的狀態蓋掉「已上傳」（G08）；讀和寫在同一個交易（R7-03，見 scheduleRetry）
+    if (await retryLater(v, nextFail, report)) { report.left--; return 'retried'; }
+    report.error = (data && data.message) || '伺服器沒有回應成功，稍後自動重送／ဆာဗာ မအောင်မြင်၊ နောက်မှ အလိုအလျောက် ထပ်တင်မည်'; // 0.4.94 中2 加緬文
+    return 'failed';
+  }
   async function runSyncInner(onProgress) {
     if (running) return { busy: true };
     running = true;
@@ -838,45 +883,14 @@
           const ask = await buildAsk(all); // R19：問後台「我手機上這幾個暫存收到了沒」（後台只回答這些）
           data = await post(cfg.gasUrl, visitPayload(cfg, v, text, mediaLost, media, ask));
         } catch (e) {
-          report.error = postError(e);
-          // 0.4.94 中3（第11任第五輪）：一筆大檔（長錄音＋多張照片）在慢網路逾時，原本 break → 後面的小筆全被它卡住，每次都從它重來。
-          // 改成：這筆照一般失敗排 nextTry（退避 1、2、4…最多 30 分鐘），先送後面的；連續 2 筆都逾時多半是網路整個太慢，這輪先停（省流量）。後台用拜訪編號防重複：逾時那筆其實已收到的話，重送回成功，不會多一筆
-          if (e.timeout) {
-            if (await retryLater(v, nextFail, report)) { report.left--; continue; }
-            if (++timeouts >= 2) break;
-            continue;
-          }
-          if (e.badResponse) { if (await retryLater(v, nextFail, report)) report.left--; else if (++serverFails >= 2) break; continue; } // 0.5.33 P2：錯誤頁（非 JSON／HTTP 錯誤）原本跟沒網路一樣 break，同一筆每次錯誤頁就整個佇列卡住 → 比照伺服器處理失敗：排晚點再試、先送下一筆（連續 2 筆才停）
-          break; // 沒網路：這一輪先停，下次再從這筆開始
-        }
-        timeouts = 0; // 0.4.94 中3：有回應就重算連續逾時
-        // 0.4.87 高1：送出後換了帳號就整份丟掉（拜訪本身的上傳狀態照記）
-        // 0.5.16 第2輪 中：寫回客戶清單、首頁等失敗（例如手機空間不足）時不能跳出整個上傳迴圈——後台已經收了，這筆照樣要標「已上傳」，不然每輪整包重送照片錄音
-        // R12-01～R14-02：寫回失敗時暫存客戶、試作不會被清——清理改成看後台快取裡有沒有它（見 pruneLocalCustomers），寫回失敗快取就沒有它
-        try { await rememberServer(data, sentAt, cfg.deviceKey); } catch (e) { report.syncWarn = SYNC_WARN; }
-        if (!report.syncWarn && oldServer(data)) report.syncWarn = OLD_SRV_WARN; // R20（GPT 04）
-        // 寫回拜訪狀態一律在同一個交易裡讀最新的再改（R7-03）：已上傳的不會被降回待上傳或被拒
-        if (data && data.ok) {
-          await markSent(v, data, media, report); // 0.5.33 P1：寫不進手機不中斷，見 markSent
-          report.sent++; report.left--;
-        } else if (data && data.code === 'BAD_LOGIN') {
-          // 0.4.87 高1：上一位的金鑰被登出停用、回「登入失效」時，現在已經換人登入 → 不回 BAD_LOGIN（不然新帳號會被踢回登入頁）
-          report.error = data.message; if (await sameLogin(cfg.deviceKey)) { report.code = 'BAD_LOGIN'; await noteLoginLost(cfg, data.message); } break; // 資料留在手機，重新登入後會接著傳；0.5.19 A1 記下失效
-        } else if (data && (data.code === 'BAD_ID' || data.code === 'BAD_REQUEST')) {
-          // 伺服器確定收不了的（格式錯）：標成被拒、留在手機，不再重送，也不擋後面的
-          try { await Store.updateVisit(v.id, cur => (cur && cur.status === 'uploaded' ? null : Object.assign({}, cur || v, { status: 'rejected', rejectReason: data.message || data.code }))); } catch (e) { noteStoreFull(report); } // 0.5.33 P1：寫不進去不中斷
-          report.left--;
-        } else if (data && data.code === 'BUSY') {
-          report.error = data.message; break; // 伺服器忙，整批晚點再來
-        } else {
-          // 其他錯誤（伺服器處理失敗）：這筆留著下次重送，先換下一筆，免得一筆壞資料卡住全部（2026-11-11 審查發現）。
-          // 連續 2 筆都失敗，多半是伺服器整個出問題，就先停，省流量。
-          // 別的同步（網頁或背景程式）已經傳好的，不要用舊的狀態蓋掉「已上傳」（G08）；讀和寫在同一個交易（R7-03，見 scheduleRetry）
-          if (await retryLater(v, nextFail, report)) { report.left--; continue; }
-          report.error = (data && data.message) || '伺服器沒有回應成功，稍後自動重送／ဆာဗာ မအောင်မြင်၊ နောက်မှ အလိုအလျောက် ထပ်တင်မည်'; // 0.4.94 中2 加緬文
-          if (++serverFails >= 2) break;
+          const k = await onSendError(e, v, report);
+          if (k === 'stop' || (k === 'timeout' && ++timeouts >= 2) || (k === 'bad' && ++serverFails >= 2)) break;
           continue;
         }
+        timeouts = 0; // 0.4.94 中3：有回應就重算連續逾時
+        const k = await applyReply(v, data, media, sentAt, cfg, report);
+        if (k === 'stop' || (k === 'failed' && ++serverFails >= 2)) break;
+        if (k === 'retried' || k === 'failed') continue;
         serverFails = 0;
       }
       // R18（Gemini 2）：這一輪後台資料寫回手機失敗 → 不清理（清理規則本身只認後台明確說的，這裡再多一道保險）
