@@ -325,32 +325,6 @@
       // 點業務卡片：到客戶頁，只看這位業務要注意的客戶
       state.cf = { q: '', staff: el.dataset.staff, area: '', type: '', show: 'attn' }; state.trial = null; state.tab = 'trial'; render();
     }));
-    // 0.4.33 主管確認／退回結案
-    $('panel').querySelectorAll('[data-closedecide]').forEach(b => b.addEventListener('click', async () => {
-      const ok = b.dataset.closedecide === 'confirm';
-      // 結案清單低9：盤商、種子商結案（有洽談結果）確認框原本寫農民、試作
-      const cl = (state.data.closings || []).find(x => x.visitId === b.dataset.vid) || {};
-      const dealer = !!cl.result, signed = cl.result === '已簽約'; // 0.4.75 董事長「盤商跟種子商變成以簽約才結案」
-      // 0.5.18（抓BUG C2）：確認框原本看不出是哪一位，按錯一筆時最後一道關卡失效 → 最前面寫客戶、業務、日期（緬文段也看得到名字）
-      const who = '【' + [cl.name, cl.staff, cl.date].filter(Boolean).join('｜') + '】\n';
-      if (!confirm(who + (ok ? (signed ? '確認這家店已簽約、結案？' + (cl.reason ? '（' + cl.reason.slice(0, 40) + '）' : '') + '確認後這家店改「已結束」，業務選單不再出現、不能再拜訪。' : dealer ? '確認這家店結案（' + cl.result.slice(0, 40) + '）？確認後這家店改「已結束」，業務選單不再出現、不能再拜訪。' : '確認這位農民結案？確認後不再提醒回訪，結案前就在進行的試作也會結束。') + '\n\nပိတ်သိမ်းမှုကို အတည်ပြုမလား။ အတည်ပြုပြီးနောက် ဤဖောက်သည် ပိတ်သိမ်းပြီး ဖြစ်မည်' : biText('退回這筆結案？客戶照常追蹤，當作沒結案。', 'ဤပိတ်သိမ်းမှုကို ပြန်ပို့မလား။ ဖောက်သည်ကို ဆက်လက် စောင့်ကြည့်မည် (မပိတ်သိမ်း)')))) return;
-      $('panel').querySelectorAll('[data-closedecide]').forEach(x => { x.disabled = true; });
-      // 0.5.18（抓BUG C1）：送出中別的讀取（月計劃）整頁重畫，按鈕原本又變可按 → 記在 state，renderClosings 照樣畫成停用
-      state.closeSending = b.dataset.vid;
-      let r;
-      try { r = await api({ action: 'closeDecide', visitId: b.dataset.vid, decision: b.dataset.closedecide }); } catch (e) { r = { ok: false, message: '連不上伺服器／ဆာဗာနှင့် ချိတ်မရပါ' }; } finally { state.closeSending = null; }
-      // C1：後台說「已經處理過」，而且現在的狀態正好是這次要做的（確認→已確認、退回→已退回）＝其實成功了，不顯示紅字
-      if (r && r.code === 'DONE_ALREADY') { const st = String(r.state || (String(r.message || '').match(/（([^（）]+)）$/) || [])[1] || ''); if (st === (ok ? '已確認' : '已退回')) r = Object.assign({}, r, { ok: true }); }
-      if (r.closings) setData({ closings: r.closings });
-      state.closeMsg = r.ok ? (ok ? '已確認結案／ပိတ်သိမ်းမှု အတည်ပြုပြီး' : '已退回／ပြန်ပို့ပြီး') : '⚠ ' + (r.message || '處理失敗／မအောင်မြင်ပါ'); // 0.4.94 緬文
-      state.closeMsgSeq = state.loadSeq + 1; // 0.4.88 低7：緊接著這次的重讀不清訊息，之後的讀取才清
-      // 確認結案會改客戶狀態、試作：整份重讀；主管BUG#4：先重畫（按鈕恢復、看到成功訊息），重讀失敗也不會卡灰
-      // 0.4.75（1號主管清單低7）：退回也重讀，拜訪紀錄、客戶履歷才會馬上變「結案（已退回）」
-      if (r.ok && ok) { render(); load(); return; }
-      if (r.ok && !ok) { render(); load(); return; } // 低7：退回
-      if (r.code === 'DONE_ALREADY') { render(); load(); return; } // 0.4.88 低6：別人已經處理過 → 重讀，畫面才會是最新的客戶狀態、拜訪紀錄
-      render();
-    }));
     bindMedia($('panel')); syncPlayer($('panel')); // 0.4.88 中8：重畫後舊錄音接到新按鈕，找不到就停
     $('panel').querySelectorAll('[data-filter]').forEach(el => el.addEventListener('change', () => { state.rf[el.dataset.filter] = el.value; render(); }));
     $('panel').querySelectorAll('[data-month]').forEach(el => el.addEventListener('change', () => { state.pm = el.value; render(); }));
@@ -688,6 +662,8 @@
       : dealer ? '確認這家店結案（' + String(c.result).slice(0, 40) + '）？確認後這家店改「已結束」，業務選單不再出現、不能再拜訪。' : '確認這位農民結案？確認後不再提醒回訪，結案前就在進行的試作也會結束。')
       + (miss.length ? '\n⚠ 這筆缺／ဤတစ်ခုတွင် လိုနေသည်：' + miss.join('、') : '') + '\n\nပိတ်သိမ်းမှုကို အတည်ပြုမလား။ အတည်ပြုပြီးနောက် ဤဖောက်သည် ပိတ်သိမ်းပြီး ဖြစ်မည်';
   }
+  /** 第26任 清死程式：舊清單 renderClosings 的「沒升級提示」搬來審核卡（結案分頁沒有結果欄時，盤商洽談結案的資料全空，不要顯示成農民收成） */
+  function noResultCol(c) { return !c.result && !c.group && !c.trialOutcome && !c.buyer && (c.price === '' || c.price == null) && (c.yield === '' || c.yield == null); }
   function closeMissing(c, v) {
     const miss = [];
     const failed = /失敗/.test(String(c.trialOutcome || '')) || /種植失敗/.test(String(c.reason || '')) || (v && v.plantFail);
@@ -719,13 +695,13 @@
     const cu = custOf(x.cid), photos = close ? reviewPhotos(x.cid, v) : (x.photos || []).slice(0, 3);
     const flags = v ? flagsOf(v) : [];
     const pos = `${close ? '待確認結案<span class="my">အတည်ပြုစောင့်ဆဲ ပိတ်သိမ်းမှု</span>' : '可疑拜訪<span class="my">သံသယရှိဖွယ် သွားရောက်မှု</span>'} ${R.i + 1}／${items.length}`;
-    const head = close ? `<h2 class="rh">${esc(x.name || '客戶 ' + x.cid)}・${esc(cu.type || x.group || '')}${cu.crop ? '・' + esc(cropText(cu.crop)) : ''}</h2><p class="sub">${esc(x.staff || '業務未填／ဝန်ထမ်း မဖြည့်ရသေး')}・送出／ပို့ပြီး ${esc(x.date || '日期未填／ရက်စွဲ မဖြည့်ရသေး')}${isTestStaff(x.staff) ? ' <span class="pill">測試<span class="my">စမ်းသပ်</span></span>' : ''}</p>`
+    const head = close ? `<h2 class="rh">${esc(x.name || '客戶 ' + (x.cid || '（沒有編號／နံပါတ် မရှိ）'))}・${esc(cu.type || x.group || '')}${cu.crop ? '・' + esc(cropText(cu.crop)) : ''}</h2><p class="sub">${esc(x.staff || '業務未填／ဝန်ထမ်း မဖြည့်ရသေး')}・送出／ပို့ပြီး ${esc(x.date || '日期未填／ရက်စွဲ မဖြည့်ရသေး')}${isTestStaff(x.staff) ? ' <span class="pill">測試<span class="my">စမ်းသပ်</span></span>' : ''}</p>`
       : `<h2 class="rh">${esc(x.cat || '')}・${esc(x.name)}</h2><p class="sub">${esc(x.staff)}・${esc(x.time)}</p>`;
     const cells = close ? `<div class="r4">
         <div><span class="sub">價格</span><b>${x.price === '' || x.price == null ? '—' : esc(nfmt(x.price)) + ' ' + esc(x.priceUnit || '')}</b></div>
         <div><span class="sub">產量<span class="my">အထွက်နှုန်း</span></span><b>${x.yield === '' || x.yield == null ? '—' : esc(nfmt(x.yield)) + ' ' + esc(x.yieldUnit || '')}</b></div>
         <div><span class="sub">收購客戶<span class="my">ဝယ်သူ</span></span><b>${esc(x.buyer || '—')}</b></div>
-        <div><span class="sub">結果</span><b>${esc(x.result || closeGroupTxt(x) || ((v && v.plantFail) ? '種植失敗／စိုက်ပျိုးမှု မအောင်မြင်' : '收成結案／ရိတ်သိမ်း ပိတ်သိမ်း'))}</b></div></div>
+        <div><span class="sub">結果</span><b>${esc(x.result || closeGroupTxt(x) || ((v && v.plantFail) ? '種植失敗／စိုက်ပျိုးမှု မအောင်မြင်' : noResultCol(x) ? '洽談結果沒記到（結案分頁少了「結果」欄，請在試算表按「第一次安裝／升級」）／ဆွေးနွေးမှု ရလဒ် မမှတ်မိပါ (ပိတ်သိမ်း စာမျက်နှာတွင် 「ရလဒ်」 ကော်လံ လိုနေသည်၊ Sheet တွင် 「ပထမအကြိမ် တပ်ဆင်／အပ်ဒိတ်」 နှိပ်ပါ)' : '收成結案／ရိတ်သိမ်း ပိတ်သိမ်း'))}</b></div></div>
       ${closeTags(x) ? `<p class="rtags">${closeTags(x)}</p>` : ''}${closeExtra(x) ? `<p class="sub">${closeExtra(x)}</p>` : ''}` : '';
     const ph = photos.length ? `<div class="rphotos">${photos.map(id => `<button type="button" class="rthumb" data-photo="${esc(id)}" data-big="${esc(id)}" aria-label="看大圖">讀取中…<span class="my">ဖတ်နေသည်</span></button>`).join('')}</div>` : '<p class="sub">（沒有照片）<span class="my">（ဓာတ်ပုံ မရှိပါ）</span></p>';
     const fl = flags.length ? `<div class="flags big">${flags.map(f => `<span class="flag f-${f.k}">${esc(f.txt)}</span>`).join('')}</div>` : '';
@@ -864,20 +840,6 @@
     return `<section class="harvest"><h3><span class="pill p-yel">快採收待盯</span> <span class="sub">預計採收日前 10 天內，請業務到現場；紅色＝已過預計採收日還沒結案<span class="my">ခန့်မှန်း ရိတ်သိမ်းရက်မတိုင်မီ ၁၀ ရက်အတွင်း ဝန်ထမ်း ကွင်းဆင်းခိုင်းပါ၊ အနီရောင်＝ရိတ်သိမ်းရက်ကျော်ပြီး မပိတ်သိမ်းရသေး</span></span></h3>
       <ul class="list">${list.map(h => `<li${h.overdue ? ' class="hs-late"' : ''}>${esc(h.staff || '未指派／တာဝန် မပေးရသေး')}｜<b><a href="javascript:void 0" data-go="${esc(h.cid)}">${esc(h.name)}</a></b>（${esc(cropText(h.crop))}）${left(h)}<br>
         <span class="sub">預計採收 ${esc(h.harvestDate)}（種植 ${esc(h.plantDate)}）｜最後拜訪 ${esc(h.lastVisit || '沒有')}<span class="my">ခန့်မှန်း ရိတ်သိမ်း ${esc(h.harvestDate)}（စိုက် ${esc(h.plantDate)}）｜နောက်ဆုံး သွားရောက်မှု ${esc(h.lastVisit || 'မရှိ')}</span></span></li>`).join('') || '<li class="empty">沒有</li>'}</ul></section>`;
-  }
-  /** 待確認結案（0.4.33 董事長：怕業務結案按錯 → 主管確認才算）：有才顯示，放總覽最上面 */
-  function renderClosings() {
-    const list = state.data.closings || [];
-    if (!list.length) return state.closeMsg ? `<p class="sub" id="closeMsg" aria-live="polite">${esc(state.closeMsg)}</p>` : ''; // 0.4.94（第五輪 6）：最後一筆處理完也看得到結果
-    // 0.4.77 董事長範例（玉米紙卡）：採收量測摘要，例如「玉米 5 穗 1.5kg 去殼・64 天」；沒填的不寫
-    const msum = m => (m ? [m.variety, m.sampleCount !== '' && m.sampleCount != null ? m.sampleCount + (m.sampleUnit || '') : '', m.weightKg !== '' && m.weightKg != null ? m.weightKg + 'kg' : '', m.husk]
-      .filter(x => x !== '' && x != null).join(' ') + (m.days !== '' && m.days != null ? '・' + m.days + ' 天' : '') : '');
-    return `<section class="closings"><h3><span class="pill p-red">待確認結案 ${list.length} 筆<span class="my">အတည်ပြုစောင့်ဆဲ ပိတ်သိမ်းမှု ${list.length} ခု</span></span> <span class="sub">業務按了結案，確認後才真的結案；按錯就退回／ဝန်ထမ်း ပိတ်သိမ်းထားသည်၊ အတည်ပြုမှ ပိတ်သိမ်းမည်၊ မှားလျှင် ပြန်ပို့ပါ</span></h3>
-      <ul class="list">${list.map(c => `<li><b><a href="javascript:void 0" data-go="${esc(c.cid)}">${esc(c.name || ('客戶 ' + (c.cid || '（沒有編號／နံပါတ် မရှိ）')))}</a></b>｜${esc(c.staff || '業務未填／ဝန်ထမ်း မဖြည့်ရသေး')}｜${esc(c.date || '日期未填／ရက်စွဲ မဖြည့်ရသေး')}${c.custEnded ? ' <span class="pill p-yel">客戶已經是「已結束」：確認＝維持結束，退回＝不記這筆結案（客戶仍是已結束）<span class="my">ဖောက်သည်သည် 「ပြီးဆုံးပြီး」 ဖြစ်နေသည် - အတည်ပြု＝ဆက်လက် ပြီးဆုံးထားမည်၊ ပြန်ပို့＝ဤပိတ်သိမ်းမှု မမှတ်ယူပါ (ဖောက်သည်မှာ ပြီးဆုံးပြီး အတိုင်း ရှိမည်)</span></span>' /* 主管BUG(2號)#6 */ : ''}${msum(c.measure) ? ' <span class="pill p-grn">' + esc(msum(c.measure)) + '</span>' : '' /* 0.4.77 採收量測 */}${c.group ? ' <span class="pill">' + esc(c.group) + (c.trialOutcome ? '・' + esc(c.trialCat || (c.group === '推廣農民' ? '推廣' : '試作')) + esc(c.trialOutcome) : '') + '</span>' /* 0.4.74 結案分類、試作結果；0.4.75 複查低3：照後台 trialCat 寫試作或推廣（舊後台沒送就看分類） */ : ''}${c.after && (c.after.visits || c.after.trials) ? '<br><span class="pill p-red">結案之後還有 ' + (c.after.visits || 0) + ' 筆拜訪' + (c.after.trials ? '、' + c.after.trials + ' 件新開始的試作（確認後新試作不會跟著結束）' : '') + '，請先看客戶履歷再決定<span class="my">ပိတ်သိမ်းပြီးနောက် သွားရောက်မှု ' + (c.after.visits || 0) + ' ခု' + (c.after.trials ? '、အသစ်စတင်သော စမ်းသပ်မှု ' + c.after.trials + ' ခု (အတည်ပြုပြီးနောက် စမ်းသပ်မှုအသစ် လိုက်မပိတ်ပါ)' : '') + ' ရှိသေးသည်၊ ဖောက်သည် မှတ်တမ်း အရင်ကြည့်ပြီး ဆုံးဖြတ်ပါ</span></span>' /* 結案清單中1 */ : ''}<br>
-        <span class="sub">${c.result ? esc(c.result) + (c.result === '已簽約' && c.reason ? '｜說明 ' + esc(c.reason) : '') /* 0.4.42 盤商、種子商洽談成功／失敗；0.4.75 已簽約＋說明 */ : !c.group && !c.trialOutcome && !c.buyer && (c.price === '' || c.price == null) && (c.yield === '' || c.yield == null) ? '洽談結果沒記到（結案分頁少了「結果」欄，請在試算表按「第一次安裝／升級」）／ဆွေးနွေးမှု ရလဒ် မမှတ်မိပါ (ပိတ်သိမ်း စာမျက်နှာတွင် 「ရလဒ်」 ကော်လံ လိုနေသည်၊ Sheet တွင် 「ပထမအကြိမ် တပ်ဆင်／အပ်ဒိတ်」 နှိပ်ပါ)' /* 主管BUG#10 */ : /* 0.5.26 抓BUG 中1：失敗結案（種植／試作失敗）可以沒價格產量收購客戶 → 寫「沒有收成」，空白印「—」，不再被當成欄位缺漏 */ (!c.buyer && (c.price === '' || c.price == null) && (c.yield === '' || c.yield == null) ? '沒有收成（種植／試作失敗）／မရိတ်ရပါ（စိုက်ပျိုးမှု／စမ်းသပ်မှု မအောင်မြင်）' : `賣給 ${esc(c.buyer || '—')}（${esc(c.region || '地區未填／ဒေသ မဖြည့်ရသေး')}）｜價格 ${c.price === '' || c.price == null ? '—' : esc(c.price) + ' ' + esc(c.priceUnit || '')}｜產量 ${c.yield === '' || c.yield == null ? '—' : esc(c.yield) + ' ' + esc(c.yieldUnit || '')}`) + `${c.phone ? '｜電話 ' + esc(c.phone) : ''}${c.reason ? '｜原因 ' + esc(c.reason) : ''}${c.progress ? '｜進度 ' + esc(c.progress) : ''}`}</span><br>
-        <button class="btn primary" type="button" data-closedecide="confirm" data-vid="${esc(c.visitId)}"${state.closeSending ? ' disabled' : ''}>確認結案</button>
-        <button class="btn" type="button" data-closedecide="reject" data-vid="${esc(c.visitId)}"${state.closeSending ? ' disabled' : ''}>退回（不結案）</button></li>`).join('')}</ul>
-      <p class="sub" id="closeMsg" aria-live="polite">${esc(state.closeMsg || '')}</p></section>`;
   }
   function renderTodayLists() {
     const cs = active().filter(c => state.showTest || !isTestStaff(c.staff)); // 第25任 審查③：同「需要你處理」的逾期數字
