@@ -30,13 +30,14 @@
   const errCode = e => String((e && e.name && e.name !== 'Error' ? e.name + '：' : '') + ((e && e.message) || e || '不明')).slice(0, 120);
   async function noteErr(where, e) {
     try { console.error('[農場打卡]', where, e); } catch (x) { /* 沒有主控台 */ }
-    try { const q = (await Store.getMeta('errQueue')) || []; q.push({ at: Date.now(), where: String(where), msg: errCode(e) }); await Store.setMeta('errQueue', q.slice(-20)); } catch (x) { /* 手機資料庫本身壞了：只留在主控台 */ }
+    // 抓BUG第4輪 手機組2：記下當時登入的帳號（換人登入後，上一位的錯誤原本會記成下一位的）
+    try { const q = (await Store.getMeta('errQueue')) || [], c0 = await Store.getMeta('config'); q.push({ at: Date.now(), where: String(where), msg: errCode(e), acct: String((c0 && c0.deviceKey && c0.account) || '') }); await Store.setMeta('errQueue', q.slice(-20)); } catch (x) { /* 手機資料庫本身壞了：只留在主控台 */ }
   }
   async function sendErrs(cfg) {
     try {
       const q = (await Store.getMeta('errQueue')) || [];
       if (!q.length || !cfg || !cfg.deviceKey) return;
-      const r = await post(cfg.gasUrl || FARM_CONFIG.gasUrl, { action: 'clientError', deviceKey: cfg.deviceKey, errors: q.slice(0, 10), app: String((typeof FARM_CONFIG !== 'undefined' && FARM_CONFIG.appVersion) || '') });
+      const r = await post(cfg.gasUrl || FARM_CONFIG.gasUrl, { action: 'clientError', deviceKey: cfg.deviceKey, errors: q.slice(0, 10).map(x => (x.acct !== undefined && x.acct !== String(cfg.account || '') ? Object.assign({}, x, { msg: '（原登入：' + (x.acct || '沒人登入') + '）' + x.msg }) : x)), app: String((typeof FARM_CONFIG !== 'undefined' && FARM_CONFIG.appVersion) || '') });
       if (r && r.ok) { const now = (await Store.getMeta('errQueue')) || []; await Store.setMeta('errQueue', now.slice(Math.min(10, q.length))); }
     } catch (e) { /* 送不出去：留在手機，下次同步再送（不再記一筆，免得越積越多） */ }
   }
@@ -2012,7 +2013,7 @@
       if (typeof refreshSave === 'function') refreshSave();
     }
     // 0.4.82 多久沒回訪：後台的最後拜訪日、這支手機剛打（還沒同步）的，取比較新的那天
-    const age = `<p class="sub">${visitAgeHtml([c.lastVisit, local[0] ? dayOf(local[0].deviceTime) : ''].filter(Boolean).sort().pop(), mmDay(0))}</p>`;
+    const age = `<p class="sub">${visitAgeHtml([c.lastVisit, local[0] ? dayOf(local[0].deviceTime) : ''].filter(Boolean).sort().pop(), mmDay(0))}</p>` + farmerFactsHtml(c, trials); // 第27任：種植日期、面積、種子、備註
     if (o.home && !c.lastVisit && !trials.length && !recent.length) { box.innerHTML = H3 + age + `<p>這位${c.type && c.type !== '農民' ? '客戶' : '農民'}還沒有拜訪紀錄。<br>` + '<span class="my">မှတ်တမ်း မရှိသေး</span></p>'; return; }
     if (!c.lastVisit && !trials.length && !recent.length) {
       // 沒有任何進度：跳出新增（補齊）農民資料
@@ -2047,6 +2048,20 @@
     const tel = String(c.phone || '').replace(/[\u1040-\u1049]/g, ch => String(ch.charCodeAt(0) - 0x1040)).replace(/[^0-9+]/g, ''); // 0.4.92 低2：緬文數字先轉 0-9
     const who = [c.name ? `<b>${esc(c.name)}</b>` : '', c.phone ? `📞 <a href="tel:${esc(tel)}">${esc(c.phone)}</a>` : '', (c.address || c.area) ? `📍 ${esc(c.address || c.area)}` : ''].filter(Boolean).join('　');
     return `<h3>之前的進度／ယခင် တိုးတက်မှု${who ? `<span class="who">${who}</span>` : ''}</h3>`;
+  }
+  /** 第27任 2026-11-18 董事長「業務選農民，備註看不見、幾號種植、拿幾包種子給農民、農民面積，業務端要看得到」：
+      選了農民，進度卡上方列這四樣（沒填的不列；盤商、種子商不列）。種子＝進行中試作／推廣開始時填的用量。
+      備註是系統自動寫的「業務在現場新增」就不列。新字只有中文，緬文待譯（_翻譯/待譯_第27任_20261118.md） */
+  function farmerFactsHtml(c, trials) {
+    if (!c || (c.type && c.type !== '農民')) return '';
+    const u = (state.options && state.options.areaUnit) || '英畝', has = x => x !== '' && x != null && String(x).trim() !== '';
+    const note = String(c.note == null ? '' : c.note).trim();
+    const rows = [
+      has(c.plantDate) ? ['種植日期', String(c.plantDate)] : null,
+      has(c.areaNow) || has(c.areaMax) ? ['面積', [has(c.areaNow) ? `目前 ${c.areaNow} ${u}` : '', has(c.areaMax) ? `可種 ${c.areaMax} ${u}` : ''].filter(Boolean).join('、')] : null
+    ].concat((trials || []).filter(t => has(t.dosage)).map(t => [`${t.cat || '試作'}種子`, String(t.dosage)]))
+      .concat([note && note !== '業務在現場新增' ? ['備註', note] : null]).filter(Boolean);
+    return rows.length ? `<ul class="ffacts">${rows.map(([k, v]) => `<li><b>${esc(k)}</b>：${esc(v)}</li>`).join('')}</ul>` : '';
   }
   /** ① 沒網路時：這支手機記的最近幾筆拜訪，排成跟後台紀錄一樣的格式（日期用緬甸日期） */
   function progressLocalRecent(local5) {
@@ -3824,7 +3839,8 @@
       // 第25任 審查⑪：背景程式正在上傳（拿不到上傳鎖回 busy）不是「沒東西要傳」——原本照樣再抓一次整份資料、把上傳進度字清掉。傳完背景程式會通知畫面重畫
       // 抓BUG第3輪 手機組1：這行原本在下面「自動那次」後面 → 每分鐘的自動同步先被那行接走，把「背景上傳中」清成空白。移到前面
       if (r && r.busy) { $('syncState').textContent = '背景上傳中…／နောက်ကွယ်မှ တင်နေသည်…'; return; }
-      if (auto && r && !r.error && !r.sent && Date.now() - (state.lastPullAt || 0) < AUTO_PULL_MS) { $('syncState').textContent = r.syncWarn || ''; return; } // 第25任 審查第三批：自動那次、沒東西傳、5 分鐘內抓過 → 不抓不重畫（finally 照樣更新待上傳筆數）
+      // 抓BUG第4輪 手機組1：r.sent 只算拜訪 → 自動同步送出打勾、後台已確認，任務清單卻沒重畫（還寫「再按一下可取消」）。送了打勾也要往下重畫
+      if (auto && r && !r.error && !r.sent && !r.ticksSent && Date.now() - (state.lastPullAt || 0) < AUTO_PULL_MS) { $('syncState').textContent = r.syncWarn || ''; return; } // 第25任 審查第三批：自動那次、沒東西傳、5 分鐘內抓過 → 不抓不重畫（finally 照樣更新待上傳筆數）
       if (r && !r.error && !r.sent && await syncPullLatest(cfg, r)) return;
       await syncAfter(cfg, r);
     } catch (e) {
@@ -3935,7 +3951,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261118-182324'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261118-194356'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');

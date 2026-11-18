@@ -496,7 +496,7 @@
     // 伺服器回成功、卻沒確認其中幾筆（或這次沒送完）：要回錯誤，背景同步才會再試（GPT-6.1 R7-04：原本 error 是空的，卡著沒人重送）
     const miss = sent.filter(s => !got.has(s.id)).length;
     const error = miss ? `有 ${miss} 個任務打勾伺服器沒確認，稍後自動重送／လုပ်ငန်း အမှန်ခြစ် ${miss} ခု ဆာဗာမှ အတည်မပြုရသေးပါ၊ နောက်မှ အလိုအလျောက် ပြန်ပို့မည်` : skipped ? `還有 ${skipped} 個任務打勾沒送，稍後自動送／မပို့ရသေးသော လုပ်ငန်း အမှန်ခြစ် ${skipped} ခု ကျန်သေးသည်၊ နောက်မှ အလိုအလျောက် ပို့မည်` : '';
-    return { left: await countLeft(), error };
+    return { left: await countLeft(), error, ticksSent: sent.length - miss }; // 抓BUG第4輪 手機組1：這次後台確認了幾個打勾（syncNow 自動那次要看）
   }
 
   /**
@@ -674,6 +674,7 @@
     const tk = await sendTaskTicks(cfg);
     report.tickLeft = tk.left;
     if (tk.error) report.error = tk.error;
+    if (tk.ticksSent) report.ticksSent = tk.ticksSent;
     if (tk.code === 'BAD_LOGIN' && await sameLogin(cfg.deviceKey)) report.code = 'BAD_LOGIN'; // 0.4.87 高1：換人後上一位的登入失效不算
   }
   /** 已上傳超過 7 天的拜訪刪掉。R17：暫存清理改看後台的 known，不再靠已上傳的拜訪當憑據（R16 加的「被記號用到就不刪」拿掉，避免跟舊資料互鎖） */

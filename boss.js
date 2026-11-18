@@ -276,14 +276,15 @@
   // 0.4.94（第11任第五輪 5）：剛拜訪、後台還沒處理完（最後拜訪日還沒更新）→ 算已回訪，總覽逾期數、逾期清單、客戶頁一致
   const dueState = c => (c.status === '已結束' || c.status === '暫停') ? 'stop' : !c.nextDue ? 'none' : visitingNow(c) ? 'ok' : c.nextDue < state.data.today ? 'late' : c.nextDue === state.data.today ? 'due' : 'ok';
   const visitsOf = id => (state.hist[id] || state.data.visits.filter(v => v.cid === id)).slice().sort((a, b) => b.time.localeCompare(a.time));
-  const weekNo = (c, date) => c.start ? Math.max(1, Math.ceil((s2d(date) - s2d(c.start)) / DAY / 7)) : null;
-  /** 履歷裡一筆拜訪是「試作第幾週」：只算掛在試作底下、而且在那件試作期間內的（原本拿客戶最後一件試作的開始日算每一筆；第二輪自行審查 T8） */
-  const visitWeek = v => {
-    const t = v.trialId && (state.data.trials || []).find(x => x.id === v.trialId);
-    const day = String(v.time).slice(0, 10);
-    if (!t || !t.start || day < t.start || (t.end && day > t.end)) return null;
-    return weekNo({ start: t.start }, day);
+  /* 第27任 2026-11-18 董事長「主管的網頁第幾週還沒改成第幾天」：改成跟手機一樣，從客戶的種植日期算「種植第 N 天／作物生長天數」。
+     沒填種植日期、日期在後面（還沒種）就不寫天數；量測提醒照試作開始日排，字也改成「試作第 N 天該量測」 */
+  const cropDaysOf = crop => { const n = Number(((state.data && state.data.cropDays) || {})[String(crop || '').trim()]); return n > 0 ? n : 0; };
+  const growDayOf = (c, date) => {
+    const pd = String((c && c.plantDate) || '').slice(0, 10), d = String(date || '').slice(0, 10);
+    if (!/^\d{4}-\d\d-\d\d$/.test(pd) || !/^\d{4}-\d\d-\d\d$/.test(d) || d < pd) return null;
+    return Math.round((s2d(d) - s2d(pd)) / DAY);
   };
+  const growDayText = (c, date) => { const n = growDayOf(c, date); if (n == null) return ''; const T = cropDaysOf(c.crop); return T ? `第 ${n} 天／${T} 天` : `第 ${n} 天`; };
 
   function render() {
     state.renderGen++;
@@ -347,6 +348,29 @@
     });
     // 第26任：客戶履歷「✎ 改階段」的「存」
     root.querySelectorAll('[data-stsave]:not([data-mbound])').forEach(el => { el.dataset.mbound = '1'; el.addEventListener('click', () => saveStageFix(el)); });
+    // 第27任：客戶履歷「✎ 改內容／種植日期／生長天數／回訪」的「存」「清除」
+    root.querySelectorAll('[data-fixsave]:not([data-mbound])').forEach(el => { el.dataset.mbound = '1'; el.addEventListener('click', () => saveFix(el, false)); });
+    root.querySelectorAll('[data-fixclear]:not([data-mbound])').forEach(el => { el.dataset.mbound = '1'; el.addEventListener('click', () => saveFix(el, true)); });
+  }
+  /* 第27任 2026-11-18 董事長「主管可以修改業務錯字、天數，設定回訪」：客戶履歷可以改 ① 拜訪的打字內容 ② 種植日期 ③ 作物生長天數（整個作物一起改）④ 下次回訪日（可清除）。
+     key＝「種類:編號」（text:拜訪編號、plantDate:客戶編號、nextDue:客戶編號、cropDays:作物）。新字只有中文，緬文待譯 */
+  function fixBoxHtml(key, label, input, canClear) {
+    return `<details class="stfix"><summary>✎ ${esc(label)}</summary>${input} <button class="btn" type="button" data-fixsave="${esc(key)}">存</button>${canClear ? ` <button class="btn" type="button" data-fixclear="${esc(key)}">清除</button>` : ''} <span class="sub" data-fixmsg></span></details>`;
+  }
+  async function saveFix(btn, clear) {
+    const key = btn.dataset.fixsave || btn.dataset.fixclear || '', i = key.indexOf(':'), kind = key.slice(0, i), id = key.slice(i + 1);
+    const box = btn.parentNode || btn, inp = box.querySelector('[data-fixin]'), msg = box.querySelector('[data-fixmsg]');
+    const val = clear ? '' : String(inp ? inp.value : '').trim();
+    if (!clear && !val && kind !== 'cropDays') { if (msg) msg.textContent = kind === 'text' ? '內容不能空白' : '請先選日期'; return; }
+    const req = kind === 'text' ? { action: 'visitTextFix', visitId: id, text: val } : kind === 'cropDays' ? { action: 'cropDaysFix', crop: id, days: val } : { action: 'custFix', cid: id, what: kind, value: val };
+    box.querySelectorAll('button').forEach(b => { b.disabled = true; }); if (msg) msg.textContent = '存檔中…';
+    let r; try { r = await api(req); } catch (e) { r = null; }
+    box.querySelectorAll('button').forEach(b => { b.disabled = false; });
+    if (!r || !r.ok) { if (msg) msg.textContent = (r && r.message) || '沒有存成功，請再試一次'; return; }
+    if (kind === 'text') [].concat(state.data.visits || [], ...Object.values(state.hist || {})).forEach(v => { if (v && v.id === id) v.text = r.text; });
+    else if (kind === 'cropDays') state.data.cropDays = r.cropDays || {};
+    else (state.data.customers || []).forEach(c => { if (c.id === id) c[kind] = kind === 'nextDue' ? r.nextDue : r.plantDate; });
+    if ($('custDetail')) refreshCustDetail();
   }
   /* 第26任 2026-11-18 董事長「業務填錯生長週期，主管後台要能改」：客戶履歷每筆拜訪（結案那筆除外）可以改生長階段 */
   const STAGE_LIST = ['播種', '發芽', '長大', '開花', '結果', '採收', '採收後', '剖面圖']; // 跟手機、後台同一份 8 個值
@@ -886,8 +910,9 @@
     const monday = addDays(state.data.today, -((t.getUTCDay() + 6) % 7) - 7);
     const days = Array.from({ length: 21 }, (_, i) => addDays(monday, i));
     const ev = {}; days.forEach(d => { ev[d] = []; });
-    state.data.visits.forEach(v => { const d = v.time.slice(0, 10); if (ev[d]) ev[d].push(`<button class="ev visit" data-go="${esc(v.cid)}">✅ ${esc(v.time.slice(11, 16))} ${esc(v.name)}</button>`); });
-    active().forEach(c => {
+    // 抓BUG第4輪 主管組2：日曆也照「隱藏測試資料」排除測試帳號的拜訪、客戶（今天、紀錄表都排除了，日曆漏掉 → 跟首頁對不上）
+    hideTest(state.data.visits).forEach(v => { const d = v.time.slice(0, 10); if (ev[d]) ev[d].push(`<button class="ev visit" data-go="${esc(v.cid)}">✅ ${esc(v.time.slice(11, 16))} ${esc(v.name)}</button>`); });
+    hideTest(active()).forEach(c => {
       const s = dueState(c);
       if (s === 'late') ev[state.data.today].unshift(`<button class="ev late" data-go="${esc(c.id)}">⚠ 逾期／ရက်ကျော်｜${esc(c.name)}</button>`);
       else if (c.nextDue && ev[c.nextDue]) ev[c.nextDue].push(`<button class="ev follow" data-go="${esc(c.id)}">🔔 回訪／ပြန်သွားရန်｜${esc(c.name)}</button>`);
@@ -925,8 +950,8 @@
     if (isActive(c) && s === 'due') return { cls: 'p-yel', text: '今天該回訪', rank: 1 };
     const t = activeTrialOf(c.id);
     const mw = measureDue(t, c.lastVisit, d.today);
-    if (mw) return { cls: 'p-red', text: `第 ${mw} 週該量測／${mw} ပတ်မြောက် တိုင်းတာရန်`, rank: 1.5 };
-    if (t) { const w = weekNo({ start: t.start }, d.today); return { cls: 'p-yel', text: `${t.cat || '試作'}${w ? '第 ' + w + ' 週／' + w + ' ပတ်မြောက်' : '中／လုပ်ဆောင်ဆဲ'}`, rank: 2 }; }
+    if (mw) return { cls: 'p-red', text: `試作第 ${mw * 7} 天該量測`, rank: 1.5 }; // 第27任：週改天（量測照試作開始日算：第 2、4、8 週＝第 14、28、56 天；緬文待譯）
+    if (t) { const g = growDayText(c, d.today); return { cls: 'p-yel', text: `${t.cat || '試作'}${g ? ' 種植' + g : '中／လုပ်ဆောင်ဆဲ'}`, rank: 2 }; } // 第27任：第幾週改種植第幾天
     if (c.lastVisit && c.lastVisit >= addDays(d.today, -6)) return { cls: 'p-grn', text: `${md(c.lastVisit)} 拜訪／${md(c.lastVisit)} သွားရောက်မှု`, rank: 3 }; // 主管BUG(2號)#11：7 天＝今天往前 6 天（原本 -7 算了 8 天，跟「近 7 天拜訪次數」不一致）
     return null;
   }
@@ -1036,21 +1061,23 @@
     const kv = (k, val) => val !== '' && val != null ? `<span>${k}：${esc(val)}</span>` : '';
     return `<div class="card profile"><span><b>${esc(c.name)}</b>（${esc(c.id)}・${esc(c.kind || c.type || '農民')}）</span><span>${esc(c.area || '')}</span>${kv('鎮／မြို့နယ်', c.town)}${kv('村／ကျေးရွာ', c.village) /* 0.4.75 董事長「農民改鎮跟村」：鄉改村、鎮放前面 */}${kv('電話／ဖုန်း', c.phone)}
         ${dealer ? kv('老闆／ဆိုင်ရှင်', c.owner) + kv('地址／လိပ်စာ', c.address) + kv('作物', cropText(c.crop)) + kv('品牌（舊資料）／တံဆိပ်（ဒေတာဟောင်း）', c.brand) + kv('其他／အခြား', c.fertilizer) /* 0.4.73 董事長：盤商、種子商品牌改作物；舊的品牌資料有才顯示 */
-          : kv('作物', cropText(c.crop)) + kv('品種／မျိုး', c.variety) + kv('代碼／ကုဒ်', c.varCode) + kv('目前種植面積／လက်ရှိ စိုက်ဧက', c.areaNow === '' || c.areaNow == null ? '' : c.areaNow + ' ' + (state.data.areaUnit || '英畝')) + kv('可種植面積／စိုက်နိုင်သော ဧက', c.areaMax === '' || c.areaMax == null ? '' : c.areaMax + ' ' + (state.data.areaUnit || '英畝')) /* 主管BUG#11 */ + kv('種植日期／စိုက်သည့်ရက်', c.plantDate) + kv('其他／အခြား', c.fertilizer)
+          : kv('作物', cropText(c.crop)) + kv('品種／မျိုး', c.variety) + kv('代碼／ကုဒ်', c.varCode) + kv('目前種植面積／လက်ရှိ စိုက်ဧက', c.areaNow === '' || c.areaNow == null ? '' : c.areaNow + ' ' + (state.data.areaUnit || '英畝')) + kv('可種植面積／စိုက်နိုင်သော ဧက', c.areaMax === '' || c.areaMax == null ? '' : c.areaMax + ' ' + (state.data.areaUnit || '英畝')) /* 主管BUG#11 */ + `<span>種植日期／စိုက်သည့်ရက်：${esc(c.plantDate || '—')} ${fixBoxHtml('plantDate:' + c.id, '改', `<input type="date" data-fixin value="${esc(c.plantDate || '')}" aria-label="種植日期">`)}</span>` /* 第27任：主管改種植日期 */
+            + (String(c.crop || '').trim() ? `<span>生長天數：${cropDaysOf(c.crop) ? cropDaysOf(c.crop) + ' 天' : '未設'} ${fixBoxHtml('cropDays:' + String(c.crop).trim(), '改（' + cropText(c.crop) + '全部一起改）', `<input type="number" min="1" max="3650" step="1" data-fixin value="${cropDaysOf(c.crop) || ''}" aria-label="生長天數" style="width:6em">`)}</span>` : '') /* 第27任：主管改作物生長天數 */
+            + kv('其他／အခြား', c.fertilizer)
             + `<span>試作／စမ်းသပ်：${esc(c.trial || '—')}${c.start ? '（' + md(c.start) + ' 開始／စတင်）' : ''}</span>`}<span>負責／တာဝန်ခံ：${esc(c.staff || '—')}</span>
-        <span>下次回訪／နောက်တစ်ကြိမ် သွားရန်：${c.nextDue ? md(c.nextDue) : '—'} ${s === 'late' ? '<span class="pill p-red">逾期</span>' : s === 'due' ? '<span class="pill p-yel">今天<span class="my">ယနေ့</span></span>' : s === 'stop' ? `<span class="pill">${esc(c.status)}</span>` : ''}</span>
+        <span>下次回訪／နောက်တစ်ကြိမ် သွားရန်：${c.nextDue ? md(c.nextDue) : '—'} ${s === 'late' ? '<span class="pill p-red">逾期</span>' : s === 'due' ? '<span class="pill p-yel">今天<span class="my">ယနေ့</span></span>' : s === 'stop' ? `<span class="pill">${esc(c.status)}</span>` : ''}${c.status !== '已結束' ? fixBoxHtml('nextDue:' + c.id, '設定回訪', `<input type="date" data-fixin value="${esc(c.nextDue || '')}" aria-label="下次回訪日">`, !!c.nextDue) : '' /* 第27任：系統不再自動排回訪，由主管設 */}</span>
         ${c.lat != null && c.lng != null ? `<a href="https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}" target="_blank" rel="noopener">田區導航 ↗</a>` : ''}</div>
       ${(state.data.trials || []).filter(t => t.cid === c.id).map(t => `<div class="card" style="margin-bottom:10px"><b>${esc(t.cat)} ${esc(t.id)}</b>：${esc(t.item || '—')}（${esc(t.start || '')} ～ ${esc(t.end || '進行中／လုပ်ဆောင်ဆဲ')}）
         <span class="pill ${t.status === '成功' ? 'p-grn' : t.status === '失敗' ? 'p-red' : 'p-yel'}">${esc(t.status)}</span>
         ${t.hasReport ? ` <button class="btn" type="button" data-report="${esc(t.id)}">⬇ 試作報告（Word）</button>` : ''}
         ${t.conclusion ? `<div class="sub pre" style="margin-top:6px">結論／နိဂုံး：${esc(t.conclusion)}</div>` : ''}</div>`).join('')}
-      <div class="timeline">${list.map(v => `<div class="entry">${catPill(v)}${v.stage ? '<span class="pill p-yel">' + esc(v.stage) + '</span> ' : '' /* 0.4.78 生長階段 */}${!dealer && !v.closing && v.id ? stageFixHtml(v) : '' /* 第26任：主管改階段 */}<b>${esc(v.time)}</b>${!dealer && visitWeek(v) ? `　試作第 ${visitWeek(v)} 週／စမ်းသပ် ${visitWeek(v)} ပတ်မြောက်` : ''} <span class="sub">${esc(v.staff)}</span>
+      <div class="timeline">${list.map(v => `<div class="entry">${catPill(v)}${v.stage ? '<span class="pill p-yel">' + esc(v.stage) + '</span> ' : '' /* 0.4.78 生長階段 */}${!dealer && !v.closing && v.id ? stageFixHtml(v) : '' /* 第26任：主管改階段 */}<b>${esc(v.time)}</b>${!dealer && growDayText(c, String(v.time).slice(0, 10)) ? `　種植${growDayText(c, String(v.time).slice(0, 10))}` : '' /* 第27任：試作第幾週改種植第幾天 */} <span class="sub">${esc(v.staff)}</span>
         <div class="sub">${v.lat != null && v.lng != null ? `📍 <a href="${esc(v.nav)}" target="_blank" rel="noopener">${v.lat.toFixed(5)}, ${v.lng.toFixed(5)}（導航／လမ်းညွှန်）</a>` : '📍 <span style="color:var(--chili)">無定位／တည်နေရာ မရှိ</span>'}
         　📷 ${v.check ? esc(v.check) : '現場拍攝／ကွင်းထဲတွင် ရိုက်ထားသည်'}</div>
         <div class="box"><div class="photos">${v.photos.length ? v.photos.map(id => `<div class="photo" data-photo="${esc(id)}">載入中…／ဖတ်နေသည်…</div>`).join('') : '<div class="photo">沒有照片／ဓာတ်ပုံ မရှိပါ</div>'}</div>
         <dl class="kv"><dt>${dealer ? '行情' : '作物'}</dt><dd>${esc(v.crop || '—')}${myLine(v, 'crop')}</dd><dt>反應</dt><dd>${esc(v.feedback || '—')}${myLine(v, 'feedback')}</dd><dt>問題</dt><dd>${esc(v.issue || '—')}${myLine(v, 'issue')}</dd><dt>下一步</dt><dd>${esc(v.next || '—')}${myLine(v, 'next')}</dd>
         <dt>摘要</dt><dd>${esc(v.summary || noSummaryText(v))}${errDetail(v)}${myLine(v, 'summary')}</dd>
-        ${v.noMeet ? `<dt>沒拜訪<span class="my">မသွားဖြစ်ပါ</span></dt><dd><span class="pill p-yel">沒拜訪<span class="my">မသွားဖြစ်ပါ</span></span> ${esc(v.noMeet)}</dd>` : ''}${v.closing ? `<dt>結案</dt><dd>${esc(v.closing)}</dd>` : ''}${v.plantFail ? `<dt>種植失敗<span class="my">စိုက်ပျိုးမှု မအောင်မြင်</span></dt><dd>${esc(v.plantFail)}</dd>` : ''}${v.text ? `<dt>打字</dt><dd class="pre">${esc(v.text)}</dd>` : ''}${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') || '<p class="empty">這位客戶還沒有拜訪紀錄。<span class="my">ဤဖောက်သည်တွင် သွားရောက်မှု မှတ်တမ်း မရှိသေးပါ။</span></p>'}</div>`;
+        ${v.noMeet ? `<dt>沒拜訪<span class="my">မသွားဖြစ်ပါ</span></dt><dd><span class="pill p-yel">沒拜訪<span class="my">မသွားဖြစ်ပါ</span></span> ${esc(v.noMeet)}</dd>` : ''}${v.closing ? `<dt>結案</dt><dd>${esc(v.closing)}</dd>` : ''}${v.plantFail ? `<dt>種植失敗<span class="my">စိုက်ပျိုးမှု မအောင်မြင်</span></dt><dd>${esc(v.plantFail)}</dd>` : ''}${v.text ? `<dt>打字</dt><dd class="pre">${esc(v.text)}${v.id ? fixBoxHtml('text:' + v.id, '改內容', `<textarea data-fixin maxlength="2000" rows="4" aria-label="打字內容">${esc(v.text)}</textarea>`) : '' /* 第27任：主管改業務打錯的字 */}</dd>` : ''}${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') || '<p class="empty">這位客戶還沒有拜訪紀錄。<span class="my">ဤဖောက်သည်တွင် သွားရောက်မှု မှတ်တမ်း မရှိသေးပါ။</span></p>'}</div>`;
   }
 
   /** 一張照片只下載一次（下載中的也共用同一個請求）；換了畫面，舊畫面的迴圈就停，不再下載別的客戶的照片（2026-11-11 抓到） */
@@ -1085,7 +1112,7 @@
   }
 
   function renderMap() {
-    const pts = state.data.customers.filter(c => c.lat && c.lng);
+    const pts = hideTest(state.data.customers).filter(c => c.lat && c.lng); // 抓BUG第4輪 主管組2：地圖同日曆，隱藏測試帳號的客戶
     if (!pts.length) return '<p class="empty">還沒有田區座標。業務第一次拜訪時的位置會自動記成田區座標。<span class="my">လယ်ကွက် တည်နေရာ မရှိသေးပါ။ ဝန်ထမ်း ပထမဆုံး သွားရောက်သည့် တည်နေရာကို အလိုအလျောက် မှတ်သားပေးမည်။</span></p>';
     const lats = pts.map(c => c.lat), lngs = pts.map(c => c.lng);
     const pad = 0.02, minLat = Math.min(...lats) - pad, maxLat = Math.max(...lats) + pad, minLng = Math.min(...lngs) - pad, maxLng = Math.max(...lngs) + pad;
