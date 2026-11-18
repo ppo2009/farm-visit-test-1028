@@ -1430,7 +1430,7 @@
     // 0.5.16 第2輪 低：點進去開哪一類照客戶的類型欄（打卡選單照類型欄分開）；類型欄跟試作類別對不上（主管手改試算表）時，用試作類別會「找不到這位客戶」
     const openCat = t => { const p = people.find(f => f.id === t.cid) || {}; const kc = KIND_CAT[p.kind]; return kc === '試作' || kc === '推廣' ? kc : (t.cat || '試作'); };
     // 第26任 2026-11-18 董事長截圖「改成 進度天數／預計收成天數」「品種」：右邊原本「第 N 週」（從試作開始日算）→ 改成種植進度（種植日期算到今天／作物生長天數，
-    //   跟打卡進度條同一套 growOf、growLabel）；作物後面接代碼。「第 N 週該量測」提醒照舊（量測週是從試作開始日算）
+    //   跟打卡進度條同一套 growOf、growLabel）；作物後面接代碼。量測提醒（從試作開始日算）第27任起寫「試作第 N 天該量測」
     const optsG = (await Store.getMeta('options')) || state.options || {};
     const personOf = cid => people.find(f => f.id === cid) || {};
     // 抓BUG 手機組 4B：手機客戶清單裡沒有這位（舊快取、改派別人）→ 原本寫「未填種植日期」像業務漏填；查不到人就不放標籤
@@ -1438,7 +1438,7 @@
     // 抓BUG 手機組 2：標籤窄時要能換行，但瀏覽器會把緬文從字中間斷開（CSS keep-all 擋不住緬文）→ 每一段包成不准斷，只在段跟段之間換行（中文在「／」後、「（」前；緬文在空格）。
     //   用「|」當切點（標籤字裡不會有），不用正規式往回看（舊 iPhone Safari 不支援，整支程式會壞）
     function keepWords(s) { return String(s).split('|').filter(Boolean).map(w => `<span class="gnw">${esc(w)}</span>`).join('<wbr>'); }
-    $('trialList').innerHTML = list.map(t => { const held = heldOf(t), unk = unknownOf(t), m = held || unk ? null : measure(t), code = String(personOf(t.cid).varCode || '').trim(); return `<li class="go" data-cid="${esc(t.cid)}" data-cat="${esc(openCat(t))}"><span>${esc(nameOf(t.cid))}<br><small>${esc(catBi(t.cat || '試作'))}・${esc(cropText(t.item || '—'))}${code ? '・' + esc(code) : ''}${t.pending ? '（未上傳）မတင်ရသေး' : ''}</small></span>${held ? '<span class="pill wait">結案待確認<br>ပိတ်သိမ်းရန် စစ်ဆေးဆဲ</span>' : unk ? '<span class="pill wait">結案狀態未知，請洽主管<br>ပိတ်သိမ်းမှု အခြေအနေ မသိ</span>' : m ? `<span class="pill late">第 ${m} 週該量測<br>${m} ပတ်မြောက် တိုင်းတာရန်</span>` : growPill(t)}</li>`; }).join('')
+    $('trialList').innerHTML = list.map(t => { const held = heldOf(t), unk = unknownOf(t), m = held || unk ? null : measure(t), code = String(personOf(t.cid).varCode || '').trim(); return `<li class="go" data-cid="${esc(t.cid)}" data-cat="${esc(openCat(t))}"><span>${esc(nameOf(t.cid))}<br><small>${esc(catBi(t.cat || '試作'))}・${esc(cropText(t.item || '—'))}${code ? '・' + esc(code) : ''}${t.pending ? '（未上傳）မတင်ရသေး' : ''}</small></span>${held ? '<span class="pill wait">結案待確認<br>ပိတ်သိမ်းရန် စစ်ဆေးဆဲ</span>' : unk ? '<span class="pill wait">結案狀態未知，請洽主管<br>ပိတ်သိမ်းမှု အခြေအနေ မသိ</span>' : m ? `<span class="pill late">試作第 ${m * 7} 天該量測</span>` /* 第27任：週改天（同主管頁；緬文待譯 E2） */ : growPill(t)}</li>`; }).join('')
       || `<li class="empty">${h ? '目前沒有進行中的試作／လုပ်ဆောင်ဆဲ စမ်းသပ်ကွက် မရှိ' : '連上網路後會顯示／အင်တာနက်ချိတ်ပြီးမှ ပြမည်'}</li>`;
     $('trialList').querySelectorAll('li.go').forEach(li => li.addEventListener('click', () => { state.lockNext = true; openVisit(li.dataset.cat === '推廣' ? '推廣' : '試作', li.dataset.cid); })); // 0.4.63 鎖死
     const ms = $('msTrials'); if (ms) ms.textContent = String(list.filter(t => !heldOf(t) && !unknownOf(t)).length); // 0.4.69 最上面一排：進行中試作（舊頁面沒有這格就不畫）；0.5.01 結案待確認的不算
@@ -3951,7 +3951,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261118-194356'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261118-200915'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
