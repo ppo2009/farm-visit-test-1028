@@ -3924,6 +3924,7 @@
       // 第25任 審查⑪：背景程式正在上傳（拿不到上傳鎖回 busy）不是「沒東西要傳」——原本照樣再抓一次整份資料、把上傳進度字清掉。傳完背景程式會通知畫面重畫
       // 抓BUG第3輪 手機組1：這行原本在下面「自動那次」後面 → 每分鐘的自動同步先被那行接走，把「背景上傳中」清成空白。移到前面
       if (r && r.busy) { $('syncState').textContent = '背景上傳中…／နောက်ကွယ်မှ တင်နေသည်…'; return; }
+      if (r && r.rejected) toast(`有 ${r.rejected} 筆拜訪被後台退回、沒有收：${r.rejectMsg || ''}`, 4000); // 第28任保哥式審查：被拒當下就說原因（例如沒拍照要重新打卡）
       // 抓BUG第4輪 手機組1：r.sent 只算拜訪 → 自動同步送出打勾、後台已確認，任務清單卻沒重畫（還寫「再按一下可取消」）。送了打勾也要往下重畫
       if (auto && r && !r.error && !r.sent && !r.ticksSent && Date.now() - (state.lastPullAt || 0) < AUTO_PULL_MS) { $('syncState').textContent = r.syncWarn || ''; return; } // 第25任 審查第三批：自動那次、沒東西傳、5 分鐘內抓過 → 不抓不重畫（finally 照樣更新待上傳筆數）
       if (r && !r.error && !r.sent && await syncPullLatest(cfg, r)) return;
@@ -4001,7 +4002,7 @@
     $('syncBadge').className = 'syncbadge ' + (left || rejected ? 'wait' : 'ok');
     $('syncBadge').textContent = left ? `⏳ ${pending.length + ticks} 筆沒上傳 မတင်ရသေး` : rejected ? `⚠ ${rejected} 筆被拒 ပယ်ခံရ` : '✓ 都上傳了 တင်ပြီး';
     const hw = typeof document !== 'undefined' && document.getElementById ? document.getElementById('hdrWait') : null; if (hw) { hw.hidden = !(left || rejected); hw.textContent = left ? `⏳ ${pending.length + ticks} 筆沒上傳` : rejected ? `⚠ ${rejected} 筆被拒` : ''; } // 第24任 第六批①
-    $('queueList').innerHTML = all.slice(0, 12).map(v => {
+    $('queueList').innerHTML = all.filter((v, i) => i < 12 || v.status === 'rejected').map(v => { // 第28任：被拒的就算比較舊也列出來（要看得到原因）
       const d = new Date(Number(v.deviceTime) + 390 * 60000); // 0.5.16 第2輪 低：緬甸時間（下面用 getUTC*），手機時區不是緬甸也不會差一天
       const tag = v.status === 'uploaded' ? '<span class="pill ok">已上傳 တင်ပြီး</span>'
         : v.status === 'rejected' ? '<span class="pill late">被拒 ပယ်ခံရ</span>' : '<span class="pill wait">等上傳 စောင့်နေ</span>';
@@ -4011,7 +4012,8 @@
       // 0.4.91 低4：後台說客戶已經不存在（被刪）→ 這筆的結案、試作沒收，標出來
       const miss = (v.missingCustomer ? '<br><small class="err">客戶已不存在，結案／試作沒收，請洽主管／ဖောက်သည် မရှိတော့ပါ၊ ပိတ်သိမ်း/စမ်းသပ်မှု လက်မခံပါ၊ မန်နေဂျာကို မေးပါ</small>' : '')
         + (v.closingDropped && !v.missingCustomer ? `<br><small class="err">${esc(v.closingDropped)}／ပိတ်သိမ်းမှု မလက်ခံပါ၊ မန်နေဂျာကို မေးပါ</small>` : '') // 0.5.16 第1輪：結案沒收要讓業務知道
-        + (v.trialDropped && !v.missingCustomer ? `<br><small class="err">${esc(v.trialDropped)}／စမ်းသပ်မှု မလက်ခံပါ၊ မန်နေဂျာကို မေးပါ</small>` : ''); // 0.5.19 B1：試作開始／結束沒收也要讓業務知道
+        + (v.trialDropped && !v.missingCustomer ? `<br><small class="err">${esc(v.trialDropped)}／စမ်းသပ်မှု မလက်ခံပါ၊ မန်နေဂျာကို မေးပါ</small>` : '') // 0.5.19 B1：試作開始／結束沒收也要讓業務知道
+        + (v.status === 'rejected' && v.rejectReason ? `<br><small class="err">${esc(v.rejectReason)}</small>` : ''); // 第28任保哥式審查：被拒的寫出原因（例如「拜訪農民一定要有照片…請重新打卡並拍照」）
       return `<li><span>${esc(v.farmerLabel)}<br><small>${d.getUTCMonth() + 1}/${d.getUTCDate()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}${what ? '・' + esc(what) : ''}</small>${miss}</span>${tag}</li>`;
     }).join('') || '<li class="empty">還沒有紀錄／မှတ်တမ်း မရှိသေး</li>';
   }
@@ -4036,7 +4038,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261119-012957'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261119-015115'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');

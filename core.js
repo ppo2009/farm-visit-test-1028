@@ -841,6 +841,7 @@
     }
     if (data && (data.code === 'BAD_ID' || data.code === 'BAD_REQUEST')) {
       // 伺服器確定收不了的（格式錯）：標成被拒、留在手機，不再重送，也不擋後面的
+      report.rejected = (report.rejected || 0) + 1; report.rejectMsg = data.message || data.code; // 第28任保哥式審查：原因要讓業務看到（畫面原本只寫「被拒，請洽主管」）
       try { await Store.updateVisit(v.id, cur => (cur && cur.status === 'uploaded' ? null : Object.assign({}, cur || v, { status: 'rejected', rejectReason: data.message || data.code }))); } catch (e) { noteStoreFull(report); } // 0.5.33 P1：寫不進去不中斷
       report.left--;
       return 'done';
