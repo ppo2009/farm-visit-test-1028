@@ -1698,7 +1698,7 @@
     $('recBtn').hidden = false;
     $('pNameLab').innerHTML = isDealerCat() ? `${cat}名字（公司）<span class="my">${CAT_MY[cat]} အမည် (ကုမ္ပဏီ)</span>` : '農民名字<span class="my">လယ်သမား အမည်</span>';
     // 0.4.32 董事長 2026-11-12：打卡畫面上方按鈕寫「一般拜訪農民／試作農民／推廣農民」（只改這裡，統計、紀錄照舊叫一般拜訪、試作、推廣）
-    const SWITCH_LABEL = { 農戶: '一般拜訪農民', 試作: '試作農民', 推廣: '推廣農民' };
+    const SWITCH_LABEL = { 農戶: '一般拜訪農民', 試作: '對照農民', 推廣: '推廣農民' }; // 第27任：試作農民改叫對照農民（只改畫面字，資料照舊叫試作）
     $('catSwitch').dataset.group = groupOf(cat);
     // 0.4.40 董事長：結案不放上方，改成畫面最下面的「結案（送主管審核）」；在結案畫面時同一顆按鈕變「取消結案」
     if (groupOf(cat) !== 'dealer') state.dealerClose = false; // 0.4.42 盤商、種子商的結案模式只在那一組
@@ -1886,6 +1886,7 @@
     $('recBtn').classList.remove('rec', 'done');
     $('recBtn').querySelector('.label').textContent = '錄音';
     state.photos = []; state.audio = null; state.audioSec = 0;
+    if (typeof clearCmp === 'function') clearCmp(); // 第27任 對照農民三段打字一起清
     renderThumbs();
     $('photoInput').value = ''; $('albumInput').value = '';
     $('note').value = ''; if (typeof $n === 'function') $n('vStageWhy').value = ''; // 0.5.26 沒選階段的原因一起清
@@ -3115,7 +3116,8 @@
       if (gen !== state.formGen) { btn.classList.remove('busy'); return; } // 已經離開這一筆拜訪，照片不要掉進下一筆（計數已在清表單時歸零）
       state.busyPhotos = Math.max(0, state.busyPhotos - 1);
       if (!p) continue;
-      state.photos.push(p);
+      if (cmpOn()) { p.group = CMP_GROUPS.indexOf(state.photoGroup) >= 0 ? state.photoGroup : '自己'; state.photos.push(p); state.photos.sort((x, y) => CMP_GROUPS.indexOf(x.group) - CMP_GROUPS.indexOf(y.group)); } // 第27任 對照農民：照三組排
+      else state.photos.push(p);
       if (source === '相機') fillGpsBox(); // 0.4.71 董事長：拍照時 GPS 座標自動帶入（新增客戶表單）
       renderThumbs(); refreshSave();
     }
@@ -3166,7 +3168,46 @@
   const PHOTO_CATS = ['農戶', '試作', '推廣'];
   function photoProblem() {
     if (PHOTO_CATS.indexOf(state.cat) < 0 || !$('farmer').value) return '';
+    if (cmpOn()) return cmpProblem();
     return (state.photos || []).length ? '' : '拜訪農民一定要有照片：請先拍照或上傳照片';
+  }
+  /* ───── 第27任 2026-11-18 董事長「對照農民」雛形：三台相機（自己的、別間公司的、別的作物）＋三段打字 ─────
+     類別值照舊是「試作」，只改畫面字。每張照片記 group；照片照三組的順序排（上傳後的編號跟打字裡寫的對得上）；
+     三段打字合成一份寫進 #note（存檔、上傳、後台都照舊）。三組都要至少一張照片、都要打字；別間公司要寫名字、別的作物要寫是什麼。
+     開始／結束試作的表單照舊用一般畫面 */
+  const CMP_GROUPS = ['自己', '別家', '別作物'];
+  const CMP_TITLE = { 自己: '自己的', 別家: '別間公司', 別作物: '別的作物' };
+  const cmpOn = () => state.cat === '試作' && !state.trialMode;
+  function cmpProblem() {
+    const miss = CMP_GROUPS.filter(g => !(state.photos || []).some(p => p.group === g)).map(g => CMP_TITLE[g]);
+    if (miss.length) return '對照農民要拍三組照片：還缺「' + miss.join('、') + '」';
+    const v = id => String(($n(id) || {}).value || '').trim();
+    if (!v('cmpCo')) return '請寫別間公司的名字';
+    if (!v('cmpCrop')) return '請寫別的作物是什麼';
+    const t = [['cmpNote1', '自己的'], ['cmpNote2', '別間公司'], ['cmpNote3', '別的作物']].filter(([id]) => !v(id)).map(x => x[1]);
+    return t.length ? '對照農民三段都要打字：還缺「' + t.join('、') + '」' : '';
+  }
+  /** 三段打字＋每組是第幾張照片，合成一份打字內容（寫進 #note） */
+  function cmpCompose() {
+    if (!cmpOn()) return;
+    const v = id => String(($n(id) || {}).value || '').trim();
+    const nums = g => (state.photos || []).map((p, i) => (p.group === g ? i + 1 : 0)).filter(Boolean);
+    const sec = (g, head, body) => { const n = nums(g); return body || n.length ? `【${head}】${n.length ? '（照片 ' + n.join('、') + '）' : ''}${body}` : ''; };
+    $('note').value = [sec('自己', '自己的', v('cmpNote1')), sec('別家', '別間公司' + (v('cmpCo') ? '：' + v('cmpCo') : ''), v('cmpNote2')), sec('別作物', '別的作物' + (v('cmpCrop') ? '：' + v('cmpCrop') : ''), v('cmpNote3'))].filter(Boolean).join('\n');
+  }
+  function paintCmp() {
+    const box = $n('cmpBox'), on = cmpOn();
+    box.hidden = !on;
+    const mb = $n('meetBody'); if (mb.classList) mb.classList.toggle('cmp', on);
+    if (!on || !box.querySelectorAll) return;
+    box.querySelectorAll('[data-cmpn]').forEach(el => { const n = (state.photos || []).filter(p => p.group === el.dataset.cmpn).length; el.textContent = n ? `已有 ${n} 張` : '還沒有照片'; });
+  }
+  function clearCmp() { ['cmpNote1', 'cmpNote2', 'cmpNote3', 'cmpCo', 'cmpCrop'].forEach(id => { const e = $n(id); if (e) e.value = ''; }); state.photoGroup = ''; }
+  function bindCmp() {
+    const box = $n('cmpBox'); if (!box || !box.querySelectorAll) return;
+    box.querySelectorAll('[data-cmpcam]').forEach(b => b.addEventListener('click', () => { state.photoGroup = b.dataset.cmpcam; $('photoInput').click(); }));
+    box.querySelectorAll('[data-cmpalb]').forEach(b => b.addEventListener('click', () => { state.photoGroup = b.dataset.cmpalb; $('albumInput').click(); }));
+    ['cmpNote1', 'cmpNote2', 'cmpNote3', 'cmpCo', 'cmpCrop'].forEach(id => { const e = $n(id); if (e && e.addEventListener) e.addEventListener('input', () => { cmpCompose(); refreshSave(); }); });
   }
   /** 0.5.26：要選階段的時候沒選、也沒寫原因 → 不給存（打卡照樣可以，只要寫原因） */
   function stageProblem() {
@@ -3196,7 +3237,7 @@
     const prev = state.thumbUrls || [];
     state.thumbUrls = state.photos.map(p => p.thumbUrl || (p.thumbUrl = URL.createObjectURL(p.blob)));
     prev.forEach(u => { if (state.thumbUrls.indexOf(u) < 0) URL.revokeObjectURL(u); }); // 刪掉的照片、換客戶清掉的照片才釋放
-    $('thumbs').innerHTML = state.photos.map((p, i) => `<div class="thumb"><img src="${state.thumbUrls[i]}" alt="照片 ${i + 1} ဓာတ်ပုံ ${i + 1}"><span class="tag">${p.source === '相簿' ? '相簿 ဓာတ်ပုံ' : '相機 ကင်မရာ'}</span><button type="button" class="del" data-i="${i}" aria-label="刪掉這張 ဤပုံကို ဖျက်မည်">×</button></div>`).join('');
+    $('thumbs').innerHTML = state.photos.map((p, i) => `<div class="thumb"><img src="${state.thumbUrls[i]}" alt="照片 ${i + 1} ဓာတ်ပုံ ${i + 1}"><span class="tag">${p.group ? esc(CMP_TITLE[p.group] || p.group) : p.source === '相簿' ? '相簿 ဓာတ်ပုံ' : '相機 ကင်မရာ'}</span><button type="button" class="del" data-i="${i}" aria-label="刪掉這張 ဤပုံကို ဖျက်မည်">×</button></div>`).join('');
     $('thumbs').querySelectorAll('.del').forEach(b => b.addEventListener('click', () => { if (state.saving) { toast('存檔中，請等存好再刪照片'); return; } state.photos.splice(Number(b.dataset.i), 1); renderThumbs(); refreshSave(); })); // 抓BUG第7輪 手機組1：存檔中（等定位）不能刪照片
     $('photoBtn').classList.toggle('done', state.photos.some(p => p.source === '相機'));
     const ag = typeof document !== 'undefined' && document.getElementById && document.getElementById('againBtn'); if (ag) ag.hidden = !state.photos.some(p => p.source === '相機'); // 第24任 第六批⑮
@@ -3378,6 +3419,7 @@
 
   /* ───── 儲存＋自動上傳 ───── */
   function refreshSave() {
+    if (typeof paintCmp === 'function') { paintCmp(); cmpCompose(); } // 第27任 對照農民：三組畫面、三段打字合成
     if (typeof paintNewTrial === 'function' && state.trialMode === 'start') paintNewTrial(); // 0534：改作物、種子公司、代碼都會叫到這裡 → 品項、品種那一行跟著變（不另外加事件，免得動到 init 接線）
     if (typeof paintOldKind === 'function' && state.trialMode === 'start') paintOldKind(); // 抓BUG第1輪（小助手2）：舊農民改品項，說明跟著變
     const sel = $('farmer').value;
@@ -3773,6 +3815,7 @@
     $('recBtn').classList.remove('rec');
     $('photoBtn').classList.remove('busy'); $('albumBtn').classList.remove('busy');
     state.photos = []; state.audio = null; state.audioSec = 0; state.original = null;
+    if (typeof clearCmp === 'function') clearCmp(); // 第27任 對照農民三段打字一起清
     renderThumbs();
     $('photoInput').value = ''; $('albumInput').value = '';
     $('recBtn').classList.remove('done');
@@ -3973,7 +4016,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261118-223642'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261118-225148'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -4265,6 +4308,7 @@
     ['dcOutcome', 'dcNote'].forEach(id => { $n(id).addEventListener('input', refreshSave); $n(id).addEventListener('change', refreshSave); }); // 0.4.42；低#7（第8任）改 $n：舊頁面沒有這兩格時初始化不中斷
     ['cRegion', 'cPrice', 'cYield', 'cBuyer', 'cPhone'].forEach(id => { $(id).addEventListener('input', refreshSave); $(id).addEventListener('change', refreshSave); });
     $('photoInput').addEventListener('change', e => addPhotos(e.target.files, '相機', $('photoBtn')).finally(() => { e.target.value = ''; }));
+    if (typeof bindCmp === 'function') bindCmp(); // 第27任 對照農民三組相機
     const again = document.getElementById('againBtn'); if (again) again.addEventListener('click', () => $('photoInput').click()); // 第24任 第六批⑮：再拍一張
     $('albumInput').addEventListener('change', e => addPhotos(e.target.files, '相簿', $('albumBtn')).finally(() => { e.target.value = ''; }));
     $('recBtn').addEventListener('click', toggleRec);

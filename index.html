@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="build-20261118-223642">
+<meta name="app-build" content="build-20261118-225148">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -272,6 +272,8 @@ header.homehdr{position:relative}
 .hvhead .my{display:block;font-weight:400;font-size:.8rem}
 .hvlist{list-style:none;margin:6px 0;padding:0} .hvlist li{display:block;border-bottom:1px solid var(--line);padding:8px 12px;cursor:pointer;overflow-wrap:anywhere} .hvlist li small{color:var(--muted)} /* display:block 蓋掉全站 li 的左右排（不然一位會擠成好幾欄） */
 .hvhide{border:1px solid var(--chili);background:var(--surface);color:var(--chili);border-radius:99px;font:inherit;font-size:.85rem;padding:4px 12px;min-height:36px;cursor:pointer} .hvhide .my{font-size:.7rem;margin-left:4px}
+.cmpg{border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;margin:0 0 10px} .cmpg h4{margin:0 0 6px;font-size:1rem} .cmpg textarea{width:100%;min-height:70px;margin-top:6px} .cmpg input{width:100%;margin-bottom:6px} .cmpbtns{display:flex;flex-wrap:wrap;gap:8px;align-items:center} .cmpbtns .btn2{min-height:44px}
+#meetBody.cmp #mediaRow,#meetBody.cmp #againBtn,#meetBody.cmp #noteBox{display:none} /* 第27任：對照農民三組拍照、三段打字 */
 .ffacts{margin:4px 0 6px;padding:6px 8px;list-style:none;display:flex;flex-wrap:wrap;gap:2px 14px;font-size:.85rem;border:1px solid var(--line);border-radius:8px} .ffacts li{overflow-wrap:anywhere} /* 第27任：選農民後的種植日期、面積、種子、備註 */
 .vage{font-weight:700;font-size:.85rem;overflow-wrap:anywhere} .vage.r{color:var(--chili)} .vage.y{color:var(--turmeric)} .vage.g{color:var(--paddy)} /* 0.4.82 多久沒回訪：≥10 天紅、5～9 天黃、0～4 天綠（字裡另有「久未回訪」等文字，不只靠顏色） */
 footer{margin-top:18px;text-align:center}
@@ -455,14 +457,14 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
   <!-- 0.4.32 董事長 2026-11-12：「農民」改成下拉選單：一般拜訪農民／試作農民／推廣農民，選了直接進那一種打卡（結案在打卡畫面上方切換） -->
   <div class="farmermenu hubmenu" id="farmerMenu" role="menu" hidden>
     <button type="button" role="menuitem" data-farmercat="農戶">一般拜訪農民<span class="my">ပုံမှန်သွားရောက် လယ်သမား</span></button>
-    <button type="button" role="menuitem" data-farmercat="試作">試作農民<span class="my">စမ်းသပ် လယ်သမား</span></button>
+    <button type="button" role="menuitem" data-farmercat="試作">對照農民<span class="my">စမ်းသပ် လယ်သမား</span></button>
     <button type="button" role="menuitem" data-farmercat="推廣">推廣農民<span class="my">မြှင့်တင် လယ်သမား</span></button>
   </div>
   <!-- 0.5.08 董事長：「下拉選單不是這樣，是滑鼠點下去會出現一般農民、試作農民、推廣農民」→ 卡片上蓋一個看不見的標準下拉選單，點卡片就跳出手機／電腦原生的選項清單（上面的 farmerMenu 留著當後備，平常點不到） -->
   <select class="hubsel" id="farmerSel" aria-label="選農民類別 လယ်သမား အမျိုးအစား ရွေးပါ">
     <option value="" selected>— 請選擇 ရွေးပါ —</option>
     <option value="農戶">一般拜訪農民／ပုံမှန်သွားရောက် လယ်သမား</option>
-    <option value="試作">試作農民／စမ်းသပ် လယ်သမား</option>
+    <option value="試作">對照農民／စမ်းသပ် လယ်သမား</option>
     <option value="推廣">推廣農民／မြှင့်တင် လယ်သမား</option>
   </select>
     </div>
@@ -531,7 +533,7 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
     <div class="rptscope" id="mineType" role="group" aria-label="看哪一種客戶 မည်သည့် ဖောက်သည် အမျိုးအစား ကြည့်မည်နည်း">
       <!-- 0.4.75 董事長：五類，按一類下面出現那一類的下拉選單 -->
       <button type="button" data-mtype="一般農民" aria-pressed="true">一般農民<span class="my">ပုံမှန် လယ်သမား</span></button>
-      <button type="button" data-mtype="試作農民" aria-pressed="false">試作農民<span class="my">စမ်းသပ် လယ်သမား</span></button>
+      <button type="button" data-mtype="試作農民" aria-pressed="false">對照農民<span class="my">စမ်းသပ် လယ်သမား</span></button>
       <button type="button" data-mtype="推廣農民" aria-pressed="false">推廣農民<span class="my">မြှင့်တင် လယ်သမား</span></button>
       <button type="button" data-mtype="種子商" aria-pressed="false">種子商<span class="my">မျိုးစေ့ဆိုင်</span></button>
       <button type="button" data-mtype="盤商" aria-pressed="false">盤商<span class="my">ကုန်သည်</span></button>
@@ -575,7 +577,7 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
     <!-- 0.4.73 董事長：我的進度列自己負責的農民、盤商、種子商；試作報告拿掉 → 前三格是三種客戶各幾位（點了切到那一種） -->
     <!-- 0.4.75 董事長：一般農民、試作農民、推廣農民、種子商、盤商五類＋本月拜訪（3 欄 2 列，375 寬不左右滑） -->
     <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="一般農民"><span>一般農民<span class="my">ပုံမှန် လယ်သမား</span></span><b id="msGen">—</b><small class="cs" id="msGenCs"></small></button>
-    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="試作農民"><span>試作農民<span class="my">စမ်းသပ် လယ်သမား</span></span><b id="msTrial">—</b><small class="cs" id="msTrialCs"></small></button>
+    <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="試作農民"><span>對照農民<span class="my">စမ်းသပ် လယ်သမား</span></span><b id="msTrial">—</b><small class="cs" id="msTrialCs"></small></button>
     <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="推廣農民"><span>推廣農民<span class="my">မြှင့်တင် လယ်သမား</span></span><b id="msPromo">—</b><small class="cs" id="msPromoCs"></small></button>
     <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="種子商"><span>種子商<span class="my">မျိုးစေ့ဆိုင်</span></span><b id="msSeeds">—</b><small class="cs" id="msSeedsCs"></small></button>
     <button type="button" class="mstat" data-jump="mineFarmers" data-mtype="盤商"><span>盤商<span class="my">ကုန်သည်</span></span><b id="msDealers">—</b><small class="cs" id="msDealersCs"></small></button>
@@ -623,7 +625,7 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
   <!-- 0.4.73 董事長：結案改「一般農民、試作農民、推廣農民結案」，盤商結案、種子商結案拿掉；選了農民會列之前的照片、留言、錄音、地址、過往成功失敗 -->
   <div class="farmermenu closepick" id="closePick">
     <button type="button" data-closecat="結案" data-closegroup="一般農民">一般農民結案<span class="my">ပုံမှန် လယ်သမား ပိတ်သိမ်း</span></button>
-    <button type="button" data-closecat="結案" data-closegroup="試作農民">試作農民結案<span class="my">စမ်းသပ် လယ်သမား ပိတ်သိမ်း</span></button>
+    <button type="button" data-closecat="結案" data-closegroup="試作農民">對照農民結案<span class="my">စမ်းသပ် လယ်သမား ပိတ်သိမ်း</span></button>
     <button type="button" data-closecat="結案" data-closegroup="推廣農民">推廣農民結案<span class="my">မြှင့်တင် လယ်သမား ပိတ်သိမ်း</span></button>
   </div>
   <!-- 0.4.82 董事長截圖：第二排「盤商結案」「種子商結案」（同樣大小）。按了進那一類的拜訪畫面，只列自己負責的店家；
@@ -800,6 +802,21 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
 
     <!-- 0.4.44 第 3 步：按「有見到」之後才出現拍照、打字、試作、價格（還沒選就不顯示，畫面比較單純） -->
     <div id="meetBody">
+    <!-- 第27任 2026-11-18 董事長「試作農民改成對照農民：一塊地種好幾種作物、也種別間公司的種子；照相要三台相機（自己的、別間公司的、別的作物），打字也要三個紀錄」（雛形，老闆看過再定）。
+         對照農民（類別值照舊是「試作」）打卡時，一般的拍照列和打字欄藏起來，改用這三組；三段打字合成一份打字內容送出（後台不用改） -->
+    <div id="cmpBox" hidden>
+      <div class="cmpg" data-g="自己"><h4>① 自己的（我們的種子）</h4>
+        <div class="cmpbtns"><button type="button" class="btn2" data-cmpcam="自己">📷 拍照</button><button type="button" class="btn2" data-cmpalb="自己">🖼 照片上傳</button><span class="sub" data-cmpn="自己"></span></div>
+        <textarea id="cmpNote1" maxlength="600" placeholder="自己的作物怎麼樣" aria-label="自己的紀錄"></textarea></div>
+      <div class="cmpg" data-g="別家"><h4>② 別間公司</h4>
+        <input type="text" id="cmpCo" maxlength="60" placeholder="別間公司的名字" aria-label="別間公司的名字">
+        <div class="cmpbtns"><button type="button" class="btn2" data-cmpcam="別家">📷 拍照</button><button type="button" class="btn2" data-cmpalb="別家">🖼 照片上傳</button><span class="sub" data-cmpn="別家"></span></div>
+        <textarea id="cmpNote2" maxlength="600" placeholder="別間公司的作物怎麼樣" aria-label="別間公司的紀錄"></textarea></div>
+      <div class="cmpg" data-g="別作物"><h4>③ 別的作物</h4>
+        <input type="text" id="cmpCrop" maxlength="60" placeholder="是什麼作物" aria-label="別的作物是什麼">
+        <div class="cmpbtns"><button type="button" class="btn2" data-cmpcam="別作物">📷 拍照</button><button type="button" class="btn2" data-cmpalb="別作物">🖼 照片上傳</button><span class="sub" data-cmpn="別作物"></span></div>
+        <textarea id="cmpNote3" maxlength="600" placeholder="別的作物怎麼樣" aria-label="別的作物的紀錄"></textarea></div>
+    </div>
     <div class="two media2" id="mediaRow">
       <label class="big" id="photoBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
