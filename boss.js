@@ -314,6 +314,8 @@
     // 主管＝總經理有新回覆、這台電腦還沒打開看過的（總經理BUG(2號)中2，不加試算表欄位，記在瀏覽器）
     const unread = briefUnreadCount(); // 第25任 審查第二批：原本這裡另寫一份同樣的算法
     $('briefBadge').hidden = !unread; $('briefBadge').textContent = unread ? String(unread) : '';
+    // 抓BUG第6輪 主管組3：整頁重畫（重新整理、離開 10 分鐘切回來自動重讀）也保留同一位客戶打開的修改框和打到一半的字
+    const d0 = $('custDetail'), keepCid = d0 ? d0.dataset.cid : '', keepBoxes = d0 ? openFixBoxes(d0) : [];
     $('panel').innerHTML = segBar() + ({ today: renderToday, overdue: renderOverdue, review: renderReview, moremenu: renderMoreMenu, latest: renderLatest, cal: renderCal, trial: renderTrial, map: renderMap, table: renderTable, reports: renderReports, progress: () => staffCards() + renderProgress(), tasks: renderTasks, accounts: renderAccounts, briefs: renderBriefs, errors: renderErrors })[state.tab](); // 第24任 第七批：今天、逾期、審核、更多（手機）；本月目標、每位業務卡片搬到工作進度
     if (state.tab === 'tasks') bindTasks();
     if (state.tab === 'briefs') bindBriefs();
@@ -326,6 +328,7 @@
       // 點業務卡片：到客戶頁，只看這位業務要注意的客戶
       state.cf = { q: '', staff: el.dataset.staff, area: '', type: '', show: 'attn' }; state.trial = null; state.tab = 'trial'; render();
     }));
+    { const d1 = $('custDetail'); if (d1 && keepCid && d1.dataset.cid === keepCid) restoreFixBoxes(d1, keepBoxes); }
     bindMedia($('panel')); syncPlayer($('panel')); // 0.4.88 中8：重畫後舊錄音接到新按鈕，找不到就停
     $('panel').querySelectorAll('[data-filter]').forEach(el => el.addEventListener('change', () => { state.rf[el.dataset.filter] = el.value; render(); }));
     $('panel').querySelectorAll('[data-month]').forEach(el => el.addEventListener('change', () => { state.pm = el.value; render(); }));
@@ -373,6 +376,9 @@
     // 抓BUG第5輪 主管組1：快採收清單跟著後台重算的換；主管組2：畫面資料改了 dataGen 加一（出發較早的重讀晚到時不採用、改重讀）
     setData(Array.isArray(r.harvestSoon) ? { harvestSoon: r.harvestSoon } : {});
     if ($('custDetail')) refreshCustDetail(key);
+    // 抓BUG第6輪 主管組2：回訪日、種植日期改了，左邊客戶清單（逾期標籤、要注意的）和上方「今天」紅點也跟著重畫
+    const cl = $('custList'); if (cl && kind !== 'text') { cl.innerHTML = renderCustList(); bindGo(cl); }
+    if (typeof paintNav7 === 'function') paintNav7();
   }
   /* 第26任 2026-11-18 董事長「業務填錯生長週期，主管後台要能改」：客戶履歷每筆拜訪（結案那筆除外）可以改生長階段 */
   const STAGE_LIST = ['播種', '發芽', '長大', '開花', '結果', '採收', '採收後', '剖面圖']; // 跟手機、後台同一份 8 個值
@@ -408,11 +414,12 @@
   async function loadHistory() {
     const c = custSelected();
     if (!c || state.hist[c.id] || state.histReq[c.id]) return; // 已經有、或正在拿，不重複要
-    const gen = state.cacheGen, req = state.histReq; // 0.5.24：記下出發時的世代和標記表
+    const gen = state.cacheGen, req = state.histReq, dgen = state.dataGen; // 0.5.24：記下出發時的世代和標記表；抓BUG第6輪 主管組1：也記畫面資料版本
     req[c.id] = true;
     let r;
     try { r = await api({ action: 'history', cid: c.id }); } catch (e) { r = null; } finally { delete req[c.id]; }
     if (gen !== state.cacheGen || !r || !r.ok) return;
+    if (dgen !== state.dataGen) { loadHistory(); return; } // 出發後主管改過打字、階段等（可能是改之前的資料）→ 不採用，重拿一次
     state.hist[c.id] = r.visits;
     const now = state.tab === 'trial' && custSelected();
     if (now && now.id === c.id) { if ($('custDetail')) refreshCustDetail(); else render(); } // 0.4.75 低3：只重畫履歷，不重建搜尋框
@@ -983,24 +990,32 @@
     return state.cf.q ? '<p class="empty">找不到符合的客戶。<span class="my">ကိုက်ညီသော ဖောက်သည် မတွေ့ပါ။</span></p>' : '<p class="empty">左邊選一位客戶，就會在這裡看到他的履歷。<span class="my">ဘယ်ဘက်မှ ဖောက်သည် တစ်ဦး ရွေးလျှင် ဤနေရာတွင် သူ၏ မှတ်တမ်း မြင်ရမည်။</span></p>';
   }
   /** 0.4.75（1號主管清單低3）：只重畫履歷那一欄（搜尋時、履歷讀完時），不重畫整頁 → 搜尋框不會被重建、手機鍵盤不會收起來 */
+  /** 抓BUG第5、6輪 主管組3：履歷裡打開的修改框（✎ 改內容／種植日期／天數／回訪／改階段）和打到一半的值；savedKey＝剛存好的那格，不保留（顯示新值） */
+  function openFixBoxes(d, savedKey) {
+    if (!d || !d.querySelectorAll) return [];
+    return Array.from(d.querySelectorAll('details.stfix[open]')).map(x => {
+      const b = x.querySelector('[data-fixsave],[data-stsave]'), inp = x.querySelector('[data-fixin],[data-stsel]');
+      return b ? { k: b.dataset.fixsave ? 'fixsave' : 'stsave', v: b.dataset.fixsave || b.dataset.stsave, val: inp ? inp.value : null } : null;
+    }).filter(x => x && x.v !== savedKey);
+  }
+  function restoreFixBoxes(d, keep) {
+    (keep || []).forEach(o => {
+      const b = d && Array.from(d.querySelectorAll('[data-' + o.k + ']')).find(x => x.dataset[o.k] === o.v), box = b && b.closest('details');
+      if (!box) return;
+      box.open = true;
+      const inp = box.querySelector('[data-fixin],[data-stsel]'); if (inp && o.val != null) inp.value = o.val;
+    });
+  }
   function refreshCustDetail(savedKey) {
     const d = $('custDetail');
     if (!d) return;
     state.renderGen++; // 舊畫面的照片迴圈停掉
     const c = custSelected();
     // 抓BUG第5輪 主管組3：履歷重畫（完整履歷載完、別的欄存完）原本把打開的修改框和打到一半的字洗掉 → 同一位客戶就記下來、重畫後放回（剛存好的那格 savedKey 除外，顯示新值）
-    const keep = c && d.dataset.cid === c.id && d.querySelectorAll ? Array.from(d.querySelectorAll('details.stfix[open]')).map(x => {
-      const b = x.querySelector('[data-fixsave],[data-stsave]'), inp = x.querySelector('[data-fixin],[data-stsel]');
-      return b ? { k: b.dataset.fixsave ? 'fixsave' : 'stsave', v: b.dataset.fixsave || b.dataset.stsave, val: inp ? inp.value : null } : null;
-    }).filter(x => x && x.v !== savedKey) : [];
+    const keep = c && d.dataset.cid === c.id ? openFixBoxes(d, savedKey) : [];
     d.dataset.cid = c ? c.id : '';
     d.innerHTML = custDetailHtml();
-    keep.forEach(o => {
-      const b = Array.from(d.querySelectorAll('[data-' + o.k + ']')).find(x => x.dataset[o.k] === o.v), box = b && b.closest('details');
-      if (!box) return;
-      box.open = true;
-      const inp = box.querySelector('[data-fixin],[data-stsel]'); if (inp && o.val != null) inp.value = o.val;
-    });
+    restoreFixBoxes(d, keep);
     bindGo(d); bindMedia(d); biDom(d); syncPlayer(d); // 0.4.88 中8
     const box = $('custList');
     if (box) box.querySelectorAll('.crow[data-go]').forEach(b => b.setAttribute('aria-current', String(!!c && b.dataset.go === c.id)));

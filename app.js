@@ -2013,7 +2013,7 @@
       if (typeof refreshSave === 'function') refreshSave();
     }
     // 0.4.82 多久沒回訪：後台的最後拜訪日、這支手機剛打（還沒同步）的，取比較新的那天
-    const age = `<p class="sub">${visitAgeHtml([c.lastVisit, local[0] ? dayOf(local[0].deviceTime) : ''].filter(Boolean).sort().pop(), mmDay(0))}</p>` + farmerFactsHtml(c, trials, ((state.options || (await Store.getMeta('options')) || {}).areaUnit)); // 第27任：種植日期、面積、種子、備註；抓BUG第5輪 手機組2：首頁「我的進度」還沒讀過選單，單位從手機資料庫讀
+    const age = `<p class="sub">${visitAgeHtml([c.lastVisit, local[0] ? dayOf(local[0].deviceTime) : ''].filter(Boolean).sort().pop(), mmDay(0))}</p>` + farmerFactsHtml(c, trials, (((await Store.getMeta('options')) || state.options || {}).areaUnit)); // 抓BUG第6輪 手機組2：先讀手機資料庫（同步存的最新），讀不到才用記憶體那份（同 fillPlantForm） // 第27任：種植日期、面積、種子、備註；抓BUG第5輪 手機組2：首頁「我的進度」還沒讀過選單，單位從手機資料庫讀
     if (o.home && !c.lastVisit && !trials.length && !recent.length) { box.innerHTML = H3 + age + `<p>這位${c.type && c.type !== '農民' ? '客戶' : '農民'}還沒有拜訪紀錄。<br>` + '<span class="my">မှတ်တမ်း မရှိသေး</span></p>'; return; }
     if (!c.lastVisit && !trials.length && !recent.length) {
       // 沒有任何進度：跳出新增（補齊）農民資料
@@ -3951,7 +3951,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261118-203152'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261118-211349'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
