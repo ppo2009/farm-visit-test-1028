@@ -370,7 +370,9 @@
     if (kind === 'text') [].concat(state.data.visits || [], ...Object.values(state.hist || {})).forEach(v => { if (v && v.id === id) v.text = r.text; });
     else if (kind === 'cropDays') state.data.cropDays = r.cropDays || {};
     else (state.data.customers || []).forEach(c => { if (c.id === id) c[kind] = kind === 'nextDue' ? r.nextDue : r.plantDate; });
-    if ($('custDetail')) refreshCustDetail();
+    // 抓BUG第5輪 主管組1：快採收清單跟著後台重算的換；主管組2：畫面資料改了 dataGen 加一（出發較早的重讀晚到時不採用、改重讀）
+    setData(Array.isArray(r.harvestSoon) ? { harvestSoon: r.harvestSoon } : {});
+    if ($('custDetail')) refreshCustDetail(key);
   }
   /* 第26任 2026-11-18 董事長「業務填錯生長週期，主管後台要能改」：客戶履歷每筆拜訪（結案那筆除外）可以改生長階段 */
   const STAGE_LIST = ['播種', '發芽', '長大', '開花', '結果', '採收', '採收後', '剖面圖']; // 跟手機、後台同一份 8 個值
@@ -389,8 +391,9 @@
     if (!r || !r.ok) { if (msg) msg.textContent = (r && r.message) || '沒有存成功，請再試一次'; return; }
     // 畫面上的這筆跟著改（總覽、完整履歷兩份都改），再重畫履歷
     [].concat(state.data.visits || [], ...Object.values(state.hist || {})).forEach(v => { if (v && v.id === id) v.stage = r.stage; });
+    state.dataGen++; // 抓BUG第5輪 主管組2：同 saveFix
     // 抓BUG 後台組：存的途中切到別的分頁 → 原本整頁 render() 會洗掉正在打的匯報、任務文字；履歷還在畫面上才重畫履歷，不在就只改資料（回來時照新值畫）
-    if ($('custDetail')) refreshCustDetail();
+    if ($('custDetail')) refreshCustDetail(id); // 抓BUG第5輪 主管組3：剛存的那格顯示新值、其他打開的格子保留
   }
   /** 點客戶名字：到客戶頁看他的履歷；窄螢幕時履歷在清單下面，自動捲過去 */
   function bindGo(root) {
@@ -920,7 +923,7 @@
     return `<div class="cal-wrap"><div class="cal">${['一', '二', '三', '四', '五', '六', '日'].map(x => `<div class="dow">週${x}<span class="my">${WEEKDAY_MY['日一二三四五六'.indexOf(x)]}</span></div>`).join('')}
       ${days.map(d => `<div class="day${d === state.data.today ? ' today' : ''}"><span class="d">${md(d)}${d === state.data.today ? ' 今天<span class="my">ယနေ့</span>' : ''}</span>${ev[d].join('')}</div>`).join('')}</div></div>
       <div class="legend"><span style="--c:var(--paddy)">已拜訪</span><span style="--c:var(--turmeric)">預定回訪</span><span style="--c:var(--chili)">逾期</span></div>
-      <p class="sub">點任何一個行程，就會打開那位客戶的試作履歷。同樣的行程也在 Google 日曆「農戶拜訪」裡。<span class="my">မည်သည့် အစီအစဉ်ကိုမဆို နှိပ်လျှင် ထိုဖောက်သည်၏ စမ်းသပ်မှု မှတ်တမ်း ပွင့်လာမည်။ တူညီသော အစီအစဉ် Google ပြက္ခဒိန် 「လယ်သမား သွားရောက်မှု」 တွင်လည်း ရှိသည်။</span></p>`;
+      <p class="sub">點任何一個行程，就會打開那位客戶的試作履歷。✅ 拜訪也在 Google 日曆「農戶拜訪」裡；🔔 回訪、⚠ 逾期只在這裡。<span class="my">မည်သည့် အစီအစဉ်ကိုမဆို နှိပ်လျှင် ထိုဖောက်သည်၏ စမ်းသပ်မှု မှတ်တမ်း ပွင့်လာမည်။ တူညီသော အစီအစဉ် Google ပြက္ခဒိန် 「လယ်သမား သွားရောက်မှု」 တွင်လည်း ရှိသည်။</span></p>`;
   }
 
   /* ───── 客戶頁：搜尋＋篩選＋按業務分組，預設只列要注意的（2026-11-12 規劃 B） ───── */
@@ -980,13 +983,24 @@
     return state.cf.q ? '<p class="empty">找不到符合的客戶。<span class="my">ကိုက်ညီသော ဖောက်သည် မတွေ့ပါ။</span></p>' : '<p class="empty">左邊選一位客戶，就會在這裡看到他的履歷。<span class="my">ဘယ်ဘက်မှ ဖောက်သည် တစ်ဦး ရွေးလျှင် ဤနေရာတွင် သူ၏ မှတ်တမ်း မြင်ရမည်။</span></p>';
   }
   /** 0.4.75（1號主管清單低3）：只重畫履歷那一欄（搜尋時、履歷讀完時），不重畫整頁 → 搜尋框不會被重建、手機鍵盤不會收起來 */
-  function refreshCustDetail() {
+  function refreshCustDetail(savedKey) {
     const d = $('custDetail');
     if (!d) return;
     state.renderGen++; // 舊畫面的照片迴圈停掉
     const c = custSelected();
+    // 抓BUG第5輪 主管組3：履歷重畫（完整履歷載完、別的欄存完）原本把打開的修改框和打到一半的字洗掉 → 同一位客戶就記下來、重畫後放回（剛存好的那格 savedKey 除外，顯示新值）
+    const keep = c && d.dataset.cid === c.id && d.querySelectorAll ? Array.from(d.querySelectorAll('details.stfix[open]')).map(x => {
+      const b = x.querySelector('[data-fixsave],[data-stsave]'), inp = x.querySelector('[data-fixin],[data-stsel]');
+      return b ? { k: b.dataset.fixsave ? 'fixsave' : 'stsave', v: b.dataset.fixsave || b.dataset.stsave, val: inp ? inp.value : null } : null;
+    }).filter(x => x && x.v !== savedKey) : [];
     d.dataset.cid = c ? c.id : '';
     d.innerHTML = custDetailHtml();
+    keep.forEach(o => {
+      const b = Array.from(d.querySelectorAll('[data-' + o.k + ']')).find(x => x.dataset[o.k] === o.v), box = b && b.closest('details');
+      if (!box) return;
+      box.open = true;
+      const inp = box.querySelector('[data-fixin],[data-stsel]'); if (inp && o.val != null) inp.value = o.val;
+    });
     bindGo(d); bindMedia(d); biDom(d); syncPlayer(d); // 0.4.88 中8
     const box = $('custList');
     if (box) box.querySelectorAll('.crow[data-go]').forEach(b => b.setAttribute('aria-current', String(!!c && b.dataset.go === c.id)));
@@ -1077,7 +1091,7 @@
         <div class="box"><div class="photos">${v.photos.length ? v.photos.map(id => `<div class="photo" data-photo="${esc(id)}">載入中…／ဖတ်နေသည်…</div>`).join('') : '<div class="photo">沒有照片／ဓာတ်ပုံ မရှိပါ</div>'}</div>
         <dl class="kv"><dt>${dealer ? '行情' : '作物'}</dt><dd>${esc(v.crop || '—')}${myLine(v, 'crop')}</dd><dt>反應</dt><dd>${esc(v.feedback || '—')}${myLine(v, 'feedback')}</dd><dt>問題</dt><dd>${esc(v.issue || '—')}${myLine(v, 'issue')}</dd><dt>下一步</dt><dd>${esc(v.next || '—')}${myLine(v, 'next')}</dd>
         <dt>摘要</dt><dd>${esc(v.summary || noSummaryText(v))}${errDetail(v)}${myLine(v, 'summary')}</dd>
-        ${v.noMeet ? `<dt>沒拜訪<span class="my">မသွားဖြစ်ပါ</span></dt><dd><span class="pill p-yel">沒拜訪<span class="my">မသွားဖြစ်ပါ</span></span> ${esc(v.noMeet)}</dd>` : ''}${v.closing ? `<dt>結案</dt><dd>${esc(v.closing)}</dd>` : ''}${v.plantFail ? `<dt>種植失敗<span class="my">စိုက်ပျိုးမှု မအောင်မြင်</span></dt><dd>${esc(v.plantFail)}</dd>` : ''}${v.text ? `<dt>打字</dt><dd class="pre">${esc(v.text)}${v.id ? fixBoxHtml('text:' + v.id, '改內容', `<textarea data-fixin maxlength="2000" rows="4" aria-label="打字內容">${esc(v.text)}</textarea>`) : '' /* 第27任：主管改業務打錯的字 */}</dd>` : ''}${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') || '<p class="empty">這位客戶還沒有拜訪紀錄。<span class="my">ဤဖောက်သည်တွင် သွားရောက်မှု မှတ်တမ်း မရှိသေးပါ။</span></p>'}</div>`;
+        ${v.noMeet ? `<dt>沒拜訪<span class="my">မသွားဖြစ်ပါ</span></dt><dd><span class="pill p-yel">沒拜訪<span class="my">မသွားဖြစ်ပါ</span></span> ${esc(v.noMeet)}</dd>` : ''}${v.closing ? `<dt>結案</dt><dd>${esc(v.closing)}</dd>` : ''}${v.plantFail ? `<dt>種植失敗<span class="my">စိုက်ပျိုးမှု မအောင်မြင်</span></dt><dd>${esc(v.plantFail)}</dd>` : ''}${v.text ? `<dt>打字</dt><dd class="pre">${esc(v.text)}${v.id ? fixBoxHtml('text:' + v.id, '改內容', `<textarea data-fixin maxlength="3000" rows="4" aria-label="打字內容">${esc(v.text)}</textarea>`) : '' /* 第27任：主管改業務打錯的字 */}</dd>` : ''}${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') || '<p class="empty">這位客戶還沒有拜訪紀錄。<span class="my">ဤဖောက်သည်တွင် သွားရောက်မှု မှတ်တမ်း မရှိသေးပါ။</span></p>'}</div>`;
   }
 
   /** 一張照片只下載一次（下載中的也共用同一個請求）；換了畫面，舊畫面的迴圈就停，不再下載別的客戶的照片（2026-11-11 抓到） */

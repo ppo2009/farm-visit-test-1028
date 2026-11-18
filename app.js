@@ -2013,7 +2013,7 @@
       if (typeof refreshSave === 'function') refreshSave();
     }
     // 0.4.82 多久沒回訪：後台的最後拜訪日、這支手機剛打（還沒同步）的，取比較新的那天
-    const age = `<p class="sub">${visitAgeHtml([c.lastVisit, local[0] ? dayOf(local[0].deviceTime) : ''].filter(Boolean).sort().pop(), mmDay(0))}</p>` + farmerFactsHtml(c, trials); // 第27任：種植日期、面積、種子、備註
+    const age = `<p class="sub">${visitAgeHtml([c.lastVisit, local[0] ? dayOf(local[0].deviceTime) : ''].filter(Boolean).sort().pop(), mmDay(0))}</p>` + farmerFactsHtml(c, trials, ((state.options || (await Store.getMeta('options')) || {}).areaUnit)); // 第27任：種植日期、面積、種子、備註；抓BUG第5輪 手機組2：首頁「我的進度」還沒讀過選單，單位從手機資料庫讀
     if (o.home && !c.lastVisit && !trials.length && !recent.length) { box.innerHTML = H3 + age + `<p>這位${c.type && c.type !== '農民' ? '客戶' : '農民'}還沒有拜訪紀錄。<br>` + '<span class="my">မှတ်တမ်း မရှိသေး</span></p>'; return; }
     if (!c.lastVisit && !trials.length && !recent.length) {
       // 沒有任何進度：跳出新增（補齊）農民資料
@@ -2052,9 +2052,9 @@
   /** 第27任 2026-11-18 董事長「業務選農民，備註看不見、幾號種植、拿幾包種子給農民、農民面積，業務端要看得到」：
       選了農民，進度卡上方列這四樣（沒填的不列；盤商、種子商不列）。種子＝進行中試作／推廣開始時填的用量。
       備註是系統自動寫的「業務在現場新增」就不列。新字只有中文，緬文待譯（_翻譯/待譯_第27任_20261118.md） */
-  function farmerFactsHtml(c, trials) {
+  function farmerFactsHtml(c, trials, unit) {
     if (!c || (c.type && c.type !== '農民')) return '';
-    const u = (state.options && state.options.areaUnit) || '英畝', has = x => x !== '' && x != null && String(x).trim() !== '';
+    const u = unit || (state.options && state.options.areaUnit) || '英畝', has = x => x !== '' && x != null && String(x).trim() !== '';
     const note = String(c.note == null ? '' : c.note).trim();
     const rows = [
       has(c.plantDate) ? ['種植日期', String(c.plantDate)] : null,
@@ -3951,7 +3951,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261118-200915'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261118-203152'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
