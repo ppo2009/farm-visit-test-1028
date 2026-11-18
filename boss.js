@@ -1374,9 +1374,14 @@
   }
   /** 標已讀／回覆後的未讀數：後台有回 briefUnread 就用；舊後台沒回就用清單自己算（清單已含 100 份以外的舊未讀） */
   const briefUnreadOf = r => (r && r.briefUnread != null ? Number(r.briefUnread) || 0 : (r && r.briefs || []).filter(b => !b.read).length);
+  // 第26任 2026-11-18 老闆「拆冗長函式」：bindBriefs 68 行拆成送匯報表單、展開標已讀、回覆表單三段（只搬位置）
   function bindBriefs() {
     const form = $('briefForm');
-    if (form) {
+    if (form) bindBriefForm(form);
+    bindBriefToggles();
+    bindReplyForms();
+  }
+  function bindBriefForm(form) {
       $('bText').addEventListener('input', () => { if (!state.bf.sentText) state.bf.text = $('bText').value; });
       if ($('bNew')) $('bNew').addEventListener('click', () => {
         if (!confirm(biText('上一份可能已經送到總經理那邊。確定要改成新的一份？（之後送出會是另一份匯報）', 'ယခင်တစ်စောင် ရောက်ပြီးဖြစ်နိုင်သည်။ အသစ်တစ်စောင် ပြောင်းရေးမလား'))) return;
@@ -1408,7 +1413,8 @@
         }
         render();
       });
-    }
+  }
+  function bindBriefToggles() {
     $('panel').querySelectorAll('details.brief').forEach(el => el.addEventListener('toggle', async () => {
       if (!el.open) { if (state.briefOpen === el.dataset.brief) state.briefOpen = ''; return; }
       // 重畫時本來就開著的那一份也會觸發 toggle：只有「這次才打開」才算看過
@@ -1424,6 +1430,8 @@
       if (r.ok) { setData({ briefs: r.briefs, briefUnread: briefUnreadOf(r) }); render(); } // 0.4.75（1號主管清單中1）：紅點跟著減
       else el.dataset.unread = '1'; // 沒成功：改回未讀，收起再打開會再標一次（自行審查 S7）
     }));
+  }
+  function bindReplyForms() {
     $('panel').querySelectorAll('[data-replyform]').forEach(f => {
       const id = f.dataset.replyform, ta = f.querySelector('textarea');
       ta.addEventListener('input', () => { (state.replyDraft || (state.replyDraft = {}))[id] = ta.value; });
