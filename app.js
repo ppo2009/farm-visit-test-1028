@@ -3176,7 +3176,7 @@
   }
   /** 第27任 2026-11-18 董事長「業務拜訪農民一定要有照片，要鎖定才能上傳」：一般／試作／推廣農民的拜訪（含沒見到）沒有照片 → 儲存鈕鎖住。
       照片還在處理中另有「照片處理中」提示（refreshSave 本來就擋）；盤商、種子商、結案不限。新字只有中文，緬文待譯 E9 */
-  const PHOTO_CATS = ['農戶', '試作', '推廣'];
+  const PHOTO_CATS = ['農戶', '試作', '推廣', '結案']; // 第28任 2026-11-19 董事長「結案也一定要拍照片，鎖死，每次去農民那邊都要拍照，沒有不能上傳」（結案＝農民結案；盤商、種子商結案照舊不限）
   function photoProblem() {
     if (PHOTO_CATS.indexOf(state.cat) < 0 || !$('farmer').value) return '';
     if (cmpOn()) return cmpProblem();
@@ -4035,7 +4035,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261119-004155'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261119-010212'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
