@@ -752,6 +752,7 @@
         profile: v.profile || null, text, prices: v.prices || [], trial: v.trial || null, trialRef: v.trialRef || '', closing: v.closing || null, // 結案（2026-11-12）：上傳一定要帶，漏了後台就收不到
         plantFailure: v.plantFailure || null, noMeet: v.noMeet || null, stage: v.stage || '', // 0.4.78 生長階段 // 0.4.39 第6任線上實測：0.4.33 種植失敗、0.4.38 沒拜訪原本漏送，後台收不到（手機存的新欄位一定要加在這裡）
         deviceTime: v.deviceTime, clockOffset: v.clockOffset || 0,
+        photoRule: v.photoRule ? 1 : 0, // 第28任：存的時候照片必填已生效（後台一律檢查照片）
         lat: v.lat, lng: v.lng, accuracy: v.accuracy,
         mediaLost // 0.4.87 中1：讀不到沒傳的照片張數、錄音（後台不認也不會壞；沒有就是 null）
       },

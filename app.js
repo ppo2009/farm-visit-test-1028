@@ -3577,6 +3577,7 @@
       id: ids.visitId,
       account: ctx.account || '',
       category: f.cat === '結案' ? '農戶' : f.cat, // 結案記成農民拜訪（統計照舊），另外帶 closing
+      photoRule: 1, // 第28任：這筆是「農民拜訪照片必填」生效後的手機存的（後台看到就一律檢查照片，不看手機時間）
       closing: f.closing,
       plantFailure: f.plantFailure,
       noMeet: f.noMeet,
@@ -4035,7 +4036,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261119-010212'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261119-012957'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
