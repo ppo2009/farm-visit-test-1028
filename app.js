@@ -52,7 +52,7 @@
     try { localStorage.setItem(K, id); } catch (e) { /* 存不了 */ }
     return id;
   }
-  const MAX_PHOTOS = 6; // 跟後台一樣
+  const MAX_PHOTOS = 12; // 跟後台一樣（第28任 2026-11-19 董事長「調高到12張」，原本 6）
   const CAT_TYPES = { 試作: ['農民'], 推廣: ['農民'], 農戶: ['農民'], 結案: ['農民'], 盤商: ['盤商'], 種子商: ['種子商'] }; // 盤商、種子商分開（2026-11-11 董事長）
   const CAT_LABEL = c => (c === '農戶' ? '一般拜訪' : c); // 「農戶」是舊資料的值，畫面上叫「一般拜訪」
   // 業務畫面一律中文＋緬文（2026-11-12 董事長；緬文是示意，待校對）
@@ -1002,7 +1002,14 @@
     const closeTop = o.closeFirst ? `<h3>結案／ပိတ်သိမ်း</h3>${pendTop ? '<p class="sub">結案等主管審核，通過後才顯示內容／ပိတ်သိမ်းမှု မန်နေဂျာ အတည်ပြုပြီးမှ ပြမည်</p>' : cv ? closeBlockHtml(cv) : '<p class="sub">還沒結案／မပိတ်သိမ်းရသေး</p>'}` : '';
     // 0.4.81（2號後台對齊）：待確認那筆的照片不在生長過程露出（結案文字已藏，也不會被當成「採收」）
     const tlTop = o.timeline ? growthTimelineHtml(hid.length ? all.map(v => v.closeHidden === '待確認' ? Object.assign({}, v, { photos: [] }) : v) : all, o.plantDate) : ''; // 0.4.78 生長過程時間軸（種植資料、田間打卡、結案共用）
-    if (o.timelineOnly) return tlTop; // 第27任 2026-11-18 董事長「上面已經有歷史紀錄了，這邊移除」：打卡畫面只留生長過程，不再列一次過往紀錄
+    // 第27任 2026-11-18 董事長「上面已經有歷史紀錄了，這邊移除」：打卡畫面只留生長過程，不再列一次過往紀錄
+    // 第28任 2026-11-19 董事長「補回」：生長過程下面補回過去試作（對照）成敗，和之前拜訪的錄音（只列有錄音的那幾筆：日期、分類、業務、錄音鈕，不再列整段文字）
+    if (o.timelineOnly) {
+      const auds = all.filter(v => v.audio && v.closeHidden !== '待確認');
+      return tlTop
+        + (trials ? `<p class="sub">試作／推廣（成功、失敗）／စမ်းသပ်／မြှင့်တင် ရလဒ်（အောင်မြင်・မအောင်မြင်）：</p><ul>${trials}</ul>` : (o.showTrials ? '<p class="sub">沒有試作、推廣紀錄／စမ်းသပ်မှု မရှိ</p>' : ''))
+        + (auds.length ? `<h3>之前的錄音</h3><ul>${auds.map(v => `<li><b>${esc(v.time)}</b>｜${esc(histCatBi(v.cat))}${v.staff ? '｜' + esc(v.staff) : ''} <button type="button" class="btn2 small" data-hau="${esc(v.audio)}">🔊 錄音 အသံဖိုင်</button></li>`).join('')}</ul>` : '');
+    }
     return `${tlTop}${closeTop}<h3>${o.closeFirst ? '之前的田間報告／ယခင် ကွင်းဆင်း အစီရင်ခံစာ' : '過往紀錄／ယခင် မှတ်တမ်း'}</h3>${head}`
       + (trials ? `<p class="sub">試作／推廣（成功、失敗）／စမ်းသပ်／မြှင့်တင် ရလဒ်（အောင်မြင်・မအောင်မြင်）：</p><ul>${trials}</ul>` : (o.showTrials ? '<p class="sub">沒有試作、推廣紀錄／စမ်းသပ်မှု မရှိ</p>' : ''))
       + `<p class="sub">拜訪紀錄 共 ${r.total || 0} 筆${r.more ? '（只列最近 50 筆）' : ''}${o.oldFirst ? '，由舊到新' : ''}；照片、錄音按了才下載／ဓာတ်ပုံ၊ အသံ နှိပ်မှ ဒေါင်းမည်（စုစုပေါင်း မှတ်တမ်း）${r.more ? '（နောက်ဆုံး ၅၀ ခုသာ ပြထားသည်）' : ''}${o.oldFirst ? '၊ အဟောင်းမှ အသစ်သို့' : ''}：</p>`
@@ -2028,7 +2035,7 @@
     box.innerHTML = progressCardHtml(c, trials, recent, !!remote, `${H3}${age}${waitHtml}`);
     bindProgressPhotos(box, cid);
   }
-  /** 第26任 2026-11-18 董事長「上次拜訪要有圖片」：進度卡的照片——最近一次拜訪自動載入（最多 6 張），「看更早的」裡的按了才下載（省緬甸網路流量）；
+  /** 第26任 2026-11-18 董事長「上次拜訪要有圖片」：進度卡的照片——最近一次拜訪自動載入（最多 MAX_PHOTOS 張），「看更早的」裡的按了才下載（省緬甸網路流量）；
    *  農民任何業務都能看（scope:'field'，跟後台 farmerHistory_ 一樣）；下載失敗留按鈕可以再按 */
   function bindProgressPhotos(box, cid) {
     if (!box || !box.querySelectorAll) return;
@@ -4025,7 +4032,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261118-235754'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261119-001555'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
