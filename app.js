@@ -938,7 +938,7 @@
     const short = t => { const s = String(t || ''); return s.length > 80 ? s.slice(0, 80) + '…' : s; };
     const li = STAGES.map(st => { const es = by[st];
       return `<li class="${es.length ? 'has' : ''}"><span class="gst">${st} <span class="my">${STAGE_MY[st]}</span></span>`
-        + (es.length ? es.map(({ v, guessed }) => `<div class="gent"><b>${esc(String(v.time || '').slice(0, 10))}</b>${guessed ? '<small>（推算 ခန့်မှန်း）</small>' : ''}${v.text ? '　' + esc(short(v.text)) : v.closing ? '　' + esc(short(v.closing)) : ''}`
+        + (es.length ? es.map(({ v, guessed }) => `<div class="gent"><b>${esc(String(v.time || '').slice(0, 10))}</b>${guessed ? '<small>（推算 ခန့်မှန်း）</small>' : ''}${v.typed || v.text ? '　' + esc(short(v.typed || v.text)) : v.closing ? '　' + esc(short(v.closing)) : '' /* 第27任 董事長「生長過程由業務填寫緬文即可，不用翻成中文」：業務打的原文優先 */}`
           + `${(v.photos || []).length ? `<div class="pgrid">${v.photos.map((id, i) => `<button type="button" class="btn2 small" data-hph="${esc(id)}">📷 照片 ${i + 1}／ဓာတ်ပုံ ${i + 1}</button>`).join('')}</div>` : ''}</div>`).join('')
           : '<div class="gent"><small>還沒有照片／ဓာတ်ပုံ မရှိသေး</small></div>') + '</li>'; }).join('');
     return `<h3>生長過程／ကြီးထွားမှု အဆင့်ဆင့်</h3>${noPd ? `<p class="sub">有 ${noPd} 筆拜訪沒標階段、也沒有種植日期，無法推算／အဆင့်နှင့် စိုက်ရက် မပါသည့် မှတ်တမ်းများ ရှိ၍ မခန့်မှန်းနိုင်ပါ</p>` : ''}${early ? `<p class="sub">有 ${early} 筆拜訪早於種植日期（上一季），不列在生長過程／စိုက်ရက်မတိုင်မီ (ယခင်ရာသီ) မှတ်တမ်းများ ရှိ၍ ကြီးထွားမှု အဆင့်ဆင့်တွင် မထည့်ပါ</p>` : ''}${badDay ? `<p class="sub">有 ${badDay} 筆拜訪日期不明，無法推算階段／ရက်စွဲ မသိသည့် မှတ်တမ်းများ ရှိ၍ အဆင့် မခန့်မှန်းနိုင်ပါ</p>` : ''}<ol class="growtl">${li}</ol>`;
@@ -1002,6 +1002,7 @@
     const closeTop = o.closeFirst ? `<h3>結案／ပိတ်သိမ်း</h3>${pendTop ? '<p class="sub">結案等主管審核，通過後才顯示內容／ပိတ်သိမ်းမှု မန်နေဂျာ အတည်ပြုပြီးမှ ပြမည်</p>' : cv ? closeBlockHtml(cv) : '<p class="sub">還沒結案／မပိတ်သိမ်းရသေး</p>'}` : '';
     // 0.4.81（2號後台對齊）：待確認那筆的照片不在生長過程露出（結案文字已藏，也不會被當成「採收」）
     const tlTop = o.timeline ? growthTimelineHtml(hid.length ? all.map(v => v.closeHidden === '待確認' ? Object.assign({}, v, { photos: [] }) : v) : all, o.plantDate) : ''; // 0.4.78 生長過程時間軸（種植資料、田間打卡、結案共用）
+    if (o.timelineOnly) return tlTop; // 第27任 2026-11-18 董事長「上面已經有歷史紀錄了，這邊移除」：打卡畫面只留生長過程，不再列一次過往紀錄
     return `${tlTop}${closeTop}<h3>${o.closeFirst ? '之前的田間報告／ယခင် ကွင်းဆင်း အစီရင်ခံစာ' : '過往紀錄／ယခင် မှတ်တမ်း'}</h3>${head}`
       + (trials ? `<p class="sub">試作／推廣（成功、失敗）／စမ်းသပ်／မြှင့်တင် ရလဒ်（အောင်မြင်・မအောင်မြင်）：</p><ul>${trials}</ul>` : (o.showTrials ? '<p class="sub">沒有試作、推廣紀錄／စမ်းသပ်မှု မရှိ</p>' : ''))
       + `<p class="sub">拜訪紀錄 共 ${r.total || 0} 筆${r.more ? '（只列最近 50 筆）' : ''}${o.oldFirst ? '，由舊到新' : ''}；照片、錄音按了才下載／ဓာတ်ပုံ၊ အသံ နှိပ်မှ ဒေါင်းမည်（စုစုပေါင်း မှတ်တမ်း）${r.more ? '（နောက်ဆုံး ၅၀ ခုသာ ပြထားသည်）' : ''}${o.oldFirst ? '၊ အဟောင်းမှ အသစ်သို့' : ''}：</p>`
@@ -1014,13 +1015,13 @@
     const f = (o.list || []).find(x => x.id === cid) || {};
     if (f.pending) { el._tok = null; el.hidden = false; el.innerHTML = '<p class="sub">剛新增、還沒上傳的客戶，上傳後才看得到過往紀錄／အသစ်ထည့်ပြီး မတင်ရသေးသော ဖောက်သည်သည် တင်ပြီးမှ ယခင် မှတ်တမ်း ကြည့်နိုင်မည်</p>'; return; }
     const tok = {}; el._tok = tok;
-    el.hidden = false; el.innerHTML = '<h3>過往紀錄／ယခင် မှတ်တမ်း</h3><p class="sub">讀取中…／ဖတ်နေသည်</p>';
+    el.hidden = false; el.innerHTML = (o.timelineOnly ? '<h3>生長過程／ကြီးထွားမှု အဆင့်ဆင့်</h3>' : '<h3>過往紀錄／ယခင် မှတ်တမ်း</h3>') + '<p class="sub">讀取中…／ဖတ်နေသည်</p>';
     let r;
     try { r = await gasCall(Object.assign({ action: 'myHistory', cid }, o.scope ? { scope: o.scope } : {})); } catch (e) { r = { ok: false, message: '網路不穩，請再試一次／ထပ်ကြိုးစားပါ' }; }
     if (r && !r.ok && r.code === 'NOT_ALLOWED') r = { ok: false, message: '只能看自己負責的客戶／ကိုယ်တာဝန်ယူထားသော ဖောက်သည်သာ' }; // 0.4.75 舊後台不認得 scope：照實說，不當掉
     if (el._tok !== tok) return; // 讀的途中換了客戶，新的那次接手
     if (!current()) { el.hidden = true; el.innerHTML = ''; el._tok = null; return; }
-    if (!r || !r.ok) { el.innerHTML = `<h3>過往紀錄／ယခင် မှတ်တမ်း</h3><p class="sub">${esc(r && r.offline ? '要有網路才看得到過往紀錄、照片、錄音／ယခင် မှတ်တမ်း၊ ဓာတ်ပုံ၊ အသံ ကြည့်ရန် အင်တာနက် လိုသည်' : (r && r.message) || '讀取失敗，請再試一次／ထပ်ကြိုးစားပါ')}</p>`; return; }
+    if (!r || !r.ok) { el.innerHTML = `${o.timelineOnly ? '<h3>生長過程／ကြီးထွားမှု အဆင့်ဆင့်</h3>' : '<h3>過往紀錄／ယခင် မှတ်တမ်း</h3>'}<p class="sub">${esc(r && r.offline ? '要有網路才看得到過往紀錄、照片、錄音／ယခင် မှတ်တမ်း၊ ဓာတ်ပုံ၊ အသံ ကြည့်ရန် အင်တာနက် လိုသည်' : (r && r.message) || '讀取失敗，請再試一次／ထပ်ကြိုးစားပါ')}</p>`; return; }
     el.innerHTML = histHtml(r, o.timeline ? Object.assign({}, o, { plantDate: f.plantDate }) : o); // 0.4.78 時間軸推算用種植日期
     el.querySelectorAll('[data-hph]').forEach(b => b.addEventListener('click', async () => {
       b.disabled = true; const label = b.textContent; b.textContent = '下載中…／ဒေါင်းနေသည်';
@@ -1943,7 +1944,7 @@
     if (state.cat === '結案') renderHistory(val, $n('closeVisitHist'), { current: () => $('farmer').value === val, list: state.allCustomers || [], timeline: true, showAddr: true, showTrials: true });
     else { const hb = $n('closeVisitHist'); hb.hidden = true; hb.innerHTML = ''; hb._tok = null; }
     // 0.4.75 董事長「田間打卡：所有的農民之前紀錄都要有之前圖片跟錄音」：一般／試作／推廣農民（不限自己負責）列過往紀錄；盤商、種子商、結案不列
-    if (state.cat !== '結案' && groupOf(state.cat) === 'farmer') renderHistory(val, $n('visitHistory'), { current: () => $('farmer').value === val && state.cat !== '結案' && groupOf(state.cat) === 'farmer', list: state.allCustomers || [], showTrials: true, timeline: true, scope: 'field' });
+    if (state.cat !== '結案' && groupOf(state.cat) === 'farmer') renderHistory(val, $n('visitHistory'), { current: () => $('farmer').value === val && state.cat !== '結案' && groupOf(state.cat) === 'farmer', list: state.allCustomers || [], showTrials: true, timeline: true, timelineOnly: true, scope: 'field' }); // 第27任：打卡畫面只放生長過程（過往紀錄上面進度卡已有）
     else { const vh = $n('visitHistory'); vh.hidden = true; vh.innerHTML = ''; vh._tok = null; }
     // 換客戶就清掉試作表單：剛剛打的結果不能套到另一位客戶的試作（2026-11-11 第四輪自抓 T8）
     resetTrialForm();
@@ -2013,7 +2014,7 @@
       if (typeof refreshSave === 'function') refreshSave();
     }
     // 0.4.82 多久沒回訪：後台的最後拜訪日、這支手機剛打（還沒同步）的，取比較新的那天
-    const age = `<p class="sub">${visitAgeHtml([c.lastVisit, local[0] ? dayOf(local[0].deviceTime) : ''].filter(Boolean).sort().pop(), mmDay(0))}</p>` + farmerFactsHtml(c, trials, (((await Store.getMeta('options')) || state.options || {}).areaUnit)); // 抓BUG第6輪 手機組2：先讀手機資料庫（同步存的最新），讀不到才用記憶體那份（同 fillPlantForm） // 第27任：種植日期、面積、種子、備註；抓BUG第5輪 手機組2：首頁「我的進度」還沒讀過選單，單位從手機資料庫讀
+    const age = `<p class="sub">${visitAgeHtml([c.lastVisit, local[0] ? dayOf(local[0].deviceTime) : ''].filter(Boolean).sort().pop(), mmDay(0))}</p>` + farmerFactsHtml(c, trials, (((await Store.getMeta('options')) || state.options || {}).areaUnit), ((await Store.getMeta('options')) || state.options || {})); // 抓BUG第6輪 手機組2：先讀手機資料庫（同步存的最新），讀不到才用記憶體那份（同 fillPlantForm） // 第27任：種植日期、面積、種子、備註；抓BUG第5輪 手機組2：首頁「我的進度」還沒讀過選單，單位從手機資料庫讀
     if (o.home && !c.lastVisit && !trials.length && !recent.length) { box.innerHTML = H3 + age + `<p>這位${c.type && c.type !== '農民' ? '客戶' : '農民'}還沒有拜訪紀錄。<br>` + '<span class="my">မှတ်တမ်း မရှိသေး</span></p>'; return; }
     if (!c.lastVisit && !trials.length && !recent.length) {
       // 沒有任何進度：跳出新增（補齊）農民資料
@@ -2052,15 +2053,27 @@
   /** 第27任 2026-11-18 董事長「業務選農民，備註看不見、幾號種植、拿幾包種子給農民、農民面積，業務端要看得到」：
       選了農民，進度卡上方列這四樣（沒填的不列；盤商、種子商不列）。種子＝進行中試作／推廣開始時填的用量。
       備註是系統自動寫的「業務在現場新增」就不列。新字只有中文，緬文待譯（_翻譯/待譯_第27任_20261118.md） */
-  function farmerFactsHtml(c, trials, unit) {
+  function farmerFactsHtml(c, trials, unit, opts) {
     if (!c || (c.type && c.type !== '農民')) return '';
     const u = unit || (state.options && state.options.areaUnit) || '英畝', has = x => x !== '' && x != null && String(x).trim() !== '';
     const note = String(c.note == null ? '' : c.note).trim();
+    // 第27任 2026-11-18 董事長「業務面的之前進度太少了，要像主管頁一樣詳細」：照主管頁客戶履歷那張卡的欄位排（編號、分類、鎮、村、作物、種子公司、代碼、面積、種植日期、生長天數、其他、試作、負責、下次回訪、備註）
+    const days = typeof cropDaysOf === 'function' ? cropDaysOf(c.crop, opts) : 0;
+    const g = typeof growOf === 'function' && has(c.plantDate) ? growOf(c.plantDate, mmDay(0), days) : null;
     const rows = [
-      has(c.plantDate) ? ['種植日期', String(c.plantDate)] : null,
-      has(c.areaNow) || has(c.areaMax) ? ['面積', [has(c.areaNow) ? `目前 ${c.areaNow} ${u}` : '', has(c.areaMax) ? `可種 ${c.areaMax} ${u}` : ''].filter(Boolean).join('、')] : null
-    ].concat((trials || []).filter(t => has(t.dosage)).map(t => [`${t.cat || '試作'}種子`, String(t.dosage)]))
-      .concat([note && note !== '業務在現場新增' ? ['備註', note] : null]).filter(Boolean);
+      ['編號', [c.id, c.kind || ''].filter(Boolean).join('・')],
+      has(c.town) ? ['鎮', String(c.town)] : null,
+      has(c.village) ? ['村', String(c.village)] : null,
+      has(c.crop) ? ['作物', cropText(String(c.crop))] : null,
+      has(c.variety) ? ['種子公司', String(c.variety)] : null,
+      has(c.varCode) ? ['代碼', String(c.varCode)] : null,
+      has(c.areaNow) || has(c.areaMax) ? ['面積', [has(c.areaNow) ? `目前 ${c.areaNow} ${u}` : '', has(c.areaMax) ? `可種 ${c.areaMax} ${u}` : ''].filter(Boolean).join('、')] : null,
+      has(c.plantDate) ? ['種植日期', String(c.plantDate) + (g && !g.future ? `（第 ${g.days} 天${days ? '／' + days + ' 天' : ''}）` : '')] : null,
+      days ? ['生長天數', days + ' 天'] : null,
+      has(c.fertilizer) ? ['其他', String(c.fertilizer)] : null
+    ].concat((trials || []).map(t => [`${t.cat || '試作'}`, [cropText(String(t.item || '（未填品項）')), t.start ? t.start + ' 開始' : ''].filter(Boolean).join('，')]))
+      .concat((trials || []).filter(t => has(t.dosage)).map(t => [`${t.cat || '試作'}種子`, String(t.dosage)]))
+      .concat([has(c.staff) ? ['負責', String(c.staff)] : null, has(c.nextDue) ? ['下次回訪', String(c.nextDue)] : null, note && note !== '業務在現場新增' ? ['備註', note] : null]).filter(Boolean);
     return rows.length ? `<ul class="ffacts">${rows.map(([k, v]) => `<li><b>${esc(k)}</b>：${esc(v)}</li>`).join('')}</ul>` : '';
   }
   /** ① 沒網路時：這支手機記的最近幾筆拜訪，排成跟後台紀錄一樣的格式（日期用緬甸日期） */
@@ -3147,6 +3160,13 @@
     const w = stageTooEarly(st, pd, mmDay(0));
     return w ? { stage: st, w } : null;
   }
+  /** 第27任 2026-11-18 董事長「業務拜訪農民一定要有照片，要鎖定才能上傳」：一般／試作／推廣農民的拜訪（含沒見到）沒有照片 → 儲存鈕鎖住。
+      照片還在處理中另有「照片處理中」提示（refreshSave 本來就擋）；盤商、種子商、結案不限。新字只有中文，緬文待譯 E9 */
+  const PHOTO_CATS = ['農戶', '試作', '推廣'];
+  function photoProblem() {
+    if (PHOTO_CATS.indexOf(state.cat) < 0 || !$('farmer').value) return '';
+    return (state.photos || []).length ? '' : '拜訪農民一定要有照片：請先拍照或上傳照片';
+  }
   /** 0.5.26：要選階段的時候沒選、也沒寫原因 → 不給存（打卡照樣可以，只要寫原因） */
   function stageProblem() {
     if ($n('stageBox').hidden || $n('vStage').value) return '';
@@ -3365,7 +3385,7 @@
     const hasContent = noMeetOn() || state.photos.length || state.audio || $('note').value.trim() || collectPrices().length || state.trialMode || ((state.cat === '結案' || state.dealerClose || dealerSignOn()) && !closeProblem()) || (sel && sel !== '__new' && collectProfile());
     $('note').placeholder = noteExample().join('\n'); // 範例跟著農民進度換
     // 0.5.26 生長階段：放在 profileProblem 前面（舊測試 test-073fix1112 檢查這行以 profileProblem() 結尾）；抽函式跑的舊測試沒有 stageProblem
-    const tp = noMeetProblem() || trialProblem() || closeProblem() || priceProblem() || (typeof stageProblem === 'function' ? stageProblem() : '') || profileProblem();
+    const tp = noMeetProblem() || trialProblem() || closeProblem() || priceProblem() || (typeof stageProblem === 'function' ? stageProblem() : '') || profileProblem() || (typeof photoProblem === 'function' ? photoProblem() : ''); // 第27任：農民拜訪要有照片
     if (tp && /面積|種植日期/.test(tp) && typeof document !== 'undefined' && document.getElementById) { const pm = document.getElementById('profileMore'); if (pm) pm.open = true; } // 第24任 第六批③：問題在收起來的欄位 → 自動打開
     const signNeed = !!state.signOnly && !dealerSignOn(); // 0.4.82 結案分頁的盤商、種子商結案：一定要走「已簽約」才能送（沒見到、還沒按有見到都不能存）
     const ok = sel && nameOk && !state.rec && !state.recBusy && !state.recStarting && !state.busyPhotos && !tp && (isNew || hasContent) && !signNeed && !state.saving; // 業務BUG#4：存檔途中（等定位最多 15 秒）不能再按
@@ -3395,7 +3415,7 @@
     const out = [];
     const add = p => { if (p && out.indexOf(p) < 0) out.push(p); };
     if (!nameOk) add('請先填名字／အမည် အရင်ဖြည့်ပါ');
-    [noMeetProblem, trialProblem, closeProblem, priceProblem, typeof stageProblem === 'function' ? stageProblem : null, profileProblem].forEach(fn => { if (typeof fn === 'function') add(fn()); });
+    [noMeetProblem, trialProblem, closeProblem, priceProblem, typeof stageProblem === 'function' ? stageProblem : null, profileProblem, typeof photoProblem === 'function' ? photoProblem : null].forEach(fn => { if (typeof fn === 'function') add(fn()); });
     // 字跟 refreshSave 那串逐字相同（那串不改：抽 refreshSave 單獨跑的舊測試沒有別的常數）
     if (extra && extra.signNeed) add('盤商、種子商結案：先按「有見到」，再寫簽約內容／ တွေ့ပြီး ကိုနှိပ်ပြီး စာချုပ် အကြောင်းအရာ ရေးပါ');
     if (extra && extra.noContent) add(`拍照、上傳照片、錄音、打字${state.cat === '盤商' ? '、記價格' : ''}${$('farmer').value === '__new' || SHOW_PROFILE_ON_VISIT ? '（或改客戶資料）' : ''}至少做一樣／ဓာတ်ပုံ၊ အသံ၊ စာ တစ်ခုခု လုပ်ပါ`);
@@ -3416,6 +3436,7 @@
     if (state.saving) return;
     // 第26任 低風險修正3②：語音輸入還在聽就按儲存 → 存檔先讀走文字、清表單時再把語音作廢，停頓後才回來的最後一句就不見了（畫面也沒提示）。先停語音、讓業務看一下文字再按
     if (typeof FarmVoice === 'object' && FarmVoice.active()) { FarmVoice.stop(false); toast('已停止語音輸入，請看一下文字再按儲存'); return; }
+    { const pp = typeof photoProblem === 'function' ? photoProblem() : ''; if (pp) { toast(pp); refreshSave(); return; } } // 第27任：按鈕狀態沒即時更新時也擋（農民拜訪要有照片）
     state.saving = true;
     // R30-3（GPT）：原本只在等定位時鎖拍照、相簿、錄音，之後讀暫存客戶、重新判斷結案時又放開 → 期間加的照片還在處理就存檔、照片無聲不見。
     //   整段存檔期間都鎖（已開著的檔案選擇器回來也會被 addPhotos 擋下並提示），不管怎麼結束都解鎖
@@ -3951,7 +3972,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261118-212520'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261118-215318'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -4091,24 +4112,22 @@
   /** 第24任 第六批④：選客戶的搜尋結果與「＋新增」按鈕。搜尋只在選單裡有的客戶中找（結案只列可結案的） */
   function paintFarmerPick() {
     if (typeof document === 'undefined' || !document.getElementById) return;
-    const sel = document.getElementById('farmer'), inp = document.getElementById('farmerSearch'), hits = document.getElementById('farmerHits'), nb = document.getElementById('farmerNewBtn');
+    const sel = document.getElementById('farmer'), inp = document.getElementById('farmerSearch'), hits = document.getElementById('farmerHits');
     if (!sel || !inp || !hits) return;
-    const has = new Set([...sel.options].map(o => o.value));
-    if (nb) { nb.hidden = !has.has('__new'); nb.firstChild.textContent = isDealerCat() ? '＋ 新增' + state.cat : '＋ 新增農民'; }
+    const has = new Set([...sel.options].map(o => o.value)); // 第27任：「＋ 新增」按鈕已拿掉（新增從選單選）
     const q = inp.value.trim().toLowerCase();
     if (!q) { hits.hidden = true; hits.innerHTML = ''; return; }
     const list = (state.farmerPick || []).filter(f => has.has(f.id) && f.key.indexOf(q) >= 0).slice(0, 30);
     hits.hidden = false;
     hits.innerHTML = list.length ? list.map(f => `<li><button type="button" data-fid="${esc(f.id)}">${esc(f.name)}<span class="sub">${esc(f.sub)}</span></button></li>`).join('')
-      : '<li class="none">找不到「' + esc(inp.value.trim()) + '」' + (has.has('__new') ? '，可以按「＋ 新增」' : '') + '<span class="my">ရှာမတွေ့ပါ 「' + esc(inp.value.trim()) + '」' + (has.has('__new') ? '၊ 「＋ အသစ်」 နှိပ်နိုင်သည်' : '') + '</span></li>';
+      : '<li class="none">找不到「' + esc(inp.value.trim()) + '」<span class="my">ရှာမတွေ့ပါ 「' + esc(inp.value.trim()) + '」</span></li>'; // 第27任：「＋ 新增」按鈕拿掉，不再提示按它
   }
   function bindFarmerPick() {
-    const sel = document.getElementById('farmer'), inp = document.getElementById('farmerSearch'), hits = document.getElementById('farmerHits'), nb = document.getElementById('farmerNewBtn');
+    const sel = document.getElementById('farmer'), inp = document.getElementById('farmerSearch'), hits = document.getElementById('farmerHits');
     if (!sel || !inp || !hits) return;
     const pick = v => { sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true })); inp.value = ''; paintFarmerPick(); };
     inp.addEventListener('input', paintFarmerPick);
     hits.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-fid]'); if (b) pick(b.dataset.fid); });
-    if (nb) nb.addEventListener('click', () => pick('__new'));
   }
   /** 第24任 第六批⑳（tomtom 實測：正式版頁尾也寫「第 2 期測試版・緬文待校對」）：設定「環境」＝測試才顯示，正式只顯示版本號；沒同步過照舊顯示（看不出是正式） */
   async function paintEnvFoot() {
