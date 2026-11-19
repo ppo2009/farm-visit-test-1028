@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="build-20261119-102944">
+<meta name="app-build" content="build-20261119-112402">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -76,7 +76,7 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
    按鈕和判斷程式照舊（何時可以結束的規則沒變），只是看不到；原本「可以按結束」的時候，改顯示旁邊的提示 */
 #trialEndBtn{display:none!important}
 /* 0.5.26 快速打卡清單：盤商、種子商的簽約標示 */
-.signtag{font-weight:700;display:inline-block;max-width:100%} /* 抓BUG第1輪（小助手1）：原本 white-space:nowrap，「沒簽約（主管退回簽約）」整串不換行，375 寬被撐到 415 → 放得下同一行、放不下整塊換下一行、還太長才在裡面換行 */.signtag.no{color:var(--chili)}.signtag.wait{color:#b26b00}
+.signtag{font-weight:700;display:inline-block;max-width:100%} /* 抓BUG第1輪（小助手1）：原本 white-space:nowrap，「沒簽約（主管退回簽約）」整串不換行，375 寬被撐到 415 → 放得下同一行、放不下整塊換下一行、還太長才在裡面換行 */.signtag.no{color:var(--chili)}.signtag.wait{color:#b26b00}.signtag.ok{color:var(--paddy)}
 #trialEndHint{display:none;margin:0}
 #trialEndBtn:not([hidden])+#trialEndHint{display:block}
 /* 0.5.07 首頁兩張卡的下拉選單：從卡片正下方展開、一項一行、蓋在下面內容上（結案分頁的 farmermenu 不受影響） */
@@ -593,6 +593,11 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
   </section>
   <!-- 0.4.72 董事長：本月新增幾個一般農民、試作農民、推廣農民、盤商、種子商，詳細的要列出來（1號）；0.4.82 改名「已開發的客戶」、五類直接列名字＋編號；
        0.5.14 客戶「歷史就是已完成的事情」→ 從執行任務搬來歷史成就（已經新增完成的客戶），id 不變 -->
+  <!-- 第28任 2026-11-19 董事長「已結案農民在田間打卡跟執行任務移除，但要在歷史成就出現這個業務曾經完成的推廣農民」 -->
+  <section class="msec" id="mineEnded">
+    <h2 data-tr="待譯">已結案的農民</h2>
+    <div id="endedFarmers"></div>
+  </section>
   <section class="msec" id="mineNewCust">
     <h2>已開發的客戶<span class="my">ချိတ်ဆက်ပြီးသော ဖောက်သည်</span><span class="sub" id="newCustSum">本月新增的客戶／ဤလ ဖောက်သည်အသစ်</span></h2>
     <div class="tcgrps" id="newCustList"></div>

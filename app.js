@@ -527,6 +527,22 @@
     for (const cat of ['試作', '推廣']) { const t = await activeTrialFor(f.id, cat); if (t) return closeTrialGroup({ cat, t }); }
     return closeTrialGroup(null);
   }
+  /**
+   * 歷史成就「已結案的農民」：這位業務負責、已經結案（主管確認過）的農民，推廣農民排最前面。
+   * 已結案的農民不會出現在田間打卡、執行任務的清單（後台不送），只在這裡留紀錄（董事長 2026-11-19）。
+   */
+  function renderEndedFarmers(list) {
+    const box = document.getElementById('endedFarmers');
+    if (!box) return; // 舊頁面沒有這一區
+    const order = ['推廣農民', '試作農民', '一般農民'];
+    const kindOf = f => (order.indexOf(f.kind) >= 0 ? f.kind : '一般農民');
+    const groups = order.map(k => [k, (list || []).filter(f => kindOf(f) === k)]).filter(([, fs]) => fs.length);
+    const place = f => [f.town, f.village].filter(Boolean).join('・');
+    const row = f => `<li><b>${esc(f.name || '')}</b>｜${esc(f.id)}${place(f) ? '｜' + esc(place(f)) : ''}${f.lastVisit ? `｜最後拜訪 ${esc(f.lastVisit)}` : ''}</li>`;
+    box.innerHTML = groups.length
+      ? groups.map(([k, fs]) => `<h3>${esc(k)}（${fs.length}）</h3><ul>${fs.map(row).join('')}</ul>`).join('')
+      : '<p class="sub">還沒有已結案的農民</p>';
+  }
   /** 0.4.57／0.4.73／0.4.75 「我的進度」：自己負責的客戶（不看別人的），五類各幾位、選一類出現下拉、選一位展開進度卡＋過往紀錄；另列農民種植進度 */
   async function fillCloseFarmers() {
     const sel = document.getElementById('closeFarmer');
@@ -539,6 +555,7 @@
     state.mineAll = allMine;
     state.closeList = allMine.filter(f => (f.type || '農民') === '農民');
     state.endedMine = ((await Store.getMeta('endedMine')) || []).filter(f => (f.type || '農民') === '農民' && !state.closeList.some(x => x.id === f.id)); // 0.4.80 中3
+    renderEndedFarmers(state.endedMine); // 第28任：歷史成就列出已結案的農民
     const today = mmDay(0); // 業務BUG#4：緬甸的今天（0.4.75 種植進度也用這個日期算）
     const groupOf = {}, growOfId = {};
     // 0.5.14 作物生長天數；0.5.16 第1輪：先讀手機資料庫（每次同步都更新）—— state.options 只在打開打卡畫面時讀一次，主管後來填的天數會看不到
@@ -1219,7 +1236,9 @@
     // 第24任（董事長「已簽約顯示已簽約，沒簽約用紅字寫沒簽約」）：字改「已簽約（待主管確認）」；主管確認後客戶結束、不在清單
     // 第24任：主管退回的簽約（後台 signRejected）寫出來，業務才知道要重談；手機有更新的簽約還沒被後台看到時照樣算待確認
     if (!sent && f.signRejected === true) return ' <span class="signtag no">沒簽約（主管退回簽約）／မချုပ်ရသေး (မန်နေဂျာ ပြန်ပို့)</span>';
-    return sent ? ' <span class="signtag wait">已簽約（待主管確認）／စာချုပ်ပြီး (စောင့်ဆဲ)</span>' : ' <span class="signtag no">沒簽約／မချုပ်ရသေး</span>';
+    if (sent) return ' <span class="signtag wait">已簽約（待主管確認）／စာချုပ်ပြီး (စောင့်ဆဲ)</span>';
+    if (f.signed === true) return ' <span class="signtag ok">已簽約</span>'; // 第28任：主管確認過的簽約，店家照樣跟著業務、照樣在清單
+    return ' <span class="signtag no">沒簽約／မချုပ်ရသေး</span>';
   }
   function renderTodoCust() {
     const box = document.getElementById('todoCust');
@@ -2293,11 +2312,27 @@
    * 給農民幾包種子、種植日期、下次回訪、備註……跟主管頁客戶資料同一套欄位），有田區座標就給導航連結。
    * 資料都在手機裡（同步下來的客戶、進行中的試作／推廣），不用等網路；查試作的途中換了農民就不寫。
    */
+  /** 已簽約的盤商、種子商資料（田間打卡搜尋框正下方）：簽約狀態、電話（點了撥）、地址、地區、老闆、作物、品牌、其他、負責、下次回訪、備註；沒填的不列 */
+  function dealerInfoHtml(c) {
+    const has = x => x !== '' && x != null && String(x).trim() !== '';
+    const row = (k, v) => (has(v) ? `<li><b>${esc(k)}</b>：${esc(String(v))}</li>` : '');
+    const tel = telDigits(c.phone);
+    const rows = [
+      `<li><b>簽約</b>：<span class="signtag ok">已簽約</span></li>`,
+      has(c.phone) ? `<li><b>電話</b>：<a href="tel:${esc(tel)}">${esc(c.phone)}</a></li>` : '',
+      row('地址', c.address), row('地區', c.area), row('編號', [c.id, c.type].filter(Boolean).join('・')), row('老闆', c.owner),
+      row('作物', has(c.crop) ? cropText(String(c.crop)) : ''), row('品牌', c.brand), row('其他', c.fertilizer),
+      row('負責', c.staff), row('下次回訪', c.nextDue), row('備註', c.note)
+    ].join('');
+    return `<h3>${esc(c.type)}資料　<b>${esc(c.name || '')}</b></h3><ul class="ffacts">${rows}</ul>`;
+  }
   async function renderFarmerInfo(cid) {
     const box = $n('farmerInfo');
     if (!box) return; // 舊頁面沒有這一格
     const c = (state.allCustomers || []).find(f => f.id === cid);
     const isFarmer = c && (!c.type || c.type === '農民');
+    // 已經簽約（主管確認過）的盤商、種子商也列資料（董事長 2026-11-19「如果已經簽約的話，就可以顯示在田間打卡那邊」）
+    if (c && cid !== '__new' && (c.type === '盤商' || c.type === '種子商') && c.signed === true) { box.innerHTML = dealerInfoHtml(c); box.hidden = false; return; }
     if (!cid || cid === '__new' || !isFarmer) { box.hidden = true; box.innerHTML = ''; return; }
     const trials = [];
     for (const cat of ['試作', '推廣']) {
@@ -4373,7 +4408,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261119-102944'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261119-112402'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
