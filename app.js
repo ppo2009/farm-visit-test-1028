@@ -122,6 +122,7 @@
 
   function show(view) {
     state.view = view;
+    if (typeof showNewFarmerPick === 'function') showNewFarmerPick(false); // 換畫面（進打卡、回首頁、登出）就把首頁「新增哪一種農民？」收起來（抓BUG第12輪 手機1）
     if (document.body && document.body.dataset) document.body.dataset.view = view; // 第24任 第六批①⑱
     const hh = document.getElementById('homeHdr'); if (hh) { hh.classList.remove('open'); const mb = document.getElementById('menuBtn'); if (mb) mb.setAttribute('aria-expanded', 'false'); }
     ['setup', 'home', 'visit'].forEach(v => { $(v).hidden = v !== view; });
@@ -4408,7 +4409,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261119-175759'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261119-184823'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -4738,17 +4739,36 @@
     const box = document.getElementById('newFarmerPick');
     if (box) box.hidden = !open; // 舊頁面（快取混版）沒有這一塊：什麼都不做
   }
+  /** 首頁農民下拉加「＋ 新增農民」這一項：寫在程式裡、不寫在網頁裡，手機快取混版（新網頁＋舊程式）時舊程式就看不到它（抓BUG第12輪 手機4） */
+  function addNewFarmerOption() {
+    const sel = document.getElementById('farmerSel');
+    if (!sel || [...sel.options].some(o => o.value === '__newfarmer')) return;
+    const opt = document.createElement('option');
+    opt.value = '__newfarmer';
+    opt.textContent = '＋ 新增農民';
+    opt.setAttribute('data-tr', '待譯');
+    sel.appendChild(opt);
+  }
   async function openNewFarmer(cat) {
     showNewFarmerPick(false);
     state.lockNext = true;
     await openVisit(cat);
+    // 沒登入被送回登入頁、或載入途中業務又改選了別的類別（抓BUG第12輪 手機待查 1、2）：不要把那張表單撥成新增
+    if (state.view !== 'visit' || state.cat !== cat) return;
     if (cat !== '農戶') state.catManual = true;
     const hasNew = [...$('farmer').options].some(o => o.value === '__new');
-    if (!hasNew) return; // 沒登入被送回登入頁、或這種類別不能新增：停在原本的畫面
+    if (!hasNew) return; // 這種類別不能新增：停在原本的畫面
     $('farmer').value = '__new';
     onFarmerChange();
   }
   function bindNewFarmerPick() {
+    addNewFarmerOption();
+    // 點三選一以外的地方就收起來（點農民卡片本身除外：那是要打開選單）（抓BUG第12輪 手機1）
+    document.addEventListener('click', e => {
+      const t = e.target;
+      if (t && t.closest && t.closest('#newFarmerPick, #farmerSel, #farmerBtn, [data-newfarmer]')) return;
+      showNewFarmerPick(false);
+    });
     document.querySelectorAll('[data-newkind]').forEach(b => b.addEventListener('click', () => openNewFarmer(b.dataset.newkind)));
     document.querySelectorAll('[data-newcancel]').forEach(b => b.addEventListener('click', () => showNewFarmerPick(false)));
     document.querySelectorAll('[data-newfarmer]').forEach(b => b.addEventListener('click', () => {

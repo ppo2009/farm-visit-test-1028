@@ -798,12 +798,21 @@
         + ' ရှိသေးသည်၊ ဖောက်သည် မှတ်တမ်း အရင်ကြည့်ပြီး ဆုံးဖြတ်ပါ</span></span>' : '');
   }
   function closeExtra(c) { return [c.result ? esc(c.result) + (c.result === '已簽約' && c.reason ? '｜說明／မှတ်ချက် ' + esc(c.reason) : '') : '', c.region ? '賣到／ရောင်းသည့်နေရာ ' + esc(c.region) : '', c.phone ? '電話／ဖုန်း ' + esc(c.phone) : '', c.reason && !c.result ? '原因／အကြောင်းရင်း ' + esc(c.reason) : '', c.progress ? '進度／တိုးတက်မှု ' + esc(c.progress) : ''].filter(Boolean).join('｜'); }
+  /**
+   * 盤商、種子商確認簽約／結案後會怎樣（第28任 抓BUG第12輪 主管1、2）：看客戶清單裡這家店「現在」的負責業務和狀態，不是送結案的那位業務。
+   * 例：業務乙送了簽約、之後店家改派給業務丙 → 寫「照樣由業務丙負責」；負責業務已清空、店家是已結束 → 確認只記這筆，不會回到任何業務的清單。
+   */
+  function dealerAfterConfirm(c) {
+    const cu = custOf(c.cid), owner = String(cu.staff || '').trim();
+    if (!owner || cu.status === '已結束') return '這家店目前沒人負責（已結束）：確認只記下這筆，不會回到任何業務的清單。';
+    return '確認後這家店照樣由' + owner + '負責、可以繼續拜訪。';
+  }
   /** 確認結案的二次確認：沿用舊清單的後果說明（防按錯的最後一道關），有缺資料再列出缺項（設計版 B） */
   function confirmText(c, miss) {
     const signed = c.result === '已簽約', dealer = !!c.result;
     // 第28任起盤商、種子商結案後不改已結束、照樣跟著業務 → 店家這兩句改說實際的後果（原本寫「改已結束、不能再拜訪」，主管可能因此退回正確的簽約；抓BUG第11輪 主管1）。
     //   原本的緬文那句是「要確認結案嗎？確認後這位客戶會結束」，對店家不對 → 店家先不放緬文（新字待譯 F12），農民照舊
-    const stays = '確認後這家店照樣由' + (c.staff || '原本的業務') + '負責、可以繼續拜訪。';
+    const stays = dealerAfterConfirm(c);
     const farmerMy = '\n\nပိတ်သိမ်းမှုကို အတည်ပြုမလား။ အတည်ပြုပြီးနောက် ဤဖောက်သည် ပိတ်သိမ်းပြီး ဖြစ်မည်';
     return '【' + [c.name, c.staff, c.date].filter(Boolean).join('｜') + '】\n' + (signed ? '確認這家店已簽約？' + (c.reason ? '（' + String(c.reason).slice(0, 40) + '）' : '') + stays
       : dealer ? '確認這家店結案（' + String(c.result).slice(0, 40) + '）？' + stays : '確認這位農民結案？確認後不再提醒回訪，結案前就在進行的試作也會結束。')
