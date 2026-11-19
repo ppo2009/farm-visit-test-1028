@@ -803,9 +803,29 @@
    * 例：業務乙送了簽約、之後店家改派給業務丙 → 寫「照樣由業務丙負責」；負責業務已清空、店家是已結束 → 確認只記這筆，不會回到任何業務的清單。
    */
   function dealerAfterConfirm(c) {
-    const cu = custOf(c.cid), owner = String(cu.staff || '').trim();
-    if (!owner || cu.status === '已結束') return '這家店目前沒人負責（已結束）：確認只記下這筆，不會回到任何業務的清單。';
+    const cu = closingCustNow(c), owner = String(cu.staff || '').trim();
+    // 第13輪 主管1：找不到、已結束、沒人負責分開說（原本找不到也寫「沒人負責（已結束）」，往來中、沒人負責的店也被寫成已結束）
+    // 第14輪 主管3：新後台的 cust 跟結案清單同一次算，「找不到」就是真的不在客戶清單（被刪、編號打錯），重新整理也一樣 → 直接說確認的後果；
+    //   舊後台（沒帶 cust、退回查舊的客戶資料）才可能是還沒更新
+    if (!cu.found) return c.cust ? '客戶清單裡找不到這家店（編號 ' + (c.cid || '（空白）') + '，可能已刪掉或打錯）：確認只記下這筆，不會改到任何客戶。'
+      : '客戶清單裡找不到這家店（可能剛新增還沒更新，或已從試算表刪掉），請先重新整理再確認。';
+    if (cu.status === '已結束') return '這家店目前是已結束：確認只記下這筆，不會回到任何業務的清單。';
+    if (!owner) return '這家店目前沒有指定負責業務：確認後照樣沒人負責（每位業務都看得到），請在試算表指定負責業務。';
     return '確認後這家店照樣由' + owner + '負責、可以繼續拜訪。';
+  }
+  /**
+   * 這筆待確認結案的店家「現在」的資料（第28任 抓BUG第13輪 主管1、2）：後台在每筆結案帶 cust（跟結案清單一起更新，確認失敗、
+   * 確認一筆後換下一張卡都是新的）；舊後台沒帶才退回查整份客戶資料。回 { found, staff, status, signed }
+   */
+  /** 這筆簽約之前，這家店有沒有已確認的簽約（第14輪 主管4：先確認晚的那筆，早的那筆不算「再一次簽約」） */
+  function signedEarlier(c) {
+    const cu = closingCustNow(c);
+    return typeof cu.signedBefore === 'boolean' ? cu.signedBefore : cu.signed === true;
+  }
+  function closingCustNow(c) {
+    if (c && c.cust && typeof c.cust === 'object' && 'found' in c.cust) return c.cust;
+    const cu = state.data.customers.find(x => x.id === c.cid);
+    return cu ? { found: true, staff: cu.staff, status: cu.status, signed: cu.signed === true } : { found: false };
   }
   /** 確認結案的二次確認：沿用舊清單的後果說明（防按錯的最後一道關），有缺資料再列出缺項（設計版 B） */
   function confirmText(c, miss) {
@@ -872,7 +892,8 @@
     const miss = close ? closeMissing(x, v) : [];
     const missH = miss.length ? `<p class="rmiss">⚠ 缺／လိုနေ：${miss.map(esc).join('、')}</p>` : '';
     // 第28任 抓BUG第11輪 主管3：店家簽約後照樣在業務清單，可能又送一次簽約 → 這家已經簽過的，審核卡提醒主管（新字待譯）
-    const againH = close && x.result === '已簽約' && cu.signed === true ? '<p class="rmiss">⚠ 這家店之前已經簽過約（主管確認過），這筆是再一次簽約</p>' : '';
+    // 第14輪 主管4：後台有帶 signedBefore（比這筆早的已確認簽約）就看它；舊後台才退回看「這家有沒有簽過」
+    const againH = close && x.result === '已簽約' && signedEarlier(x) ? '<p class="rmiss">⚠ 這家店之前已經簽過約（主管確認過），這筆是再一次簽約</p>' : '';
     const rej = R.rej === (close ? x.visitId : x.id) ? rejectPanel() : '';
     const btns = close ? `<div class="rbtns"><button class="btn" type="button" data-rv="reject"${state.closeSending ? ' disabled' : ''}>退回（寫原因）<span class="my">ပြန်ပို့（အကြောင်းရင်း ရေး）</span></button><button class="btn primary" type="button" data-rv="confirm"${state.closeSending ? ' disabled' : ''}`
       + `>確認結案</button></div>`
@@ -963,6 +984,8 @@
           return;
         } // closeMsgSeq：緊接著的重讀不清掉訊息（同舊清單 0.4.88 低7）
         state.closeMsg = '⚠ ' + (r.message || '處理失敗／မအောင်မြင်ပါ'); render();
+        // 第14輪 主管2：失敗但後台帶了新的待確認清單 → 整份也重讀一次，客戶資料、拜訪清單跟結案清單說法一致（成功那條本來就會重讀）
+        if (r.closings) { state.closeMsgSeq = state.loadSeq + 1; load(); }
       }
     }));
   }

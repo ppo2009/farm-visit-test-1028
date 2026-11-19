@@ -4427,7 +4427,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261119-205129'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261119-214553'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -4755,12 +4755,17 @@
    */
   function showNewFarmerPick(open) {
     const box = document.getElementById('newFarmerPick');
-    if (box) box.hidden = !open; // 舊頁面（快取混版）沒有這一塊：什麼都不做
+    if (!box) return; // 舊頁面（快取混版）沒有這一塊：什麼都不做
+    const opening = open && box.hidden;
+    box.hidden = !open;
+    // 打開時把焦點移到第一顆（讀螢幕的業務才知道下面多了三個選擇、鍵盤不用先跳過盤商卡；抓BUG第13輪 手機2）
+    if (opening) { const first = box.querySelector('[data-newkind]'); if (first && first.focus) first.focus(); }
   }
   /** 首頁農民下拉加「＋ 新增農民」這一項：寫在程式裡、不寫在網頁裡，手機快取混版（新網頁＋舊程式）時舊程式就看不到它（抓BUG第12輪 手機4） */
   function addNewFarmerOption() {
     const sel = document.getElementById('farmerSel');
-    if (!sel || [...sel.options].some(o => o.value === '__newfarmer')) return;
+    // 手機快取混版的另一個方向（舊網頁＋新程式）：網頁上沒有三選一那一塊，就不加這一項（不然選了沒有任何反應；抓BUG第13輪 手機1）
+    if (!sel || !document.getElementById('newFarmerPick') || [...sel.options].some(o => o.value === '__newfarmer')) return;
     const opt = document.createElement('option');
     opt.value = '__newfarmer';
     opt.textContent = '＋ 新增農民';
@@ -4789,6 +4794,16 @@
     });
     document.querySelectorAll('[data-newkind]').forEach(b => b.addEventListener('click', () => openNewFarmer(b.dataset.newkind)));
     document.querySelectorAll('[data-newcancel]').forEach(b => b.addEventListener('click', () => showNewFarmerPick(false)));
+    // 按 Esc 收起，焦點回到農民下拉（抓BUG第13輪 手機2）。
+    // 只在焦點就在三選一裡面時處理：鎖畫面等對話框蓋在上面時按 Esc，不能把焦點搬到對話框後面（第14輪 手機1）
+    document.addEventListener('keydown', e => {
+      const box = document.getElementById('newFarmerPick');
+      if (e.key !== 'Escape' || !box || box.hidden || !box.contains(document.activeElement)) return;
+      if (typeof FarmLock !== 'undefined' && FarmLock.isLocked && FarmLock.isLocked()) return; // 鎖畫面蓋著：不動後面的東西
+      showNewFarmerPick(false);
+      const sel = document.getElementById('farmerSel');
+      if (sel && sel.focus) sel.focus();
+    });
     document.querySelectorAll('[data-newfarmer]').forEach(b => b.addEventListener('click', () => {
       $('farmerMenu').hidden = true; $('farmerBtn').setAttribute('aria-expanded', 'false');
       showNewFarmerPick(true);

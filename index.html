@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="build-20261119-205129">
+<meta name="app-build" content="build-20261119-214553">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -490,8 +490,8 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
     </div>
   <!-- 第28任 2026-11-19 董事長「新增農民要加進去」做法 A：選了「＋ 新增農民」先在這裡再選一種，選了直接打開那一種的新農民表單。
        放在兩張卡片下面獨立一整列（抓BUG第12輪 手機2：原本放在農民卡片裡，會把旁邊的盤商卡一起撐成一大塊） -->
-  <div class="newfarmerpick" id="newFarmerPick" hidden>
-    <p class="lab" data-tr="待譯">新增哪一種農民？</p>
+  <div class="newfarmerpick" id="newFarmerPick" role="group" aria-labelledby="newFarmerPickLab" hidden>
+    <p class="lab" id="newFarmerPickLab" data-tr="待譯">新增哪一種農民？</p>
     <button type="button" class="btn" data-newkind="農戶">一般拜訪農民<span class="my">ပုံမှန်သွားရောက် လယ်သမား</span></button>
     <button type="button" class="btn" data-newkind="試作">對照農民<span class="my">စမ်းသပ် လယ်သမား</span></button>
     <button type="button" class="btn" data-newkind="推廣">推廣農民<span class="my">မြှင့်တင် လယ်သမား</span></button>
