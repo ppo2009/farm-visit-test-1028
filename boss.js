@@ -801,9 +801,13 @@
   /** 確認結案的二次確認：沿用舊清單的後果說明（防按錯的最後一道關），有缺資料再列出缺項（設計版 B） */
   function confirmText(c, miss) {
     const signed = c.result === '已簽約', dealer = !!c.result;
-    return '【' + [c.name, c.staff, c.date].filter(Boolean).join('｜') + '】\n' + (signed ? '確認這家店已簽約、結案？' + (c.reason ? '（' + String(c.reason).slice(0, 40) + '）' : '') + '確認後這家店改「已結束」，業務選單不再出現、不能再拜訪。'
-      : dealer ? '確認這家店結案（' + String(c.result).slice(0, 40) + '）？確認後這家店改「已結束」，業務選單不再出現、不能再拜訪。' : '確認這位農民結案？確認後不再提醒回訪，結案前就在進行的試作也會結束。')
-      + (miss.length ? '\n⚠ 這筆缺／ဤတစ်ခုတွင် လိုနေသည်：' + miss.join('、') : '') + '\n\nပိတ်သိမ်းမှုကို အတည်ပြုမလား။ အတည်ပြုပြီးနောက် ဤဖောက်သည် ပိတ်သိမ်းပြီး ဖြစ်မည်';
+    // 第28任起盤商、種子商結案後不改已結束、照樣跟著業務 → 店家這兩句改說實際的後果（原本寫「改已結束、不能再拜訪」，主管可能因此退回正確的簽約；抓BUG第11輪 主管1）。
+    //   原本的緬文那句是「要確認結案嗎？確認後這位客戶會結束」，對店家不對 → 店家先不放緬文（新字待譯 F12），農民照舊
+    const stays = '確認後這家店照樣由' + (c.staff || '原本的業務') + '負責、可以繼續拜訪。';
+    const farmerMy = '\n\nပိတ်သိမ်းမှုကို အတည်ပြုမလား။ အတည်ပြုပြီးနောက် ဤဖောက်သည် ပိတ်သိမ်းပြီး ဖြစ်မည်';
+    return '【' + [c.name, c.staff, c.date].filter(Boolean).join('｜') + '】\n' + (signed ? '確認這家店已簽約？' + (c.reason ? '（' + String(c.reason).slice(0, 40) + '）' : '') + stays
+      : dealer ? '確認這家店結案（' + String(c.result).slice(0, 40) + '）？' + stays : '確認這位農民結案？確認後不再提醒回訪，結案前就在進行的試作也會結束。')
+      + (miss.length ? '\n⚠ 這筆缺／ဤတစ်ခုတွင် လိုနေသည်：' + miss.join('、') : '') + (dealer ? '' : farmerMy);
   }
   /** 第26任 清死程式：舊清單 renderClosings 的「沒升級提示」搬來審核卡（結案分頁沒有結果欄時，盤商洽談結案的資料全空，不要顯示成農民收成） */
   function noResultCol(c) { return !c.result && !c.group && !c.trialOutcome && !c.buyer && (c.price === '' || c.price == null) && (c.yield === '' || c.yield == null); }
@@ -858,6 +862,8 @@
     const sum = v && v.summary ? `<p class="rsum"><button class="btn" type="button" data-speak="${esc(v.id)}" aria-label="念中文摘要">🔊</button> ${esc(v.summary)}</p>` : v ? `<p class="sub">${esc(noSummaryText(v))}</p>` : '';
     const miss = close ? closeMissing(x, v) : [];
     const missH = miss.length ? `<p class="rmiss">⚠ 缺／လိုနေ：${miss.map(esc).join('、')}</p>` : '';
+    // 第28任 抓BUG第11輪 主管3：店家簽約後照樣在業務清單，可能又送一次簽約 → 這家已經簽過的，審核卡提醒主管（新字待譯）
+    const againH = close && x.result === '已簽約' && cu.signed === true ? '<p class="rmiss">⚠ 這家店之前已經簽過約（主管確認過），這筆是再一次簽約</p>' : '';
     const rej = R.rej === (close ? x.visitId : x.id) ? rejectPanel() : '';
     const btns = close ? `<div class="rbtns"><button class="btn" type="button" data-rv="reject"${state.closeSending ? ' disabled' : ''}>退回（寫原因）<span class="my">ပြန်ပို့（အကြောင်းရင်း ရေး）</span></button><button class="btn primary" type="button" data-rv="confirm"${state.closeSending ? ' disabled' : ''}`
       + `>確認結案</button></div>`
@@ -865,7 +871,7 @@
     return `<div class="review" id="reviewCard"><div class="rtop"><button class="btn" type="button" data-rv="exit">← 回今天<span class="my">ယနေ့သို့ ပြန်</span></button><b>${pos}`
       + `</b><span><button class="btn" type="button" data-rv="prev" aria-label="上一筆／ယခင်တစ်ခု"${R.i ? '' : ' disabled'}>‹</button><button class="btn" type="button" data-rv="next" aria-label="下一筆／နောက်တစ်ခု"${R.i < items.length - 1 ? '' : ' disabled'}`
       + `>›</button></span></div>
-      <div class="rcard">${head}${cells}${ph}${fl}${sum}${missH}<p class="sub"><a href="javascript:void 0" data-go="${esc(x.cid)}">看這位客戶的完整紀錄<span class="my">ဤဖောက်သည်၏ မှတ်တမ်း အပြည့်အစုံ ကြည့်ရန်</span></a></p>${rej}`
+      <div class="rcard">${head}${cells}${ph}${fl}${sum}${againH}${missH}<p class="sub"><a href="javascript:void 0" data-go="${esc(x.cid)}">看這位客戶的完整紀錄<span class="my">ဤဖောက်သည်၏ မှတ်တမ်း အပြည့်အစုံ ကြည့်ရန်</span></a></p>${rej}`
         + `</div>
       <p class="sub" id="closeMsg" aria-live="polite">${esc(state.closeMsg || '')}</p>${btns}</div>`;
   }
@@ -1286,7 +1292,8 @@
     const list = visitsOf(c.id), s = dueState(c);
     const dealer = c.type === '盤商' || c.type === '種子商';
     const kv = (k, val) => val !== '' && val != null ? `<span>${k}：${esc(val)}</span>` : '';
-    return `<div class="card profile"><span><b>${esc(c.name)}</b>（${esc(c.id)}・${esc(c.kind || c.type || '農民')}）</span><span>${esc(c.area || '')}</span>${kv('鎮／မြို့နယ်', c.town)}`
+    const signTag = dealer && c.signed === true ? ' <span class="pill p-grn">已簽約</span>' : ''; // 第28任 抓BUG第11輪 主管3：簽約後不再改已結束，另外標出來（新字待譯）
+    return `<div class="card profile"><span><b>${esc(c.name)}</b>（${esc(c.id)}・${esc(c.kind || c.type || '農民')}）${signTag}</span><span>${esc(c.area || '')}</span>${kv('鎮／မြို့နယ်', c.town)}`
       + `${kv('村／ကျေးရွာ', c.village) /* 0.4.75 董事長「農民改鎮跟村」：鄉改村、鎮放前面 */}${kv('電話／ဖုန်း', c.phone)}
         ${dealer ? kv('老闆／ဆိုင်ရှင်', c.owner) + kv('地址／လိပ်စာ', c.address) + kv('作物', cropText(c.crop)) + kv('品牌（舊資料）／တံဆိပ်（ဒေတာဟောင်း）', c.brand) + kv('其他／အခြား', c.fertilizer) /* 0.4.73 董事長：盤商、種子商品牌改作物；舊的品牌資料有才顯示 */
           : kv('作物', cropText(c.crop)) + kv('品種／မျိုး', c.variety) + kv('代碼／ကုဒ်', c.varCode) + kv('目前種植面積／လက်ရှိ စိုက်ဧက', c.areaNow === '' || c.areaNow == null ? '' : c.areaNow + ' ' + (state.data.areaUnit || '英畝'))
