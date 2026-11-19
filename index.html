@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="build-20261119-092559">
+<meta name="app-build" content="build-20261119-101323">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -675,6 +675,8 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
     <!-- 0.4.35 董事長：選擇農民後跳出這位農民之前的進度（農民進度表）；沒有進度就跳出新增（補齊）農民資料。
          0.4.44 董事長：照四步驟（選農民→進度小卡→有見到嗎→存檔）移到選農民正下方 -->
     <!-- 0.4.75 董事長「田間打卡：所有的農民之前紀錄都要有之前圖片跟錄音」：一般／試作／推廣農民選了人，列過往紀錄（照片、錄音按了才下載；不限自己負責）。第27任 董事長「上下框交換，生長排前面、之前紀錄排後面」：搬到進度卡上面，只放生長過程 -->
+    <!-- 第28任 2026-11-19 董事長截圖「選了農民之後就要有詳細的農民資訊」：搜尋框正下方，電話、地址、面積、業務、作物、生長天數、其他、給農民幾包種子、主管頁那邊的資料 -->
+    <div class="progress finfo" id="farmerInfo" hidden aria-live="polite"></div>
     <div class="progress vhist" id="visitHistory" hidden aria-live="polite"></div>
     <div class="progress" id="progressBox" hidden aria-live="polite"></div>
     <!-- 0.4.73 董事長：結案畫面選了農民，列之前的照片、留言、錄音、地址、過往試作成功失敗（只有結案時出現） -->

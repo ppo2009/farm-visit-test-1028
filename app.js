@@ -2100,6 +2100,7 @@
     if (!val) {
       box.hidden = true;
       $('progressBox').hidden = true;
+      renderFarmerInfo(''); // 第28任：農民資料框一起收起
       const hb = $n('closeVisitHist');
       hb.hidden = true;
       hb.innerHTML = '';
@@ -2132,6 +2133,7 @@
       $('profileTitle').textContent = '客戶資料（點開可修改）／ဖောက်သည် အချက်အလက် (နှိပ်ပြီး ပြင်နိုင်)';
     }
     fillVarieties();
+    renderFarmerInfo(val); // 第28任：搜尋框正下方先列農民詳細資料
     renderProgress(val); // 0.4.35 選了農民就跳出他之前的進度
     // 0.4.73 董事長「結案要有之前的照片、留言、錄音、地址、詳細過往失敗成功的紀錄」：結案畫面選了農民就列過往紀錄
     if (state.cat === '結案') renderHistory(val, $n('closeVisitHist'), { current: () => $('farmer').value === val, list: state.allCustomers || [], timeline: true, showAddr: true, showTrials: true });
@@ -2207,7 +2209,7 @@
       if (typeof refreshSave === 'function') refreshSave();
     }
     // 0.4.82 多久沒回訪：後台的最後拜訪日、這支手機剛打（還沒同步）的，取比較新的那天
-    const age = `<p class="sub">${visitAgeHtml([c.lastVisit, local[0] ? dayOf(local[0].deviceTime) : ''].filter(Boolean).sort().pop(), mmDay(0))}</p>` + farmerFactsHtml(c, trials, (((await Store.getMeta('options')) || state.options || {}).areaUnit), ((await Store.getMeta('options')) || state.options || {})); // 抓BUG第6輪 手機組2：先讀手機資料庫（同步存的最新），讀不到才用記憶體那份（同 fillPlantForm） // 第27任：種植日期、面積、種子、備註；抓BUG第5輪 手機組2：首頁「我的進度」還沒讀過選單，單位從手機資料庫讀
+    const age = `<p class="sub">${visitAgeHtml([c.lastVisit, local[0] ? dayOf(local[0].deviceTime) : ''].filter(Boolean).sort().pop(), mmDay(0))}</p>` + (o.box ? farmerFactsHtml(c, trials, (((await Store.getMeta('options')) || state.options || {}).areaUnit), ((await Store.getMeta('options')) || state.options || {})) : ''); /* 第28任：打卡畫面的農民資料已經放在搜尋框正下方（renderFarmerInfo），進度卡不再重複；首頁「我的進度」照舊列 */ // 抓BUG第6輪 手機組2：先讀手機資料庫（同步存的最新），讀不到才用記憶體那份（同 fillPlantForm） // 第27任：種植日期、面積、種子、備註；抓BUG第5輪 手機組2：首頁「我的進度」還沒讀過選單，單位從手機資料庫讀
     if (o.home && !c.lastVisit && !trials.length && !recent.length) {
       box.innerHTML = H3 + age + `<p>這位${c.type && c.type !== '農民' ? '客戶' : '農民'}還沒有拜訪紀錄。<br>` + '<span class="my">မှတ်တမ်း မရှိသေး</span></p>';
       return;
@@ -2238,13 +2240,24 @@
     btns.forEach(b => b.addEventListener('click', () => load(b, true)));
     // 最近一次那筆（不在「看更早的」裡）自動載入。抓BUG第9輪 手機組1（第28任）：照片上限調到 12 後一次同時下載 12 張，網路慢時每張都等到逾時、一張都出不來 → 改成一張一張排隊下載；換了農民（按鈕已不在畫面上）就停
     const auto = btns.filter(b => !(b.closest && b.closest('details')));
-    (async () => { for (const b of auto) { if (b.isConnected === false) break; await load(b, false); } })();
+    // 換了農民怎麼知道：看按鈕「外面那一格」還在不在畫面上（整張進度卡重畫時那格會被換掉）。
+    // 不能只看按鈕本身：照片下載好時按鈕會被換成圖片，也不在畫面上了——那是「這張已經好了」，要跳過、接著排下一張（第10輪 手機組1）
+    const holders = auto.map(b => b.parentNode);
+    (async () => {
+      for (let i = 0; i < auto.length; i++) {
+        if (holders[i] && holders[i].isConnected === false) break; // 換農民了，舊的照片不用再下載
+        if (auto[i].isConnected === false) continue; // 這張已經載好（業務先手動點了）
+        await load(auto[i], false);
+      }
+    })();
   }
   /* renderProgress 拆出來的（第15任 2026-11-14 董事長「拆 renderProgress」）：① 純計算／組 HTML（不碰畫面、不碰手機資料） ② 記下後台回答
      放在 renderProgress 後面、「試作（2B）」之前：舊測試從 renderProgress 切到那行，會自動一起帶到 */
   /** ① 進度卡標題：農民姓名、電話（點了直接撥）、地址（沒填地址就顯示地區）（0.4.49 董事長） */
+  /** 電話號碼轉成「點了能撥」的數字：緬文數字先換成 0-9，再拿掉空白、橫線這些（0.4.92 低2：緬文數字先轉 0-9） */
+  const telDigits = phone => String(phone || '').replace(/[\u1040-\u1049]/g, ch => String(ch.charCodeAt(0) - 0x1040)).replace(/[^0-9+]/g, '');
   function progressHeader(c) {
-    const tel = String(c.phone || '').replace(/[\u1040-\u1049]/g, ch => String(ch.charCodeAt(0) - 0x1040)).replace(/[^0-9+]/g, ''); // 0.4.92 低2：緬文數字先轉 0-9
+    const tel = telDigits(c.phone);
     const who = [c.name ? `<b>${esc(c.name)}</b>` : '', c.phone ? `📞 <a href="tel:${esc(tel)}">${esc(c.phone)}</a>` : '', (c.address || c.area) ? `📍 ${esc(c.address || c.area)}` : ''].filter(Boolean).join('　');
     return `<h3>之前的進度／ယခင် တိုးတက်မှု${who ? `<span class="who">${who}</span>` : ''}</h3>`;
   }
@@ -2273,6 +2286,38 @@
       .concat((trials || []).filter(t => has(t.dosage)).map(t => [`${t.cat || '試作'}種子`, String(t.dosage)]))
       .concat([has(c.staff) ? ['負責', String(c.staff)] : null, has(c.nextDue) ? ['下次回訪', String(c.nextDue)] : null, note && note !== '業務在現場新增' ? ['備註', note] : null]).filter(Boolean);
     return rows.length ? `<ul class="ffacts">${rows.map(([k, v]) => `<li><b>${esc(k)}</b>：${esc(v)}</li>`).join('')}</ul>` : '';
+  }
+  /**
+   * 打卡畫面：選了農民，搜尋框正下方馬上列出這位的詳細資料（董事長 2026-11-19 截圖）。
+   * 列什麼：電話（點了直接撥）、地址、地區，加上 farmerFactsHtml 那一整串（面積、負責業務、作物、生長天數、其他、
+   * 給農民幾包種子、種植日期、下次回訪、備註……跟主管頁客戶資料同一套欄位），有田區座標就給導航連結。
+   * 資料都在手機裡（同步下來的客戶、進行中的試作／推廣），不用等網路；查試作的途中換了農民就不寫。
+   */
+  async function renderFarmerInfo(cid) {
+    const box = $n('farmerInfo');
+    if (!box) return; // 舊頁面沒有這一格
+    const c = (state.allCustomers || []).find(f => f.id === cid);
+    const isFarmer = c && (!c.type || c.type === '農民');
+    if (!cid || cid === '__new' || !isFarmer) { box.hidden = true; box.innerHTML = ''; return; }
+    const trials = [];
+    for (const cat of ['試作', '推廣']) {
+      const t = await activeTrialFor(cid, cat);
+      if (t) trials.push(Object.assign({ cat }, t));
+    }
+    if ($('farmer').value !== cid) return; // 查的途中換了農民
+    const options = (await Store.getMeta('options')) || state.options || {};
+    const tel = telDigits(c.phone);
+    const has = x => x !== '' && x != null && String(x).trim() !== '';
+    const contact = [
+      has(c.phone) ? `<li><b>電話</b>：<a href="tel:${esc(tel)}">${esc(c.phone)}</a></li>` : '',
+      has(c.address) ? `<li><b>地址</b>：${esc(c.address)}</li>` : '',
+      has(c.area) ? `<li><b>地區</b>：${esc(c.area)}</li>` : '',
+      c.lat != null && c.lng != null && c.lat !== '' ? `<li><a href="https://www.google.com/maps/search/?api=1&query=${esc(c.lat)},${esc(c.lng)}" target="_blank" rel="noopener">田區導航 ↗</a></li>` : ''
+    ].join('');
+    const facts = farmerFactsHtml(c, trials, options.areaUnit, options);
+    const list = facts ? facts.replace('<ul class="ffacts">', '<ul class="ffacts">' + contact) : (contact ? `<ul class="ffacts">${contact}</ul>` : ''); // 電話、地址放在同一張清單最上面
+    box.innerHTML = `<h3>農民資料　<b>${esc(c.name || '')}</b></h3>` + list;
+    box.hidden = false;
   }
   /** ① 沒網路時：這支手機記的最近幾筆拜訪，排成跟後台紀錄一樣的格式（日期用緬甸日期） */
   function progressLocalRecent(local5) {
@@ -4093,6 +4138,7 @@
     state.farmerVal = ''; // 0.4.91 低1：上一次選的客戶也清掉（不然下次先填結案欄位再選農民，會被誤問「換農民」、取消還跳回上一位）
     // 0.4.54 第6任檢查：上一位客戶的進度卡、作物四格會殘留到下一次打卡畫面 → 進畫面就清掉
     const pbx = $('progressBox'); if (pbx) { pbx.hidden = true; pbx.innerHTML = ''; }
+    { const fi = $n('farmerInfo'); if (fi) { fi.hidden = true; fi.innerHTML = ''; } } // 第28任：農民資料框也清掉
     { const hb = $n('closeVisitHist'); hb.hidden = true; hb.innerHTML = ''; hb._tok = null; } // 0.4.73 結案過往紀錄也清掉
     hideHist('visitHistory'); // 0.4.75 田間打卡過往紀錄也清掉
     state.cropOpen = false; $n('cropBox').hidden = true; $n('cropSum').hidden = true;
@@ -4327,7 +4373,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261119-092559'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261119-101323'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');

@@ -1269,6 +1269,19 @@
     return s ? `<div class="my-line" lang="my">${esc(s)}</div>` : '';
   }
 
+  /**
+   * 客戶履歷最下面那句話。總覽只帶最近 500 筆拜訪，老客戶的早期紀錄要另外讀「完整履歷」，所以有三種情況：
+   *   - 完整履歷沒讀到（網路斷、伺服器忙）：一定要說，並給「重試」——就算畫面上已經有最近幾筆，也可能少了早期的（第10輪 主管組2）
+   *   - 還在讀：說「讀取中」，不能說「還沒有拜訪紀錄」，不然主管會以為業務從沒去過（第10輪 主管組1）
+   *   - 讀完了、真的一筆都沒有：才說「還沒有拜訪紀錄」
+   */
+  function histStatusHtml(c, hasList) {
+    const err = (state.histErr || {})[c.id];
+    if (err) return `<p class="err">完整拜訪紀錄沒讀到（${esc(err)}）。 <button type="button" class="btn" data-histretry="${esc(c.id)}">重試</button></p>`;
+    if (hasList) return '';
+    if (!(state.hist || {})[c.id]) return '<p class="sub">讀取完整拜訪紀錄中…</p>';
+    return '<p class="empty">這位客戶還沒有拜訪紀錄。<span class="my">ဤဖောက်သည်တွင် သွားရောက်မှု မှတ်တမ်း မရှိသေးပါ။</span></p>';
+  }
   function renderCustDetail(c) {
     const list = visitsOf(c.id), s = dueState(c);
     const dealer = c.type === '盤商' || c.type === '種子商';
@@ -1307,8 +1320,7 @@
         ${v.noMeet ? `<dt>沒拜訪<span class="my">မသွားဖြစ်ပါ</span></dt><dd><span class="pill p-yel">沒拜訪<span class="my">မသွားဖြစ်ပါ</span></span> ${esc(v.noMeet)}</dd>` : ''}`
           + `${v.closing ? `<dt>結案</dt><dd>${esc(v.closing)}</dd>` : ''}${v.plantFail ? `<dt>種植失敗<span class="my">စိုက်ပျိုးမှု မအောင်မြင်</span></dt><dd>${esc(v.plantFail)}</dd>` : ''}`
           + `${v.text ? `<dt>打字</dt><dd class="pre">${esc(v.text)}${v.id ? fixBoxHtml('text:' + v.id, '改內容', `<textarea data-fixin maxlength="3000" rows="4" aria-label="打字內容">${esc(v.text)}</textarea>`) : '' /* 第27任：主管改業務打錯的字 */}</dd>` : ''}`
-          + `${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') || ((state.histErr || {})[c.id] ? `<p class="err">完整拜訪紀錄沒讀到（${esc(state.histErr[c.id])}`
-          + `）。 <button type="button" class="btn" data-histretry="${esc(c.id)}">重試</button></p>` : !(state.hist || {})[c.id] && (state.histReq || {})[c.id] ? '<p class="sub">讀取完整拜訪紀錄中…</p>' : '<p class="empty">這位客戶還沒有拜訪紀錄。<span class="my">ဤဖောက်သည်တွင် သွားရောက်မှု မှတ်တမ်း မရှိသေးပါ။</span></p>') /* 抓BUG第9輪 主管組2（第28任）：沒讀到、讀取中不能說「還沒有紀錄」 */}</div>`;
+          + `${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') + histStatusHtml(c, list.length > 0)}</div>`;
   }
 
   /** 一張照片只下載一次（下載中的也共用同一個請求）；換了畫面，舊畫面的迴圈就停，不再下載別的客戶的照片（2026-11-11 抓到） */
