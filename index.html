@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="build-20261119-124422">
+<meta name="app-build" content="build-20261119-131206">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -373,7 +373,7 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
 .closefirst{margin:0 0 4px} #closeBox.failed #closeRow>div:has(#cPrice),#closeBox.failed #closeRow>div:has(#cYield),#closeBox.failed #closeRow>div:has(#cBuyer),#closeBox.failed #measureBox{display:none}
 #closeTrialBox,#cPlantFailLab{margin-bottom:10px}
 #testTag[hidden]+#appVer+#testTag2{display:none}
-/* 第24任 第六批③ */ #profileMore>summary{min-height:48px;display:flex;align-items:center;font-weight:700;color:var(--paddy);cursor:pointer} #profileMore>summary .my{display:inline;margin-left:6px}
+/* 第24任 第六批③；第28任改成不收合的分段標題 */ #profileMore>.morehead{min-height:48px;display:flex;align-items:center;font-weight:700;color:var(--paddy)} #profileMore>.morehead .my{display:inline;margin-left:6px}
 #farmerNewBtn{width:auto;max-width:42%;white-space:normal;overflow-wrap:anywhere} .fpick input{min-width:0}
 /* 第25任（老闆選 C）：下拉選單是主要的；下面搜尋框縮小、虛線框、淡底，看得出是「另一個選擇」（字仍 16px，iPhone 點了不會放大畫面） */
 .fpick2{margin:8px 0} .fpick2 input{min-height:40px;padding:6px 10px;font-size:16px;border:1.5px dashed var(--line);background:transparent} .fpick2 input::placeholder{font-size:.9rem} .fpick2 #farmerNewBtn{min-height:44px}
@@ -717,7 +717,8 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
           <div><label class="lab" for="pGps">GPS 座標<span class="my">GPS တည်နေရာ</span></label><input type="text" id="pGps" readonly placeholder="拍照時自動帶入／ဓာတ်ပုံရိုက်လျှင် ဖြည့်မည်"></div>
         </div>
         <!-- 第24任 第六批③（tomtom 實測：新增農民 19 欄、4 個螢幕）：必填只有名字（手機、後台都一樣），其他先收起來，之後拜訪可以補 -->
-        <details class="more" id="profileMore"><summary>更多資料（可之後補）<span class="my">နောက်ထပ် အချက်အလက်（နောက်မှ ဖြည့်နိုင်）</span></summary><div class="fields">
+        <!-- 第28任 2026-11-19 董事長截圖「更多資料不要做縮放，把可種植面積、種植日期、其他都顯示出來」：原本是可收合的 <details>，改成一般區塊，標題留著當分段，欄位一直顯示 -->
+        <div class="more" id="profileMore"><div class="morehead">更多資料（可之後補）<span class="my">နောက်ထပ် အချက်အလက်（နောက်မှ ဖြည့်နိုင်）</span></div><div class="fields">
         <div class="dealer-only"><label class="lab" for="pAddress">地址<span class="my">လိပ်စာ</span></label><input type="text" id="pAddress" maxlength="200"></div>
         <!-- 0.4.73 董事長截圖：盤商、種子商「品牌」改成「作物」下拉（跟農民同一份作物清單），選單沒有的寫在下面「其他」；舊品牌資料留在試算表不動 -->
         <div class="dealer-only"><label class="lab" for="pDCrop">作物<span class="my">သီးနှံ</span></label><select id="pDCrop"></select></div>
@@ -728,7 +729,7 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
         <div class="farmer-only"><label class="lab" for="pPlantDate">種植日期<span class="my">စိုက်သည့်ရက်</span></label><input type="date" id="pPlantDate"></div>
         <!-- 0.4.71 董事長：「使用肥料」改「其他」（資料照存在客戶清單「使用肥料」欄，不搬欄位） -->
         <div><label class="lab" for="pFert">其他<span class="my">အခြား</span></label><input type="text" id="pFert" maxlength="120"></div><!-- 一般／試作／推廣農民、盤商、種子商都有 -->
-        </div></details>
+        </div></div>
       </div>
     </details>
 
