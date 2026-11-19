@@ -301,7 +301,13 @@
       rc.onerror = () => fail(rc.error);
       rc.onsuccess = () => {
         const c = rc.result;
-        if (c && c.deviceKey && c.account && String(c.account) !== String(expectOwner)) { const e = new Error('換了別人登入，這次沒有存／အခြားသူ ဝင်ထား၍ ယခု မသိမ်းရသေးပါ'); e.code = 'OWNER'; e.account = String(c.account); fail(e); return; }
+        if (c && c.deviceKey && c.account && String(c.account) !== String(expectOwner)) {
+          const e = new Error('換了別人登入，這次沒有存／အခြားသူ ဝင်ထား၍ ယခု မသိမ်းရသေးပါ');
+          e.code = 'OWNER';
+          e.account = String(c.account);
+          fail(e);
+          return;
+        }
         verThenGo();
       };
     }),
@@ -495,7 +501,8 @@
     if (Array.isArray(r.tasks) && await sameLogin(cfg.deviceKey)) await Store.setMetaIfRev('tasks', r.tasks, revBefore);
     // 伺服器回成功、卻沒確認其中幾筆（或這次沒送完）：要回錯誤，背景同步才會再試（GPT-6.1 R7-04：原本 error 是空的，卡著沒人重送）
     const miss = sent.filter(s => !got.has(s.id)).length;
-    const error = miss ? `有 ${miss} 個任務打勾伺服器沒確認，稍後自動重送／လုပ်ငန်း အမှန်ခြစ် ${miss} ခု ဆာဗာမှ အတည်မပြုရသေးပါ၊ နောက်မှ အလိုအလျောက် ပြန်ပို့မည်` : skipped ? `還有 ${skipped} 個任務打勾沒送，稍後自動送／မပို့ရသေးသော လုပ်ငန်း အမှန်ခြစ် ${skipped} ခု ကျန်သေးသည်၊ နောက်မှ အလိုအလျောက် ပို့မည်` : '';
+    const error = miss ? `有 ${miss} 個任務打勾伺服器沒確認，稍後自動重送／လုပ်ငန်း အမှန်ခြစ် ${miss} ခု ဆာဗာမှ အတည်မပြုရသေးပါ၊ နောက်မှ အလိုအလျောက် ပြန်ပို့မည်` : skipped ? `還有 ${skipped}`
+      + ` 個任務打勾沒送，稍後自動送／မပို့ရသေးသော လုပ်ငန်း အမှန်ခြစ် ${skipped} ခု ကျန်သေးသည်၊ နောက်မှ အလိုအလျောက် ပို့မည်` : '';
     return { left: await countLeft(), error, ticksSent: sent.length - miss }; // 抓BUG第4輪 手機組1：這次後台確認了幾個打勾（syncNow 自動那次要看）
   }
 

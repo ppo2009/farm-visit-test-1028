@@ -17,7 +17,12 @@
 
   /* ───── 純計算與儲存（測試直接呼叫） ───── */
   const b64u = buf => { let s = ''; new Uint8Array(buf).forEach(b => { s += String.fromCharCode(b); }); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
-  const unb64u = s => { const t = atob(String(s).replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((String(s).length + 3) % 4)); const u = new Uint8Array(t.length); for (let i = 0; i < t.length; i++) u[i] = t.charCodeAt(i); return u; };
+  const unb64u = s => {
+    const t = atob(String(s).replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((String(s).length + 3) % 4));
+    const u = new Uint8Array(t.length);
+    for (let i = 0; i < t.length; i++) u[i] = t.charCodeAt(i);
+    return u;
+  };
   const rand = n => { const u = new Uint8Array(n); crypto.getRandomValues(u); return u; };
   const hex = buf => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
   function load() { try { const c = JSON.parse(localStorage.getItem(KEY) || 'null'); return c && typeof c === 'object' ? c : null; } catch (e) { return null; } }
@@ -115,7 +120,12 @@
     const add = i => { if (seq.indexOf(i) < 0) { seq.push(i); stroke++; paint(); } };
     const finish = () => { if (!seq.length) return; const s = seq; seq = []; drawing = false; stroke = 0; paint(); done(s); };
     box.querySelectorAll('.patdot').forEach(b => {
-      b.addEventListener('pointerdown', e => { drawing = true; stroke = 0; add(Number(b.dataset.i)); if (b.releasePointerCapture && e.pointerId != null) try { b.releasePointerCapture(e.pointerId); } catch (x) { /* 沒抓住也沒關係 */ } });
+      b.addEventListener('pointerdown', e => {
+        drawing = true;
+        stroke = 0;
+        add(Number(b.dataset.i));
+        if (b.releasePointerCapture && e.pointerId != null) try { b.releasePointerCapture(e.pointerId); } catch (x) { /* 沒抓住也沒關係 */ }
+      });
       b.addEventListener('pointerenter', () => { if (drawing) add(Number(b.dataset.i)); });
       b.addEventListener('click', e => { if (e.detail === 0) add(Number(b.dataset.i)); }); // 鍵盤（Enter／空白鍵）
     });
@@ -131,7 +141,8 @@
   async function showLock(c) {
     ensureDom(); locked = true;
     const cfg = (await H.getConfig()) || {};
-    el('lockWho').textContent = (cfg.name || cfg.account || '') + (c.method === 'pattern' && c.fails ? `（已錯 ${c.fails} 次，錯 ${MAX_FAILS} 次要用密碼重新登入）／（${c.fails} ကြိမ် မှားပြီး၊ ${MAX_FAILS} ကြိမ် မှားလျှင် စကားဝှက်ဖြင့် ပြန်ဝင်ရမည်）` : '');
+    el('lockWho').textContent = (cfg.name || cfg.account || '') + (c.method === 'pattern' && c.fails ? `（已錯 ${c.fails} 次，錯 ${MAX_FAILS} 次要用密碼重新登入）／（${c.fails} ကြိမ် မှားပြီး၊ ${MAX_FAILS}`
+      + ` ကြိမ် မှားလျှင် စကားဝှက်ဖြင့် ပြန်ဝင်ရမည်）` : '');
     el('lockMsg').textContent = '';
     el('lockBio').hidden = c.method !== 'bio'; el('lockPat').hidden = c.method !== 'pattern';
     el('lockScreen').hidden = false;
@@ -179,7 +190,8 @@
     const cfg = await H.getConfig(); if (!cfg || !cfg.deviceKey) return;
     if (!(await enabled())) { H.toast('主管已關閉解鎖功能／မန်နေဂျာက သော့ဖွင့် လုပ်ဆောင်ချက်ကို ပိတ်ထားသည်'); return; }
     const cur = await activeFor(cfg), bio = await bioAvailable();
-    el('unlockSetIntro').textContent = intro || (cur ? '目前用' + (cur.method === 'bio' ? '人臉／指紋' : '九宮格') + '解鎖。可以換成另一種，或關閉。／လက်ရှိ သုံးနေသည် ' + (cur.method === 'bio' ? 'မျက်နှာ／လက်ဗွေ' : 'ပုံစံကွက်') + ' သော့ဖွင့်။ အခြားနည်း ပြောင်းနိုင်သည် သို့မဟုတ် ပိတ်နိုင်သည်။' : '以後打開 App、或離開一段時間再回來，用人臉／指紋或九宮格解鎖，不用再打密碼。／နောက်ပိုင်း App ဖွင့်လျှင် သို့မဟုတ် ခဏထွက်ပြီး ပြန်ဝင်လျှင် မျက်နှာ／လက်ဗွေ သို့မဟုတ် ပုံစံကွက်ဖြင့် ဖွင့်နိုင်သည်၊ စကားဝှက် ထပ်ရိုက်ရန် မလိုပါ။');
+    el('unlockSetIntro').textContent = intro || (cur ? '目前用' + (cur.method === 'bio' ? '人臉／指紋' : '九宮格') + '解鎖。可以換成另一種，或關閉。／လက်ရှိ သုံးနေသည် ' + (cur.method === 'bio' ? 'မျက်နှာ／လက်ဗွေ' : 'ပုံစံကွက်')
+      + ' သော့ဖွင့်။ အခြားနည်း ပြောင်းနိုင်သည် သို့မဟုတ် ပိတ်နိုင်သည်။' : '以後打開 App、或離開一段時間再回來，用人臉／指紋或九宮格解鎖，不用再打密碼。／နောက်ပိုင်း App ဖွင့်လျှင် သို့မဟုတ် ခဏထွက်ပြီး ပြန်ဝင်လျှင် မျက်နှာ／လက်ဗွေ သို့မဟုတ် ပုံစံကွက်ဖြင့် ဖွင့်နိုင်သည်၊ စကားဝှက် ထပ်ရိုက်ရန် မလိုပါ။');
     el('setBio').hidden = !bio; el('setOff').hidden = !cur; el('setPatBox').hidden = true; el('unlockSetMsg').textContent = '';
     el('unlockSet').hidden = false;
     const close = () => { el('unlockSet').hidden = true; };
@@ -187,7 +199,15 @@
     el('setOff').onclick = () => { save(null); close(); H.toast('已關閉解鎖／သော့ဖွင့်ခြင်း ပိတ်ပြီးပါပြီ'); };
     el('setBio').onclick = async () => {
       el('unlockSetMsg').textContent = '請照手機的提示驗證人臉或指紋…／ဖုန်း ညွှန်ကြားချက်အတိုင်း မျက်နှာ သို့မဟုတ် လက်ဗွေ စစ်ဆေးပါ…';
-      try { await setBio(await H.getConfig()); close(); H.toast('已啟用人臉／指紋解鎖／မျက်နှာ／လက်ဗွေ သော့ဖွင့် ဖွင့်ပြီးပါပြီ'); } catch (e) { const no = e && e.name === 'NotAllowedError', msg = !no && e && e.message; el('unlockSetMsg').textContent = '沒有啟用成功（' + (no ? '取消了或手機不允許' : msg || '不明原因') + '），可以改用九宮格／ဖွင့်၍ မအောင်မြင်ပါ' + (no ? ' - ပယ်ဖျက်လိုက်ခြင်း သို့မဟုတ် ဖုန်းမှ ခွင့်မပြုခြင်း' : msg ? '' : ' - မသိသော အကြောင်းရင်း') + '၊ ပုံစံကွက် ပြောင်းသုံးနိုင်သည်'; }
+      try {
+        await setBio(await H.getConfig());
+        close();
+        H.toast('已啟用人臉／指紋解鎖／မျက်နှာ／လက်ဗွေ သော့ဖွင့် ဖွင့်ပြီးပါပြီ');
+      } catch (e) {
+        const no = e && e.name === 'NotAllowedError', msg = !no && e && e.message;
+        el('unlockSetMsg').textContent = '沒有啟用成功（' + (no ? '取消了或手機不允許' : msg || '不明原因') + '），可以改用九宮格／ဖွင့်၍ မအောင်မြင်ပါ' + (no ? ' - ပယ်ဖျက်လိုက်ခြင်း သို့မဟုတ် ဖုန်းမှ ခွင့်မပြုခြင်း' : msg ? '' : ' - မသိသော အကြောင်းရင်း')
+          + '၊ ပုံစံကွက် ပြောင်းသုံးနိုင်သည်';
+      }
     };
     el('setPat').onclick = () => {
       el('setPatBox').hidden = false; let first = null;
@@ -196,7 +216,11 @@
         if (!validPattern(seq)) { el('setPatHint').textContent = '至少要連 4 個點，請重畫／အနည်းဆုံး ၄ စက် ဆက်ရမည်၊ ပြန်ဆွဲပါ'; return; }
         if (!first) { first = seq; el('setPatHint').textContent = '再畫一次確認／အတည်ပြုရန် နောက်တစ်ကြိမ် ထပ်ဆွဲပါ'; return; }
         if (first.join() !== seq.join()) { first = null; el('setPatHint').textContent = '兩次不一樣，請重新畫第一次／နှစ်ကြိမ် မတူပါ၊ ပထမအကြိမ်မှ ပြန်စဆွဲပါ'; gr.reset(); return; }
-        try { await setPattern(await H.getConfig(), seq); close(); H.toast('已設定九宮格解鎖／ပုံစံကွက် သော့ဖွင့် သတ်မှတ်ပြီးပါပြီ'); } catch (e) { el('setPatHint').textContent = (e && e.message) || '設定失敗／သတ်မှတ်မှု မအောင်မြင်ပါ'; }
+        try {
+          await setPattern(await H.getConfig(), seq);
+          close();
+          H.toast('已設定九宮格解鎖／ပုံစံကွက် သော့ဖွင့် သတ်မှတ်ပြီးပါပြီ');
+        } catch (e) { el('setPatHint').textContent = (e && e.message) || '設定失敗／သတ်မှတ်မှု မအောင်မြင်ပါ'; }
       });
     };
   }
