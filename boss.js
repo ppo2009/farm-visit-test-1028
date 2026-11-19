@@ -1540,7 +1540,7 @@
         // 第24任 第七批設計版 J：選了業務後只列他負責的農民（原本其他人的也列在後面，名單太長）
         const own = selName ? farmers.filter(c => c.staff === selName) : farmers;
         const pre = f.cid && own.indexOf(farmers.find(c => c.id === f.cid)) < 0 ? farmers.find(c => c.id === f.cid) : null; if (pre) own.push(pre); // 第26任 低風險修正3①：從可疑拜訪「派任務追問」帶過來的客戶不是這位業務負責的 → 也列進選單（原本選單空白、送出說「請選一位農民」）
-        return `<select id="tFarmer" aria-label="哪一位農民"><option value="">${own.length ? '— 選擇農民／လယ်သမား ရွေးပါ —' : '（這位業務沒有負責的農民）／（ဤဝန်ထမ်းတွင် တာဝန်ယူသော လယ်သမား မရှိပါ）'}</option>`
+        return `<select id="tFarmer" aria-label="哪一位農民"><option value="">${own.length ? '— 不指定農民（一般任務）—' : '（這位業務沒有負責的農民）／（ဤဝန်ထမ်းတွင် တာဝန်ယူသော လယ်သမား မရှိပါ）'}</option>`
           + own.map(fo).join('') + '</select>';
       })();
     const form = staff.length || bosses.length ? `<h3>派出任務</h3><form class="taskform" id="taskForm">
@@ -1590,7 +1590,7 @@
       form.addEventListener('submit', async ev => {
         ev.preventDefault(); keep();
         const toBoss = isGM() && (state.data.bossList || []).some(b => b.account === state.tf.staff);
-        if (!toBoss && !state.tf.cid) { $('tMsg').textContent = '請選一位農民／လယ်သမား တစ်ဦး ရွေးပါ'; return; } // 0.5.18 C7：補緬文
+        // 第28任 2026-11-19 董事長：派給業務也可以不選農民（一般任務），原本這裡擋「請選一位農民」
         if (!state.tf.text.trim()) { $('tMsg').textContent = '請填任務內容／လုပ်ငန်း အကြောင်းအရာ ဖြည့်ပါ'; return; }
         $('tAdd').disabled = true; $('tMsg').textContent = '送出中…／ပို့နေသည်';
         // 0.4.66 主管BUG(2號)#4：同一個內容（同人、同農民、同字）重按用同一個送出代號，斷線後再按不會派兩條；內容改了就換新代號

@@ -1650,10 +1650,10 @@
       const wait = !isDone && ticked.has(t.id);
       const busy = wait && sending.has(t.id); // 送出中：請求已經在路上，不能取消（R6-05）
       return `<li class="task${isDone || wait ? ' done' : ''}"><label><input type="checkbox" data-task="${esc(t.id)}"${isDone || wait ? ' checked' : ''}${isDone || busy ? ' disabled' : ''}>
-        <span><b>${esc(t.name)}</b>：${esc(t.text)} ${isDone ? '<span class="pill ok">已完成 ပြီးပြီ</span>' : wait ? '<span class="pill wait">已打勾 ခြစ်ပြီး</span>' : '<span class="pill late">還沒做 မလုပ်ရသေး</span>'}`
+        <span>${t.cid ? `<b>${esc(t.name)}</b>：` : '' /* 第28任：沒綁農民的一般任務只寫內容 */}${esc(t.text)} ${isDone ? '<span class="pill ok">已完成 ပြီးပြီ</span>' : wait ? '<span class="pill wait">已打勾 ခြစ်ပြီး</span>' : '<span class="pill late">還沒做 မလုပ်ရသေး</span>'}`
           + `<br><small>${isDone ? '已完成 ပြီးပြီ ' + esc(String(t.doneAt || '').slice(5, 16)) + '<br>' : busy && unconf.has(t.id) ? '已送出，等連上網路確認（不能取消）／ပို့ပြီး၊ အင်တာနက်ချိတ်ပြီး အတည်ပြုချက် စောင့်နေ (ပယ်ဖျက်၍ မရ)<br>' : busy ? '送出中…（送出後就不能取消）／ပို့နေသည် (ပို့ပြီးလျှင် ပယ်ဖျက်၍ မရ)<br>' : wait ? '已打勾，有網路會自動送出（再按一下可取消）／အမှန်ခြစ်ပြီး၊ အင်တာနက်ရလျှင် အလိုအလျောက် ပို့မည် (ထပ်နှိပ်လျှင် ပယ်ဖျက်)<br>' : ''}`
           + `${esc(t.by || '主管 မန်နေဂျာ') + ' 派 ပေးသည်・' + esc(String(t.at || '').slice(0, 16).replace('T', ' '))}</small></span></label>
-        ${isDone ? '' : closed(t) ? '<small class="taskclosed">找不到這位客戶（可能已結案）：做完直接打勾，不用做請主管取消／ဤဖောက်သည် မတွေ့ပါ (ပိတ်သိမ်းပြီး ဖြစ်နိုင်) - ပြီးလျှင် တိုက်ရိုက် အမှန်ခြစ်ပါ၊ မလုပ်ရလျှင် မန်နေဂျာကို ပယ်ဖျက်ခိုင်းပါ</small>' : `<button type="button" class="btn2 small" data-taskgo="${esc(t.cid)}`
+        ${isDone ? '' : closed(t) ? '<small class="taskclosed">找不到這位客戶（可能已結案）：做完直接打勾，不用做請主管取消／ဤဖောက်သည် မတွေ့ပါ (ပိတ်သိမ်းပြီး ဖြစ်နိုင်) - ပြီးလျှင် တိုက်ရိုက် အမှန်ခြစ်ပါ၊ မလုပ်ရလျှင် မန်နေဂျာကို ပယ်ဖျက်ခိုင်းပါ</small>' : !t.cid ? '' /* 第28任：一般任務沒有要去拜訪的農民，不放「去拜訪」 */ : `<button type="button" class="btn2 small" data-taskgo="${esc(t.cid)}`
           + `">去拜訪<br>သွားမည်</button>`}</li>`;
     };
     // 0.4.63 董事長：一邊看主管派的任務、一邊看自己的進度 → 上面一行總結＋進度條
@@ -4373,7 +4373,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261119-101323'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261119-102944'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
