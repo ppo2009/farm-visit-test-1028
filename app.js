@@ -2071,7 +2071,7 @@
   const formDirty = () => !!(visitDirty() || filled('nmNote')
     || ($('farmer').value === '__new' && Object.values(PROFILE_INPUTS).some(filled))
     || CLOSE_IDS.some(filled)
-    || collectPrices().length || state.trialMode);
+    || collectPrices().length || trialTouched()); // 第28任：試作表單改看「有沒有被動過」（程式自動打開、沒動不算）
   function clearVisitInput() {
     // 1號清單高#1（第8任 2026-11-12）：換客戶也要換世代、照片計數歸零（跟 resetForm 一樣），
     // 不然還在處理的照片、錄音處理完會掉進下一位客戶的拜訪。世代要在停錄音之前換，onstop 才會丟掉這段。
@@ -2100,13 +2100,16 @@
     // 2號 0.4.69 清單中1、中2（第8任）：結案欄位、盤商結案說明、還在填的新客戶資料也算「填過」（跟返回鍵的 formDirty 同一套），
     // 原本換客戶不問 → 結案價格、收購客戶帶到下一位；新客戶資料填一半改選舊客戶被整份清空
     const closeTyped = CLOSE_IDS.some(filled), newTyped = prev === '__new' && Object.values(PROFILE_INPUTS).some(filled);
-    if (prev && val !== prev && (visitDirty() || pricesTyped() || filled('nmNote') || state.trialMode || closeTyped || newTyped)) {
+    if (prev && val !== prev && (visitDirty() || pricesTyped() || filled('nmNote') || trialTouched() || closeTyped || newTyped)) {
       const extra = (closeTyped ? '、結案資料' : '') + (newTyped ? '、新客戶資料' : '');
       const ask = hasPrices ? `換店家會清掉剛剛的照片、錄音、打字、價格、匯報${extra}，確定要換？\nဆိုင် ပြောင်းလျှင် စောစောက ဓာတ်ပုံ၊ အသံ၊ စာ၊ ဈေးနှုန်း၊ အစီရင်ခံများ ပျောက်မည်။ ပြောင်းမှာ သေချာပါသလား။`
         : `換農民會清掉剛剛的照片、錄音、打字、匯報${extra}，確定要換？\nလယ်သမား ပြောင်းလျှင် စောစောက ဓာတ်ပုံ၊ အသံ၊ စာ၊ အစီရင်ခံများ ပျောက်မည်။ ပြောင်းမှာ သေချာပါသလား။`;
       if (!confirm(ask)) { $('farmer').value = prev; return; }
       clearVisitInput();
       CLOSE_IDS.forEach(id => { const e = $n(id); if (e.type === 'checkbox') { e.checked = false; e.disabled = false; } else e.value = ''; }); // 中1：確定換人，上一位的結案欄位一起清（0.4.75 勾選框取消勾）
+    } else if (prev && val !== prev && state.trialMode) {
+      // 第28任：程式自動打開、業務沒動過的試作表單不再問（上面不會進去），但照樣要清掉，不然會帶到下一位客戶（其他東西都沒填，清掉不會丟資料）
+      clearVisitInput();
     }
     if (prev && val !== prev && hasPrices) { $('priceRows').innerHTML = ''; addPriceRow(); refreshPriceBtn(); }
     state.farmerVal = val;
@@ -2646,10 +2649,24 @@
     trialBoxOldKind(sel, cat, t, notMine);
     if (typeof paintNewTrial === 'function') paintNewTrial(); // 0534：新農民改寫框上方說明（不寫「目前沒有進行中」）、品項＝作物、品種那一行
   }
+  /**
+   * 開始試作表單「有沒有被動過」（第28任 2026-11-19 董事長「沒填就不問」，抓BUG第12輪 手機3）。
+   * 0.4.63 起返回鍵、換客戶只要試作表單開著就當成「填過」——那時表單要業務自己按才會開；0.5.08 起新增對照／推廣農民、
+   * 0.5.26 起分類就是這一類的舊農民，程式會自動打開並帶入今天、作物，結果什麼都沒填按返回也被問「確定要回首頁？」。
+   * 做法：程式自動打開時記下當下的值（markTrialAuto）；之後品項、其他品項、用量、開始日跟記下的不一樣才算動過。業務自己按按鈕打開的照舊一律算。
+   */
+  const trialStartValues = () => ['tItem', 'tItemOther', 'tDosage', 'tStart'].map(id => String($n(id).value || ''));
+  function markTrialAuto() { state.trialAuto = trialStartValues(); }
+  function trialTouched() {
+    if (!state.trialMode) return false;
+    if (!state.trialAuto) return true;
+    const now = trialStartValues();
+    return now.some((v, i) => v !== state.trialAuto[i]);
+  }
   /** 試作框：照這位有沒有進行中的、能不能結束、是不是別人負責，收起或打開開始／結束表單（舊的試作／推廣農民自動打開、帶入作物） */
   function trialBoxMode(sel, cat, t, unk, waitC, notMine) {
     if ((state.trialMode === 'end' && (!t || unk)) || (state.trialMode === 'start' && t) || (state.trialMode === 'end' && waitC) || (notMine && state.trialMode)) setTrialMode(null);
-    else if (sel === '__new' && !state.trialMode) setTrialMode('start'); // 0.5.08 試作／推廣新增農民：直接打開「開始新的」表單（一定要開始，見 trialProblem）
+    else if (sel === '__new' && !state.trialMode) { setTrialMode('start'); markTrialAuto(); } // 0.5.08 試作／推廣新增農民：直接打開「開始新的」表單（一定要開始，見 trialProblem）；第28任記成程式自動打開
     else if (sel && sel !== '__new' && !t && !notMine && !state.trialMode && state.trialStartAuto !== sel) {
       // 0.5.26（客戶截圖 U Nga Shint：已經是推廣農民、有作物，還要先按「開始新的推廣」再選一次品項）：
       //   這位的分類就是這一類（推廣農民在推廣、試作農民在試作）而且目前沒有進行中的 → 直接打開開始表單，品項先帶入他的作物（可以改；不想開始就再按一次收起）
@@ -2659,6 +2676,7 @@
         setTrialMode('start');
         const crop = String(cust.crop || '').trim(), it = $n('tItem');
         if (crop && !it.value && [...(it.options || [])].some(o => o.value === crop)) { it.value = crop; if (typeof refreshTrialOther === 'function') refreshTrialOther(); }
+        markTrialAuto(); // 第28任：程式自動打開、品項是程式帶的，業務沒動就返回不問
         refreshSave(); // 帶入品項後重新檢查存檔（不然還停在「請填推廣品項」）
       }
     }
@@ -2694,6 +2712,7 @@
   }
   function setTrialMode(m) {
     state.trialMode = m;
+    state.trialAuto = null; // 預設當成業務自己打開；程式自動打開的地方呼叫完再記 markTrialAuto()
     $('trialStartForm').hidden = m !== 'start'; $('trialEndForm').hidden = m !== 'end';
     $('trialStartBtn').setAttribute('aria-pressed', String(m === 'start')); $('trialEndBtn').setAttribute('aria-pressed', String(m === 'end'));
     if (m === 'start' && !$('tStart').value) { $('tStart').value = mmDay(0); } // 業務BUG#4：緬甸的今天
@@ -4409,7 +4428,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261119-184823'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261119-202858'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
