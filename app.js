@@ -4408,7 +4408,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261119-131206'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261119-175759'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -4720,11 +4720,41 @@
       s.addEventListener('change', async () => { const v = s.value; s.value = ''; if (v) await go(v); });
     };
     hubSel('farmerSel', async cat => {
+      if (cat === '__newfarmer') { showNewFarmerPick(true); return; } // 第28任：「＋ 新增農民」先選一種，不直接進打卡
+      showNewFarmerPick(false); // 改選一般／對照／推廣：剛剛開著的三選一收起來
       state.lockNext = true;
       await openVisit(cat);
       if (cat !== '農戶') state.catManual = true;
     });
+    bindNewFarmerPick();
     hubSel('dealerSel', async cat => { state.lockNext = true; await openVisit(cat); });
+  }
+  /**
+   * 首頁「＋ 新增農民」（第28任 2026-11-19 董事長做法 A）：每位新農民一定屬於一般／對照／推廣其中一種，
+   * 所以選了「新增農民」先在農民卡片下面列這三種讓業務再選一次；選了就跟從選單選那一種一樣進打卡（一樣鎖住類別），
+   * 再把客戶選單直接撥到「＋ 新增農民」，打開新農民表單。例：選新增農民 → 點對照農民 → 出現「新對照資料」表單。
+   */
+  function showNewFarmerPick(open) {
+    const box = document.getElementById('newFarmerPick');
+    if (box) box.hidden = !open; // 舊頁面（快取混版）沒有這一塊：什麼都不做
+  }
+  async function openNewFarmer(cat) {
+    showNewFarmerPick(false);
+    state.lockNext = true;
+    await openVisit(cat);
+    if (cat !== '農戶') state.catManual = true;
+    const hasNew = [...$('farmer').options].some(o => o.value === '__new');
+    if (!hasNew) return; // 沒登入被送回登入頁、或這種類別不能新增：停在原本的畫面
+    $('farmer').value = '__new';
+    onFarmerChange();
+  }
+  function bindNewFarmerPick() {
+    document.querySelectorAll('[data-newkind]').forEach(b => b.addEventListener('click', () => openNewFarmer(b.dataset.newkind)));
+    document.querySelectorAll('[data-newcancel]').forEach(b => b.addEventListener('click', () => showNewFarmerPick(false)));
+    document.querySelectorAll('[data-newfarmer]').forEach(b => b.addEventListener('click', () => {
+      $('farmerMenu').hidden = true; $('farmerBtn').setAttribute('aria-expanded', 'false');
+      showNewFarmerPick(true);
+    }));
   }
   /** 打卡畫面：返回、選客戶、客戶資料欄、結案欄、照片錄音、儲存 */
   function bindVisitForm() {

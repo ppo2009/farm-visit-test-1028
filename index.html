@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="build-20261119-131206">
+<meta name="app-build" content="build-20261119-175759">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -84,6 +84,11 @@ h2 .sub{display:block;font-weight:400;margin-top:2px} /* 區塊說明（中文�
 .hubwrap>.cat{width:100%;flex:1}
 .hubmenu{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:30;grid-template-columns:1fr;margin-top:0;padding:6px;gap:6px;box-shadow:0 8px 20px rgba(0,0,0,.22)}
 .hubmenu button{min-height:52px}
+/* 第28任：首頁「＋ 新增農民」選了以後，在農民卡片下面列三種讓業務再選一次 */
+/*   卡片上蓋著看不見的原生下拉（.hubsel，z-index 5、高度跟整塊一樣），三選一要疊在它上面才點得到 */
+.newfarmerpick{position:relative;z-index:6;display:grid;gap:6px;margin-top:6px;padding:8px;border:1px solid var(--line, #ccc);border-radius:10px;background:var(--card, #fff)}
+.newfarmerpick[hidden]{display:none}
+.newfarmerpick .btn{min-height:48px;width:100%}
 /* 0.5.08 看不見的原生下拉選單蓋滿整張卡片：點卡片＝打開選項清單（font-size 16px：iPhone 點了不會放大畫面） */
 .hubsel{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:5;font-size:16px;border:0;margin:0;-webkit-appearance:menulist;appearance:auto}
 /* 首頁分頁標籤（0.4.26，董事長給的範例：一排文字分頁，選到的那個加框） */
@@ -459,6 +464,7 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
     <button type="button" role="menuitem" data-farmercat="農戶">一般拜訪農民<span class="my">ပုံမှန်သွားရောက် လယ်သမား</span></button>
     <button type="button" role="menuitem" data-farmercat="試作">對照農民<span class="my">စမ်းသပ် လယ်သမား</span></button>
     <button type="button" role="menuitem" data-farmercat="推廣">推廣農民<span class="my">မြှင့်တင် လယ်သမား</span></button>
+    <button type="button" role="menuitem" data-newfarmer data-tr="待譯">＋ 新增農民</button>
   </div>
   <!-- 0.5.08 董事長：「下拉選單不是這樣，是滑鼠點下去會出現一般農民、試作農民、推廣農民」→ 卡片上蓋一個看不見的標準下拉選單，點卡片就跳出手機／電腦原生的選項清單（上面的 farmerMenu 留著當後備，平常點不到） -->
   <select class="hubsel" id="farmerSel" aria-label="選農民類別 လယ်သမား အမျိုးအစား ရွေးပါ">
@@ -466,7 +472,16 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
     <option value="農戶">一般拜訪農民／ပုံမှန်သွားရောက် လယ်သမား</option>
     <option value="試作">對照農民／စမ်းသပ် လယ်သမား</option>
     <option value="推廣">推廣農民／မြှင့်တင် လယ်သမား</option>
+    <option value="__newfarmer" data-tr="待譯">＋ 新增農民</option>
   </select>
+  <!-- 第28任 2026-11-19 董事長「新增農民要加進去」做法 A：選了「＋ 新增農民」先在這裡再選一種，選了直接打開那一種的新農民表單 -->
+  <div class="newfarmerpick" id="newFarmerPick" hidden>
+    <p class="lab" data-tr="待譯">新增哪一種農民？</p>
+    <button type="button" class="btn" data-newkind="農戶">一般拜訪農民<span class="my">ပုံမှန်သွားရောက် လယ်သမား</span></button>
+    <button type="button" class="btn" data-newkind="試作">對照農民<span class="my">စမ်းသပ် လယ်သမား</span></button>
+    <button type="button" class="btn" data-newkind="推廣">推廣農民<span class="my">မြှင့်တင် လယ်သမား</span></button>
+    <button type="button" class="btn ghost" data-newcancel data-tr="待譯">取消</button>
+  </div>
     </div>
     <div class="hubwrap">
     <button type="button" class="cat c3 hub" id="dealerBtn" aria-expanded="false" aria-controls="dealerMenu">盤商或種子商 ▾<span class="my">ကုန်သည် / မျိုးစေ့ဆိုင်</span><small class="hint">點開選：盤商／種子商<br>ကုန်သည် / မျိုးစေ့ဆိုင် ရွေးပါ</small></button>
