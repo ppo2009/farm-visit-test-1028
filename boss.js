@@ -31,7 +31,7 @@
   const md = s => { const d = s2d(s); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
 
   const KEY_NAME = 'farm-boss-key';
-  const MORE_TABS = ['progress', 'accounts', 'errors']; // 第24任 第七批：地圖、紀錄表、日曆改在「客戶」「拜訪」裡切換 // 第24任 必改第二批⑦：錯誤紀錄 // 收在「更多」底下的分頁（2026-11-12 規劃 C）
+  const MORE_TABS = ['progress', 'accounts', 'errors', 'myfix']; // 第24任 第七批：地圖、紀錄表、日曆改在「客戶」「拜訪」裡切換 // 第24任 必改第二批⑦：錯誤紀錄 // 收在「更多」底下的分頁（2026-11-12 規劃 C）
 
   /* ───── 主管網頁中文＋緬文（2026-11-12 董事長；緬文是示意，待校對）─────
      畫面畫好後掃一遍：文字剛好是下表的詞，就在後面補緬文（小字）；輸入框提示也補。不用改每一段畫面程式 */
@@ -254,6 +254,7 @@
     // 0.5.24（第21任抓BUG）：連「正在拿」的標記一起換新、換世代：重讀前發出去的履歷／進度晚到就丟掉，重讀後馬上重拿（原本會被標記擋住、存進舊的）
     Object.assign(state, { hist: {}, prog: {}, histReq: {}, histErr: {}, progReq: {}, cacheGen: (state.cacheGen || 0) + 1 }); // 第28任：按「重新整理」也清掉「沒讀到」，重拿一次
     state.data = data;
+    if (window.FarmMyFix) window.FarmMyFix.set(data.myFixes || {}, true); // 第28任：主管改好的畫面緬文
     state.loadedAt = Date.now(); // 0.4.88 低8：切回頁面時判斷要不要重讀
     if (seq > (state.closeMsgSeq || 0)) state.closeMsg = ''; // 0.4.88 低7：讀完新資料，上一次結案的提示清掉（按完確認緊接著那次重讀不清，才看得到「已確認結案」）
     // 0.4.88 低3：進度明細的月份不在最近 6 個月（例如頁面開著跨月）→ 改回本月
@@ -345,11 +346,12 @@
     $('briefBadge').hidden = !unread; $('briefBadge').textContent = unread ? String(unread) : '';
     // 抓BUG第6輪 主管組3：整頁重畫（重新整理、離開 10 分鐘切回來自動重讀）也保留同一位客戶打開的修改框和打到一半的字
     const d0 = $('custDetail'), keepCid = d0 ? d0.dataset.cid : '', keepBoxes = d0 ? openFixBoxes(d0) : [];
-    $('panel').innerHTML = segBar() + ({ today: renderToday, overdue: renderOverdue, review: renderReview, moremenu: renderMoreMenu, latest: renderLatest, cal: renderCal, trial: renderTrial, map: renderMap, table: renderTable, reports: renderReports, progress: () => staffCards() + renderProgress(), tasks: renderTasks, accounts: renderAccounts, briefs: renderBriefs, errors: renderErrors })[state.tab](); // 第24任 第七批：今天、逾期、審核、更多（手機）；本月目標、每位業務卡片搬到工作進度
+    $('panel').innerHTML = segBar() + ({ today: renderToday, overdue: renderOverdue, review: renderReview, moremenu: renderMoreMenu, latest: renderLatest, cal: renderCal, trial: renderTrial, map: renderMap, table: renderTable, reports: renderReports, progress: () => staffCards() + renderProgress(), tasks: renderTasks, accounts: renderAccounts, briefs: renderBriefs, errors: renderErrors, myfix: renderMyFix })[state.tab](); // 第24任 第七批：今天、逾期、審核、更多（手機）；本月目標、每位業務卡片搬到工作進度
     if (state.tab === 'tasks') bindTasks();
     if (state.tab === 'briefs') bindBriefs();
     if (state.tab === 'accounts') bindAccounts();
     if (state.tab === 'errors') bindErrors();
+    if (state.tab === 'myfix') bindMyFix();
     if (state.tab === 'trial') bindCustomers();
     bindGo($('panel'));
     biDom($('panel')); biDom($('stats')); // 補緬文
@@ -383,6 +385,12 @@
     // 第27任：客戶履歷「✎ 改內容／種植日期／生長天數／回訪」的「存」「清除」
     root.querySelectorAll('[data-fixsave]:not([data-mbound])').forEach(el => { el.dataset.mbound = '1'; el.addEventListener('click', () => saveFix(el, false)); });
     root.querySelectorAll('[data-fixclear]:not([data-mbound])').forEach(el => { el.dataset.mbound = '1'; el.addEventListener('click', () => saveFix(el, true)); });
+    // 第28任：逐字稿打開框框時才去後台讀
+    root.querySelectorAll('[data-tsload]:not([data-mbound])').forEach(el => {
+      el.dataset.mbound = '1';
+      const box = el.closest('details');
+      if (box) box.addEventListener('toggle', () => loadTranscript(box));
+    });
     // 第28任 保哥迴圈 R1-07（Gemini）：完整履歷沒讀到時，只重拿這位客戶（不用整頁重新整理）
     root.querySelectorAll('[data-histretry]:not([data-mbound])').forEach(el => {
       el.dataset.mbound = '1';
@@ -406,17 +414,68 @@
     return `<details class="stfix"><summary>✎ ${esc(label)}</summary>${input} <button class="btn" type="button" data-fixsave="${esc(key)}">存</button>${canClear ? ` <button class="btn" type="button" data-fixclear="${esc(key)}">清除</button>` : ''}`
       + ` <span class="sub" data-fixmsg></span></details>`;
   }
+  /* 「✎ 改」框框的 key＝「種類:編號」，這裡換成送後台的動作。
+     第28任 2026-11-20 老闆「主管要能改緬甸錯字」加了兩種：
+       ctext:欄位|客戶編號（名字、鎮、村、老闆、地址）、my:欄位|拜訪編號（緬文版那幾行、transcript＝逐字稿） */
+  function fixRequestOf(kind, id, val) {
+    const bar = id.indexOf('|'), field = id.slice(0, bar), target = id.slice(bar + 1);
+    if (kind === 'text') return { action: 'visitTextFix', visitId: id, text: val };
+    if (kind === 'cropDays') return { action: 'cropDaysFix', crop: id, days: val };
+    if (kind === 'ctext') return { action: 'custTextFix', cid: target, field, value: val };
+    if (kind === 'my') return { action: 'visitMyFix', visitId: target, field, text: val };
+    return { action: 'custFix', cid: id, what: kind, value: val };
+  }
+  const CTEXT_MAX = { name: 60, village: 60, town: 60, owner: 60, address: 200 }; // 跟後台 PROFILE_MAP 一樣
+  /** 客戶資料的字（名字、鎮、村、老闆、地址）旁邊的「✎ 改」 */
+  function ctextFixHtml(c, field) {
+    const cur = String(c[field] == null ? '' : c[field]);
+    const input = `<input type="text" data-fixin maxlength="${CTEXT_MAX[field]}" value="${esc(cur)}" aria-label="改字">`;
+    return fixBoxHtml('ctext:' + field + '|' + c.id, '改', input);
+  }
+  /** 拜訪那幾行緬文版（摘要、作物、反應、問題、下一步）下面的「✎ 改緬文」 */
+  function myFixHtml(v, field, cur) {
+    const max = field === 'summary' ? 3000 : 1000; // 跟後台 MY_FIELDS_ 一樣
+    const input = `<textarea data-fixin lang="my" maxlength="${max}" rows="3" aria-label="改緬文">${esc(cur)}</textarea>`;
+    return fixBoxHtml('my:' + field + '|' + v.id, '改緬文', input);
+  }
+  /** 逐字稿很長，總覽不帶：主管點開「✎ 看／改逐字稿」才去後台讀（讀過的記在 state.transcripts） */
+  function transcriptFixHtml(v) {
+    const known = (state.transcripts || {})[v.id];
+    const input = `<textarea data-fixin data-tsload="${esc(v.id)}" lang="my" maxlength="40000" rows="6" aria-label="緬文逐字稿">${esc(known || '')}</textarea>`;
+    return fixBoxHtml('my:transcript|' + v.id, '看／改逐字稿', input);
+  }
+  async function loadTranscript(box) {
+    const ta = box.querySelector('[data-tsload]'), msg = box.querySelector('[data-fixmsg]');
+    if (!ta || !box.open || ta.value || ta.dataset.loaded) return;
+    const save = box.querySelector('[data-fixsave]');
+    if (save) save.disabled = true;
+    if (msg) msg.textContent = '讀取中…';
+    let r; try { r = await api({ action: 'visitTranscript', visitId: ta.dataset.tsload }); } catch (e) { r = null; }
+    if (save) save.disabled = false;
+    if (!r || !r.ok) { if (msg) msg.textContent = (r && r.message) || '沒有讀到逐字稿，請關掉再打開一次'; return; }
+    if (msg) msg.textContent = r.text ? '' : '這筆還沒有逐字稿';
+    ta.dataset.loaded = '1';
+    if (!ta.value) ta.value = r.text; // 讀的時候主管已經開始打字，就不蓋掉
+    (state.transcripts = state.transcripts || {})[r.visitId] = r.text;
+  }
+  /** 總覽和完整履歷裡同一筆拜訪可能各有一份，改完兩邊都要換 */
+  function eachVisit(id, fn) {
+    [].concat(state.data.visits || [], ...Object.values(state.hist || {})).forEach(v => { if (v && v.id === id) fn(v); });
+  }
   async function saveFix(btn, clear) {
     const key = btn.dataset.fixsave || btn.dataset.fixclear || '', i = key.indexOf(':'), kind = key.slice(0, i), id = key.slice(i + 1);
     const box = btn.parentNode || btn, inp = box.querySelector('[data-fixin]'), msg = box.querySelector('[data-fixmsg]');
     const val = clear ? '' : String(inp ? inp.value : '').trim();
-    if (!clear && !val && kind !== 'cropDays') { if (msg) msg.textContent = kind === 'text' ? '內容不能空白' : '請先選日期'; return; }
-    const req = kind === 'text' ? { action: 'visitTextFix', visitId: id, text: val } : kind === 'cropDays' ? { action: 'cropDaysFix', crop: id, days: val } : { action: 'custFix', cid: id, what: kind, value: val };
+    const isText = kind === 'text' || kind === 'ctext' || kind === 'my';
+    if (!clear && !val && kind !== 'cropDays') { if (msg) msg.textContent = isText ? '內容不能空白' : '請先選日期'; return; }
     box.querySelectorAll('button').forEach(b => { b.disabled = true; }); if (msg) msg.textContent = '存檔中…';
-    let r; try { r = await api(req); } catch (e) { r = null; }
+    let r; try { r = await api(fixRequestOf(kind, id, val)); } catch (e) { r = null; }
     box.querySelectorAll('button').forEach(b => { b.disabled = false; });
     if (showSaveFailed(r, msg)) return;
-    if (kind === 'text') [].concat(state.data.visits || [], ...Object.values(state.hist || {})).forEach(v => { if (v && v.id === id) v.text = r.text; });
+    if (kind === 'text') eachVisit(id, v => { v.text = r.text; });
+    else if (kind === 'my' && r.field === 'transcript') (state.transcripts = state.transcripts || {})[r.visitId] = r.text;
+    else if (kind === 'my') { if (r.my) eachVisit(r.visitId, v => { v.my = r.my; }); }
+    else if (kind === 'ctext') (state.data.customers || []).forEach(c => { if (c.id === r.cid) c[r.field] = r.value; });
     else if (kind === 'cropDays') state.data.cropDays = r.cropDays || {};
     else (state.data.customers || []).forEach(c => { if (c.id === id) c[kind] = kind === 'nextDue' ? r.nextDue : r.plantDate; });
     // 抓BUG第5輪 主管組1：快採收清單跟著後台重算的換；主管組2：畫面資料改了 dataGen 加一（出發較早的重讀晚到時不採用、改重讀）
@@ -658,10 +717,10 @@
 
   /* ───── 第24任 第七批（老闆核准「設計版」＋「升級版」）：主管頁改成「今天」待辦頁、連續審核、精簡拜訪卡片、手機 4 個導覽 ───── */
   // 導覽分組：手機底部「今天｜拜訪｜客戶｜更多」；電腦頂部 7 個（今天、拜訪、客戶、任務、試作報告、主管匯報、更多）
-  const NAV = { today: ['today', 'overdue', 'review'], visits: ['latest', 'table', 'cal'], customers: ['trial', 'map'], more: ['moremenu', 'tasks', 'reports', 'briefs', 'progress', 'accounts', 'errors'] };
+  const NAV = { today: ['today', 'overdue', 'review'], visits: ['latest', 'table', 'cal'], customers: ['trial', 'map'], more: ['moremenu', 'tasks', 'reports', 'briefs', 'progress', 'accounts', 'errors', 'myfix'] };
   const navGroup = t => Object.keys(NAV).find(g => NAV[g].indexOf(t) >= 0) || 'today';
   const SEGS = { visits: [['latest', '卡片<span class="my">ကတ်ပုံစံ</span>'], ['table', '表格<span class="my">ဇယားပုံစံ</span>'], ['cal', '日曆']], customers: [['trial', '清單<span class="my">စာရင်းပုံစံ</span>'], ['map', '地圖<span class="my">မြေပုံ</span>']] };
-  const MORE_ITEMS = [['tasks', '任務'], ['reports', '試作報告'], ['briefs', '主管匯報'], ['progress', '工作進度<span class="my">လုပ်ငန်း တိုးတက်မှု</span>'], ['accounts', '業務帳號'], ['errors', '錯誤紀錄<span class="my">အမှား မှတ်တမ်း</span>']];
+  const MORE_ITEMS = [['tasks', '任務'], ['reports', '試作報告'], ['briefs', '主管匯報'], ['progress', '工作進度<span class="my">လုပ်ငန်း တိုးတက်မှု</span>'], ['accounts', '業務帳號'], ['errors', '錯誤紀錄<span class="my">အမှား မှတ်တမ်း</span>'], ['myfix', '緬文對照']]; // 第28任：主管改畫面緬文
   /** 主管頁設定（後台設定分頁：主管頁還早時間、沒拜訪提醒天數、測試帳號）；舊後台沒送就用預設 */
   function cfg7() {
     const c = (state.data && state.data.bossCfg) || {};
@@ -1329,7 +1388,8 @@
   /** 0.5.23（第21任，客戶主管「這幾句看不到緬文」）：中文下面加一行 Gemini 同時寫的緬文版；舊紀錄沒有就不顯示 */
   function myLine(v, k) {
     const s = v && v.my && typeof v.my[k] === 'string' ? v.my[k].trim() : '';
-    return s ? `<div class="my-line" lang="my">${esc(s)}</div>` : '';
+    if (!s) return '';
+    return `<div class="my-line" lang="my">${esc(s)}</div>${v.id ? myFixHtml(v, k, s) : '' /* 第28任：主管改緬甸錯字 */}`;
   }
 
   /**
@@ -1349,10 +1409,12 @@
     const list = visitsOf(c.id), s = dueState(c);
     const dealer = c.type === '盤商' || c.type === '種子商';
     const kv = (k, val) => val !== '' && val != null ? `<span>${k}：${esc(val)}</span>` : '';
+    // 第28任 2026-11-20 老闆「主管要能改緬甸錯字」：名字、鎮、村、老闆、地址旁邊多一個「✎ 改」
+    const kvFix = (k, val, field) => val !== '' && val != null ? `<span>${k}：${esc(val)} ${ctextFixHtml(c, field)}</span>` : '';
     const signTag = dealer && c.signed === true ? ' <span class="pill p-grn">已簽約</span>' : ''; // 第28任 抓BUG第11輪 主管3：簽約後不再改已結束，另外標出來（新字待譯）
-    return `<div class="card profile"><span><b>${esc(c.name)}</b>（${esc(c.id)}・${esc(c.kind || c.type || '農民')}）${signTag}</span><span>${esc(c.area || '')}</span>${kv('鎮／မြို့နယ်', c.town)}`
-      + `${kv('村／ကျေးရွာ', c.village) /* 0.4.75 董事長「農民改鎮跟村」：鄉改村、鎮放前面 */}${kv('電話／ဖုန်း', c.phone)}
-        ${dealer ? kv('老闆／ဆိုင်ရှင်', c.owner) + kv('地址／လိပ်စာ', c.address) + kv('作物', cropText(c.crop)) + kv('品牌（舊資料）／တံဆိပ်（ဒေတာဟောင်း）', c.brand) + kv('其他／အခြား', c.fertilizer) /* 0.4.73 董事長：盤商、種子商品牌改作物；舊的品牌資料有才顯示 */
+    return `<div class="card profile"><span><b>${esc(c.name)}</b>（${esc(c.id)}・${esc(c.kind || c.type || '農民')}）${signTag} ${ctextFixHtml(c, 'name')}</span><span>${esc(c.area || '')}</span>${kvFix('鎮／မြို့နယ်', c.town, 'town')}`
+      + `${kvFix('村／ကျေးရွာ', c.village, 'village') /* 0.4.75 董事長「農民改鎮跟村」：鄉改村、鎮放前面 */}${kv('電話／ဖုန်း', c.phone)}
+        ${dealer ? kvFix('老闆／ဆိုင်ရှင်', c.owner, 'owner') + kvFix('地址／လိပ်စာ', c.address, 'address') + kv('作物', cropText(c.crop)) + kv('品牌（舊資料）／တံဆိပ်（ဒေတာဟောင်း）', c.brand) + kv('其他／အခြား', c.fertilizer) /* 0.4.73 董事長：盤商、種子商品牌改作物；舊的品牌資料有才顯示 */
           : kv('作物', cropText(c.crop)) + kv('品種／မျိုး', c.variety) + kv('代碼／ကုဒ်', c.varCode) + kv('目前種植面積／လက်ရှိ စိုက်ဧက', c.areaNow === '' || c.areaNow == null ? '' : c.areaNow + ' ' + (state.data.areaUnit || '英畝'))
             + kv('可種植面積／စိုက်နိုင်သော ဧက', c.areaMax === '' || c.areaMax == null ? '' : c.areaMax + ' ' + (state.data.areaUnit || '英畝')) /* 主管BUG#11 */ + `<span>種植日期／စိုက်သည့်ရက်：${esc(c.plantDate || '—')} ${fixBoxHtml('plantDate:' + c.id, '改', `<input type="date" data-fixin value="${esc(c.plantDate || '')}`
             + `" aria-label="種植日期">`)}</span>` /* 第27任：主管改種植日期 */
@@ -1384,6 +1446,7 @@
         ${v.noMeet ? `<dt>沒拜訪<span class="my">မသွားဖြစ်ပါ</span></dt><dd><span class="pill p-yel">沒拜訪<span class="my">မသွားဖြစ်ပါ</span></span> ${esc(v.noMeet)}</dd>` : ''}`
           + `${v.closing ? `<dt>結案</dt><dd>${esc(v.closing)}</dd>` : ''}${v.plantFail ? `<dt>種植失敗<span class="my">စိုက်ပျိုးမှု မအောင်မြင်</span></dt><dd>${esc(v.plantFail)}</dd>` : ''}`
           + `${v.text ? `<dt>打字</dt><dd class="pre">${esc(v.text)}${v.id ? fixBoxHtml('text:' + v.id, '改內容', `<textarea data-fixin maxlength="3000" rows="4" aria-label="打字內容">${esc(v.text)}</textarea>`) : '' /* 第27任：主管改業務打錯的字 */}</dd>` : ''}`
+          + `${v.id && v.audio ? `<dt>逐字稿</dt><dd>${transcriptFixHtml(v)}</dd>` : '' /* 第28任：主管改緬甸錯字 */}`
           + `${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') + histStatusHtml(c, list.length > 0)}</div>`;
   }
 
@@ -1842,6 +1905,97 @@
   }
 
   /* ───── 第24任 必改第二批⑦：錯誤紀錄（更多 → 錯誤紀錄）：最新 100 筆，可勾「已處理」，可只看沒處理的、只看某個環境 ───── */
+  /* ───── 第28任 2026-11-20 老闆「主管那邊要有個功能可以改緬甸錯字」：「更多 → 緬文對照」 ─────
+     畫面上固定的緬文（按鈕、標題、提示）翻錯時在這裡改。清單是把手機、主管頁的程式檔讀下來，
+     找出每一段緬文和它前面的中文（例：「送出／…」→ 中文「送出」配那段緬文），主管打中文關鍵字找到那句就能改。
+     改好的字存在後台設定「緬文修正」，web/myfix.js 在手機和主管頁的畫面上換掉；程式裡的緬文不動。
+     清單本身掛 data-nomyfix：要看得到程式原本的字，才知道改了什麼。後台回的訊息（錯誤提示等）不在清單裡 */
+  const MY_FILES = [['index.html', '手機'], ['app.js', '手機'], ['core.js', '手機'], ['unlock.js', '手機'], ['voice.js', '手機'], ['inapp.js', '手機'],
+    ['boss.html', '主管頁'], ['boss.js', '主管頁']];
+  const MY_LIST_MAX = 100;
+  async function loadMyList() {
+    if (state.myListLoading || !window.FarmMyFix) return;
+    state.myListLoading = true;
+    const items = new Map();
+    try {
+      for (const [file, where] of MY_FILES) {
+        const res = await fetch(file, { cache: 'no-store' });
+        if (!res.ok) throw new Error(file + ' ' + res.status);
+        window.FarmMyFix.scan(await res.text()).forEach(found => addMyItem(items, found, where));
+      }
+      const sorted = Array.from(items.values()).sort((a, b) => (a.zh[0] || '～').localeCompare(b.zh[0] || '～'));
+      state.myList = { ok: true, items: sorted };
+    } catch (e) {
+      state.myList = { ok: false, message: '讀不到畫面的程式檔（' + String((e && e.message) || e).slice(0, 80) + '），請按重新讀取' };
+    }
+    state.myListLoading = false;
+    if (state.tab === 'myfix') render();
+  }
+  /** 同一段緬文出現在好幾個地方：合成一筆，中文最多記 3 種說法 */
+  function addMyItem(items, found, where) {
+    const it = items.get(found.my) || { my: found.my, zh: [], where: [] };
+    if (found.zh && it.zh.indexOf(found.zh) < 0 && it.zh.length < 3) it.zh.push(found.zh);
+    if (it.where.indexOf(where) < 0) it.where.push(where);
+    items.set(found.my, it);
+  }
+  function myFixMatches() {
+    const f = state.mf || (state.mf = { q: '', fixed: false, msg: '' });
+    const fixes = window.FarmMyFix ? window.FarmMyFix.get() : {};
+    const q = f.q.trim().toLowerCase();
+    const hit = state.myList.items.filter(x => (!f.fixed || x.my in fixes)
+      && (!q || x.my.toLowerCase().includes(q) || x.zh.some(z => z.toLowerCase().includes(q))));
+    return { hit, fixes };
+  }
+  function renderMyFixRows() {
+    const { hit, fixes } = myFixMatches();
+    state.mfShown = hit.slice(0, MY_LIST_MAX);
+    const count = `<p class="sub">找到 ${hit.length} 句${hit.length > MY_LIST_MAX ? `（只列前 ${MY_LIST_MAX} 句，請多打幾個字縮小範圍）` : ''}</p>`;
+    const rows = state.mfShown.map((x, i) => {
+      const now = fixes[x.my];
+      return `<li data-mfrow="${i}"><b>${esc(x.zh.join('｜') || '（找不到旁邊的中文）')}</b> <span class="sub">${esc(x.where.join('、'))}</span>`
+        + `<div class="sub">原本：<span lang="my">${esc(x.my)}</span></div>`
+        + `${now ? `<div>改成：<b lang="my">${esc(now)}</b> <button class="btn" type="button" data-mfundo="${i}">還原</button></div>` : ''}`
+        + `<details class="stfix"><summary>✎ 改緬文</summary><textarea data-mfin lang="my" rows="2" maxlength="300" aria-label="改好的緬文">${esc(now || x.my)}</textarea>`
+        + ` <button class="btn" type="button" data-mfsave="${i}">存</button> <span class="sub" data-mfmsg></span></details></li>`;
+    }).join('');
+    return count + `<ul class="list">${rows || '<li class="empty">沒有符合的句子</li>'}</ul>`;
+  }
+  function renderMyFix() {
+    const L = state.myList;
+    if (!L) { loadMyList(); return '<p class="sub">讀取畫面上的緬文中…</p>'; }
+    if (!L.ok) return `<p class="empty">${esc(L.message)}</p><button class="btn" type="button" id="mfReload">重新讀取</button>`;
+    const f = state.mf || (state.mf = { q: '', fixed: false, msg: '' });
+    return `<section data-nomyfix><h3>緬文對照 <span class="sub">畫面上固定的緬文翻錯了，在這裡改；手機下次同步、主管頁重新整理後就換成新的字</span></h3>
+      <p class="sub"><input type="search" id="mfQ" value="${esc(f.q)}" placeholder="打中文或緬文找句子，例如：送出" aria-label="找句子">
+      <label><input type="checkbox" id="mfFixed"${f.fixed ? ' checked' : ''}> 只看改過的</label></p>
+      <p class="sub" aria-live="polite">${esc(f.msg || '')}</p><div id="mfList">${renderMyFixRows()}</div></section>`;
+  }
+  function bindMyFixRows(root) {
+    root.querySelectorAll('[data-mfsave]').forEach(b => b.addEventListener('click', () => saveMyFix(Number(b.dataset.mfsave), false)));
+    root.querySelectorAll('[data-mfundo]').forEach(b => b.addEventListener('click', () => saveMyFix(Number(b.dataset.mfundo), true)));
+  }
+  function bindMyFix() {
+    const rl = $('mfReload'); if (rl) rl.addEventListener('click', () => { state.myList = null; render(); });
+    const q = $('mfQ'), fx = $('mfFixed'), list = $('mfList');
+    if (q) q.addEventListener('input', () => { state.mf.q = q.value; list.innerHTML = renderMyFixRows(); bindMyFixRows(list); });
+    if (fx) fx.addEventListener('change', () => { state.mf.fixed = fx.checked; list.innerHTML = renderMyFixRows(); bindMyFixRows(list); });
+    if (list) bindMyFixRows(list);
+  }
+  async function saveMyFix(i, undo) {
+    const it = (state.mfShown || [])[i], row = document.querySelector(`[data-mfrow="${i}"]`);
+    if (!it || !row) return;
+    const ta = row.querySelector('[data-mfin]'), msg = row.querySelector('[data-mfmsg]');
+    const to = undo ? '' : String(ta ? ta.value : '').trim();
+    if (!undo && !to) { if (msg) msg.textContent = '內容不能空白（要改回原本的字請按「還原」）'; return; }
+    row.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    let r; try { r = await api({ action: 'myFixSet', from: it.my, to }); } catch (e) { r = null; }
+    row.querySelectorAll('button').forEach(b => { b.disabled = false; });
+    if (!r || !r.ok) { if (msg) msg.textContent = (r && r.message) || '沒有存成功，請再試一次'; else state.mf.msg = (r && r.message) || '沒有存成功'; return; }
+    state.data.myFixes = r.myFixes;
+    if (window.FarmMyFix) window.FarmMyFix.set(r.myFixes, true);
+    state.mf.msg = undo ? '已還原成原本的字' : '已存好；手機下次同步後也會換成新的字';
+    render();
+  }
   function renderErrors() {
     const e = state.errs;
     if (!e) { if (!state.errsLoading) loadErrors(); return '<p class="sub">讀取中…<span class="my">ဖတ်နေသည်</span></p>'; }

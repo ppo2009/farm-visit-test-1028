@@ -424,6 +424,8 @@
     // R23-07：舊後台的回應（沒有 known）就算因為沒帶後台時間被當成舊的、整份不寫，也記下「連到舊後台」→ 清理先停
     // R24-2：這個旗標改在 applyServer 同一個交易寫（比登入、比送出時間），不在交易外補寫
     const r = await Store.applyServer(sentKey, data && data.serverTime, entries, data && data.askedTemps, sentAt);
+    // 第28任：主管改好的畫面緬文（web/myfix.js；背景程式 sw.js 也載入這個檔，那裡沒有 FarmMyFix 就跳過）
+    if (r === true && entries.options && typeof self !== 'undefined' && self.FarmMyFix) self.FarmMyFix.set(entries.options.myFixes || {}, true);
     return r === true;
   }
   /** 0.4.87 高1：現在登入的還是送出時那把金鑰嗎（登出、換帳號就不是） */
