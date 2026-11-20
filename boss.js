@@ -2110,9 +2110,13 @@
   function admDeleted() {
     const l = admState().list;
     if (!l || !l.ok) return '';
-    const c = l.customers.map(x => `<div class="admrow"><span>客戶 ${esc(x.name)}（${esc(x.cid)}・${esc(x.type)}・${esc(x.staff)}）<small>${esc(x.mark)}</small></span>${admBtn('custRestore', { cid: x.cid }, '還原')}</div>`);
-    const v = l.visits.map(x => `<div class="admrow"><span>拜訪 ${esc(x.at)}・${esc(x.name)}・${esc(x.staff)}<small>${esc(x.mark)}</small></span>${admBtn('visitRestore', { vid: x.vid }, '還原')}</div>`);
-    const s = l.staff.map(x => `<div class="admrow"><span>帳號 ${esc(x.name)}（${esc(x.account)}）<small>${esc(x.mark)}</small></span>${admBtn('staffRestore', { account: x.account }, '還原')}</div>`);
+    // 每一筆：還原、確定刪除（董事長「這邊要多一個確定刪除的按鈕，按下去就確定刪除了」）
+    const c = l.customers.map(x => `<div class="admrow"><span>客戶 ${esc(x.name)}（${esc(x.cid)}・${esc(x.type)}・${esc(x.staff)}）<small>${esc(x.mark)}</small></span>`
+      + `${admBtn('custRestore', { cid: x.cid }, '還原')}${admBtn('custPurge', { cid: x.cid }, '確定刪除', '', true)}</div>`);
+    const v = l.visits.map(x => `<div class="admrow"><span>拜訪 ${esc(x.at)}・${esc(x.name)}・${esc(x.staff)}<small>${esc(x.mark)}</small></span>`
+      + `${admBtn('visitRestore', { vid: x.vid }, '還原')}${admBtn('visitPurge', { vid: x.vid }, '確定刪除', '', true)}</div>`);
+    const s = l.staff.map(x => `<div class="admrow"><span>帳號 ${esc(x.name)}（${esc(x.account)}）<small>${esc(x.mark)}</small></span>`
+      + `${admBtn('staffRestore', { account: x.account }, '還原')}${admBtn('staffPurge', { account: x.account }, '確定刪除', '', true)}</div>`);
     const all = c.concat(v, s);
     return all.length ? all.join('') : '<p class="sub">沒有刪除的資料</p>';
   }
@@ -2134,6 +2138,9 @@
     custDelete: '確定要刪除這位客戶？手機、主管頁、報表都會看不到他和他的拜訪（可以在「已刪除」還原）。',
     visitDelete: '確定要刪除這筆拜訪？（可以在「已刪除」還原）',
     staffDelete: '確定要刪除這個帳號？他會馬上被登出、不能再登入；名下的客戶請另外改負責業務（可以在「已刪除」還原）。',
+    custPurge: '確定刪除後，這位客戶和他的拜訪、推廣對照、任務都會從資料表拿掉，不能在這裡還原（整列內容會留在試算表「刪除封存」分頁）。確定？',
+    visitPurge: '確定刪除後，這筆拜訪會從資料表拿掉，不能在這裡還原（內容會留在試算表「刪除封存」分頁）。確定？',
+    staffPurge: '確定刪除後，這個帳號會從資料表拿掉，不能在這裡還原（內容會留在試算表「刪除封存」分頁）。確定？',
     staffRename: '改名字後，這個人名下的客戶、拜訪會一起換成新名字，他的手機會登出、要重新登入。確定？',
   };
   async function runAdmin(btn) {
@@ -2151,7 +2158,7 @@
     } catch (e) { r = null; }
     btn.disabled = false;
     if (!r || !r.ok) { a.msg = '沒有存成功：' + ((r && r.message) || '請再試一次'); render(); return; }
-    a.msg = op.indexOf('Delete') >= 0 ? '已刪除（可以在最下面「已刪除」還原）' : op.indexOf('Restore') >= 0 ? '已還原' : '已存好';
+    a.msg = op.indexOf('Purge') >= 0 ? '已確定刪除' : op.indexOf('Delete') >= 0 ? '已刪除（可以在最下面「已刪除」還原）' : op.indexOf('Restore') >= 0 ? '已還原' : '已存好';
     if (op === 'staffDelete' && r.customersLeft) a.msg += `；他名下還有 ${r.customersLeft} 位客戶，請改負責業務`;
     a.hist = {};
     a.list = null;
