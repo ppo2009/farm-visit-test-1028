@@ -2644,6 +2644,7 @@
     const sel = $('farmer').value;
     const show = (state.cat === '試作' || state.cat === '推廣') && !!sel;
     $('trialBox').hidden = !show;
+    hideNewFarmerTrialBox(sel); // 第28任：新增對照／推廣農民不顯示對照框（下面照樣自動打開開始表單）
     refreshCloseTrial(); // 0.4.74 結案：有進行中的試作／推廣就要先填結果（自己處理換客戶的競態）
     refreshPlantFail(); // 0.4.33 一般拜訪的種植失敗勾選：換類別、換客戶時跟著顯示／收起
     if (sel && !isDealerCat()) fillVarieties(); // 0.4.50 換類別時種子公司選單跟著換（一般＝其他公司、試作推廣＝農友）
@@ -2685,6 +2686,15 @@
     trialBoxMode(sel, cat, t, unk, waitC, notMine);
     trialBoxOldKind(sel, cat, t, notMine);
     if (typeof paintNewTrial === 'function') paintNewTrial(); // 0534：新農民改寫框上方說明（不寫「目前沒有進行中」）、品項＝作物、品種那一行
+  }
+  /**
+   * 新增對照／推廣農民時，整塊對照（推廣）框不給業務看（第28任 2026-11-20 董事長：「我在新增，應該是沒有對照的行為」，選「藏起來、背景自動開」）。
+   * 框裡的開始表單照樣開著（trialMode＝start），存檔時照舊替這位記下對照／推廣的起算：品項＝上面選的作物、開始日＝今天、用量空白。
+   * 例：新增對照農民吳先生、作物選辣椒 → 畫面只有農民資料；存檔後主管頁就有「對照：辣椒，今天開始」，量測提醒照常。
+   */
+  function hideNewFarmerTrialBox(sel) {
+    if (sel !== '__new') return;
+    $('trialBox').hidden = true;
   }
   /**
    * 開始試作表單「有沒有被動過」（第28任 2026-11-19 董事長「沒填就不問」，抓BUG第12輪 手機3）。
@@ -4477,7 +4487,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261120-224356'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261120-231251'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
