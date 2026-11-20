@@ -31,7 +31,7 @@
   const md = s => { const d = s2d(s); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
 
   const KEY_NAME = 'farm-boss-key';
-  const MORE_TABS = ['progress', 'accounts', 'errors', 'myfix']; // 第24任 第七批：地圖、紀錄表、日曆改在「客戶」「拜訪」裡切換 // 第24任 必改第二批⑦：錯誤紀錄 // 收在「更多」底下的分頁（2026-11-12 規劃 C）
+  const MORE_TABS = ['progress', 'accounts', 'errors', 'myfix', 'admin']; // 第24任 第七批：地圖、紀錄表、日曆改在「客戶」「拜訪」裡切換 // 第24任 必改第二批⑦：錯誤紀錄 // 收在「更多」底下的分頁（2026-11-12 規劃 C）
 
   /* ───── 主管網頁中文＋緬文（2026-11-12 董事長；緬文是示意，待校對）─────
      畫面畫好後掃一遍：文字剛好是下表的詞，就在後面補緬文（小字）；輸入框提示也補。不用改每一段畫面程式 */
@@ -265,6 +265,8 @@
     // 總經理的帳號分頁管業務和主管（2026-11-12）；分頁名稱換掉後補一次緬文
     const accTab = document.querySelector('.tab[data-tab="accounts"]');
     if (accTab) { accTab.textContent = data.role === '總經理' ? '業務、主管帳號' : '業務帳號'; biDom(accTab.parentNode); }
+    const admTab = document.querySelector('.tab[data-tab="admin"]');
+    if (admTab) admTab.hidden = data.role !== '總經理'; // 第28任：資料管理只有總經理看得到
     $('updated').textContent = (t => '更新於 ' + t + '（緬甸時間）／' + t + ' တွင် အပ်ဒိတ်လုပ်ပြီး (မြန်မာစံတော်ချိန်)')((() => { try { return new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Yangon' }); } catch (e) { return new Date(Date.now() + 6.5 * 3600000).toISOString().slice(11, 16); } })()); // 0.5.18 C8：原本用手機／電腦自己的時區，台灣看差一個半小時
     // 0.4.38 董事長：「開啟試算表」只有總經理有（後台只給總經理網址，主管拿到的是空的就藏起來）
     $('sheetLink').href = data.sheetUrl || '#';
@@ -346,12 +348,13 @@
     $('briefBadge').hidden = !unread; $('briefBadge').textContent = unread ? String(unread) : '';
     // 抓BUG第6輪 主管組3：整頁重畫（重新整理、離開 10 分鐘切回來自動重讀）也保留同一位客戶打開的修改框和打到一半的字
     const d0 = $('custDetail'), keepCid = d0 ? d0.dataset.cid : '', keepBoxes = d0 ? openFixBoxes(d0) : [];
-    $('panel').innerHTML = segBar() + ({ today: renderToday, overdue: renderOverdue, review: renderReview, moremenu: renderMoreMenu, latest: renderLatest, cal: renderCal, trial: renderTrial, map: renderMap, table: renderTable, reports: renderReports, progress: () => staffCards() + renderProgress(), tasks: renderTasks, accounts: renderAccounts, briefs: renderBriefs, errors: renderErrors, myfix: renderMyFix })[state.tab](); // 第24任 第七批：今天、逾期、審核、更多（手機）；本月目標、每位業務卡片搬到工作進度
+    $('panel').innerHTML = segBar() + ({ today: renderToday, overdue: renderOverdue, review: renderReview, moremenu: renderMoreMenu, latest: renderLatest, cal: renderCal, trial: renderTrial, map: renderMap, table: renderTable, reports: renderReports, progress: () => staffCards() + renderProgress(), tasks: renderTasks, accounts: renderAccounts, briefs: renderBriefs, errors: renderErrors, myfix: renderMyFix, admin: renderAdmin })[state.tab](); // 第24任 第七批：今天、逾期、審核、更多（手機）；本月目標、每位業務卡片搬到工作進度
     if (state.tab === 'tasks') bindTasks();
     if (state.tab === 'briefs') bindBriefs();
     if (state.tab === 'accounts') bindAccounts();
     if (state.tab === 'errors') bindErrors();
     if (state.tab === 'myfix') bindMyFix();
+    if (state.tab === 'admin') bindAdmin(); // 第28任：資料管理
     if (state.tab === 'trial') bindCustomers();
     bindGo($('panel'));
     biDom($('panel')); biDom($('stats')); // 補緬文
@@ -725,10 +728,10 @@
 
   /* ───── 第24任 第七批（老闆核准「設計版」＋「升級版」）：主管頁改成「今天」待辦頁、連續審核、精簡拜訪卡片、手機 4 個導覽 ───── */
   // 導覽分組：手機底部「今天｜拜訪｜客戶｜更多」；電腦頂部 7 個（今天、拜訪、客戶、任務、試作報告、主管匯報、更多）
-  const NAV = { today: ['today', 'overdue', 'review'], visits: ['latest', 'table', 'cal'], customers: ['trial', 'map'], more: ['moremenu', 'tasks', 'reports', 'briefs', 'progress', 'accounts', 'errors', 'myfix'] };
+  const NAV = { today: ['today', 'overdue', 'review'], visits: ['latest', 'table', 'cal'], customers: ['trial', 'map'], more: ['moremenu', 'tasks', 'reports', 'briefs', 'progress', 'accounts', 'errors', 'myfix', 'admin'] };
   const navGroup = t => Object.keys(NAV).find(g => NAV[g].indexOf(t) >= 0) || 'today';
   const SEGS = { visits: [['latest', '卡片<span class="my">ကတ်ပုံစံ</span>'], ['table', '表格<span class="my">ဇယားပုံစံ</span>'], ['cal', '日曆']], customers: [['trial', '清單<span class="my">စာရင်းပုံစံ</span>'], ['map', '地圖<span class="my">မြေပုံ</span>']] };
-  const MORE_ITEMS = [['tasks', '任務'], ['reports', '試作報告'], ['briefs', '主管匯報'], ['progress', '工作進度<span class="my">လုပ်ငန်း တိုးတက်မှု</span>'], ['accounts', '業務帳號'], ['errors', '錯誤紀錄<span class="my">အမှား မှတ်တမ်း</span>'], ['myfix', '緬文對照']]; // 第28任：主管改畫面緬文
+  const MORE_ITEMS = [['tasks', '任務'], ['reports', '試作報告'], ['briefs', '主管匯報'], ['progress', '工作進度<span class="my">လုပ်ငန်း တိုးတက်မှု</span>'], ['accounts', '業務帳號'], ['errors', '錯誤紀錄<span class="my">အမှား မှတ်တမ်း</span>'], ['myfix', '緬文對照'], ['admin', '資料管理']]; // 第28任：資料管理只有總經理（renderMoreMenu 會濾掉） // 第28任：主管改畫面緬文
   /** 主管頁設定（後台設定分頁：主管頁還早時間、沒拜訪提醒天數、測試帳號）；舊後台沒送就用預設 */
   function cfg7() {
     const c = (state.data && state.data.bossCfg) || {};
@@ -842,7 +845,7 @@
   }
   function renderMoreMenu() {
     const badge = moreBadges();
-    return `<ul class="moremenu">${MORE_ITEMS.map(([t, n]) => `<li><button type="button" data-nav="${t}"><span>${n}</span>${badge[t] ? `<b class="badge">${badge[t]}</b>` : ''}`
+    return `<ul class="moremenu">${MORE_ITEMS.filter(([t]) => t !== 'admin' || isGM()).map(([t, n]) => `<li><button type="button" data-nav="${t}"><span>${n}</span>${badge[t] ? `<b class="badge">${badge[t]}</b>` : ''}`
       + `<span class="arr" aria-hidden="true">＞</span></button></li>`).join('')}</ul>`;
   }
   /** 拜訪、客戶分頁上方的切換（卡片／表格／日曆、清單／地圖） */
@@ -2022,6 +2025,151 @@
     if (window.FarmMyFix) window.FarmMyFix.set(r.myFixes, true);
     state.mf.msg = undo ? '已還原成原本的字' : '已存好；手機下次同步後也會換成新的字';
     render();
+  }
+  /*
+   * 資料管理（第28任 2026-11-20 董事長：「做一個後台，可以刪改業務、農民、盤商，可修改日期、改錯字、刪改種植作物、日期、拜訪日期」）。
+   * 只有總經理看得到（董事長選）。刪除都是標記刪除，下面「已刪除」清單可以還原。
+   * 畫面：上面搜尋客戶 → 點開一位：改類型、負責業務、作物、品種、種植日期、推廣／對照紀錄、他的每一筆拜訪（改日期、刪除）、刪除這位；
+   *       再來是業務、主管（改名字、刪除）；最後是已刪除的客戶、拜訪、帳號（還原）。
+   * 每個按鈕都寫 data-admop（後台動作）＋ data-admarg（帶哪位）＋ data-admval（要讀哪個輸入框），bindAdmin 統一處理。
+   */
+  const ADM_MAX = 30;
+  const ADM_FARMER_KINDS = [['一般農民', '一般農民'], ['試作農民', '對照農民'], ['推廣農民', '推廣農民']];
+  const ADM_DEALER_KINDS = [['盤商', '盤商'], ['種子商', '種子商']];
+  const admState = () => state.adm || (state.adm = { q: '', open: '', list: null, hist: {}, msg: '' });
+  async function loadAdminList() {
+    const a = admState();
+    let r; try { r = await api({ action: 'admin', op: 'list' }); } catch (e) { r = null; }
+    a.list = r && r.ok ? r : { ok: false, message: (r && r.message) || '讀取失敗，請按重新整理' };
+    if (state.tab === 'admin') render();
+  }
+  async function loadAdminHistory(cid) {
+    const a = admState();
+    let r; try { r = await api({ action: 'history', cid }); } catch (e) { r = null; }
+    a.hist[cid] = r && r.ok ? (r.visits || []) : [];
+    if (state.tab === 'admin' && a.open === cid) render();
+  }
+  /** 一顆會送到後台的按鈕 */
+  function admBtn(op, arg, label, valId, danger) {
+    return `<button type="button" class="btn${danger ? ' ghost' : ''}" data-admop="${op}" data-admarg="${esc(JSON.stringify(arg))}"${valId ? ` data-admval="${valId}"` : ''}>${label}</button>`;
+  }
+  const admOptions = (pairs, cur) => pairs.map(([v, n]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(n)}</option>`).join('');
+  function admKindLabel(c) {
+    const kind = c.kind || c.type || '農民';
+    return kind === '試作農民' ? '對照農民' : kind;
+  }
+  /** 一位客戶點開後的內容 */
+  function admCustomerBody(c) {
+    const a = admState(), id = c.id, sales = (a.list && a.list.sales) || [];
+    const dealer = c.type === '盤商' || c.type === '種子商';
+    const kinds = dealer ? ADM_DEALER_KINDS : ADM_FARMER_KINDS;
+    const curKind = dealer ? c.type : (c.kind || '一般農民');
+    const staffOpts = admOptions(sales.map(n => [n, n]), c.staff);
+    const trials = ((state.data && state.data.trials) || []).filter(t => t.cid === id && t.status === '進行中');
+    const visits = a.hist[id];
+    if (!visits) loadAdminHistory(id);
+    const trialHtml = trials.map(t => `<div class="admrow"><b>${t.cat === '推廣' ? '推廣' : '對照'} ${esc(t.id)}</b>
+      <label>品項 <input id="admTi_${esc(t.id)}" value="${esc(t.item || '')}" maxlength="60"></label>${admBtn('trialFix', { tid: t.id, field: 'item' }, '存品項', 'admTi_' + t.id)}
+      <label>開始日 <input type="date" id="admTs_${esc(t.id)}" value="${esc(t.start || '')}"></label>${admBtn('trialFix', { tid: t.id, field: 'start' }, '存開始日', 'admTs_' + t.id)}</div>`).join('');
+    const visitHtml = !visits ? '<p class="sub">拜訪讀取中…</p>' : !visits.length ? '<p class="sub">沒有拜訪紀錄</p>'
+      : visits.slice().reverse().map(v => `<div class="admrow"><span>${esc(v.time || '')}・${esc(v.staff || '')}・${esc(v.cat || '')}</span>
+        <input type="date" id="admVd_${esc(v.id)}" value="${esc(String(v.time || '').slice(0, 10))}" aria-label="拜訪日期">${admBtn('visitDate', { vid: v.id }, '改日期', 'admVd_' + v.id)}
+        ${admBtn('visitDelete', { vid: v.id }, '刪除這筆拜訪', '', true)}</div>`).join('');
+    return `<div class="admbody">
+      <div class="admrow"><label>類型 <select id="admK_${esc(id)}">${admOptions(kinds, curKind)}</select></label>${admBtn('custType', { cid: id }, '存類型', 'admK_' + id)}
+        <label>負責業務 <select id="admS_${esc(id)}">${staffOpts}</select></label>${admBtn('custStaff', { cid: id }, '存負責業務', 'admS_' + id)}</div>
+      <div class="admrow"><label>作物 <input id="admC_${esc(id)}" value="${esc(c.crop || '')}" maxlength="60"></label>${admBtn('custCrop', { cid: id, field: 'crop' }, '存作物', 'admC_' + id)}
+        <label>品種 <input id="admV_${esc(id)}" value="${esc(c.variety || '')}" maxlength="60"></label>${admBtn('custCrop', { cid: id, field: 'variety' }, '存品種', 'admV_' + id)}
+        <label>種植日期 <input type="date" id="admP_${esc(id)}" value="${esc(c.plantDate || '')}"></label>${admBtn('plantDate', { cid: id }, '存種植日期', 'admP_' + id)}</div>
+      ${trialHtml}
+      <h4>拜訪</h4>${visitHtml}
+      <div class="admrow">${admBtn('custDelete', { cid: id }, '刪除這位客戶（可以還原）', '', true)}</div>
+    </div>`;
+  }
+  function admCustomers() {
+    const a = admState(), q = a.q.trim().toLowerCase();
+    const all = ((state.data && state.data.customers) || []).filter(c => !q || [c.id, c.name, c.staff, c.crop, c.area].some(x => String(x || '').toLowerCase().includes(q)));
+    const rows = all.slice(0, ADM_MAX).map(c => `<details class="admcust" data-admcust="${esc(c.id)}"${a.open === c.id ? ' open' : ''}>
+      <summary><b data-nomyfix>${esc(c.name || '')}</b>（${esc(c.id)}・${esc(admKindLabel(c))}・${esc(c.staff || '沒有負責業務')}）</summary>
+      ${a.open === c.id ? admCustomerBody(c) : ''}</details>`).join('');
+    return `<p class="sub">找到 ${all.length} 位${all.length > ADM_MAX ? `，先列前 ${ADM_MAX} 位，請打更多字縮小範圍` : ''}</p>${rows}`;
+  }
+  function admPeople() {
+    const people = (admState().list && admState().list.people) || [];
+    if (!people.length) return '<p class="sub">沒有可以管理的帳號</p>';
+    return people.map(p => `<div class="admrow"><span>${esc(p.name)}（${esc(p.account)}・${esc(p.role)}${p.active ? '' : '・停用'}）</span>
+      <input id="admN_${esc(p.account)}" value="${esc(p.name)}" maxlength="40" aria-label="新名字">${admBtn('staffRename', { account: p.account }, '改名字', 'admN_' + p.account)}
+      ${admBtn('staffDelete', { account: p.account }, '刪除帳號', '', true)}</div>`).join('');
+  }
+  function admDeleted() {
+    const l = admState().list;
+    if (!l || !l.ok) return '';
+    const c = l.customers.map(x => `<div class="admrow"><span>客戶 ${esc(x.name)}（${esc(x.cid)}・${esc(x.type)}・${esc(x.staff)}）<small>${esc(x.mark)}</small></span>${admBtn('custRestore', { cid: x.cid }, '還原')}</div>`);
+    const v = l.visits.map(x => `<div class="admrow"><span>拜訪 ${esc(x.at)}・${esc(x.name)}・${esc(x.staff)}<small>${esc(x.mark)}</small></span>${admBtn('visitRestore', { vid: x.vid }, '還原')}</div>`);
+    const s = l.staff.map(x => `<div class="admrow"><span>帳號 ${esc(x.name)}（${esc(x.account)}）<small>${esc(x.mark)}</small></span>${admBtn('staffRestore', { account: x.account }, '還原')}</div>`);
+    const all = c.concat(v, s);
+    return all.length ? all.join('') : '<p class="sub">沒有刪除的資料</p>';
+  }
+  function renderAdmin() {
+    if (!isGM()) return '<p class="empty">只有總經理能用資料管理</p>';
+    const a = admState();
+    if (!a.list) loadAdminList();
+    return `<section class="admin"><h3>資料管理 <span class="sub">只有總經理看得到；刪除的資料可以在最下面還原</span></h3>
+      <p id="admMsg" class="sub" role="status" aria-live="polite">${esc(a.msg)}</p>
+      <h4>客戶（農民、盤商、種子商）</h4>
+      <input type="search" id="admQ" value="${esc(a.q)}" placeholder="打名字、編號、業務、作物找客戶" aria-label="找客戶">
+      <div id="admCustList">${admCustomers()}</div>
+      <h4>業務、主管</h4>${a.list ? admPeople() : '<p class="sub">讀取中…</p>'}
+      <h4>已刪除（可以還原）</h4>${a.list ? admDeleted() : '<p class="sub">讀取中…</p>'}
+    </section>`;
+  }
+  /** 刪除前一定再問一次；改名字也問（那個人的手機會登出） */
+  const ADM_ASK = {
+    custDelete: '確定要刪除這位客戶？手機、主管頁、報表都會看不到他和他的拜訪（可以在「已刪除」還原）。',
+    visitDelete: '確定要刪除這筆拜訪？（可以在「已刪除」還原）',
+    staffDelete: '確定要刪除這個帳號？他會馬上被登出、不能再登入；名下的客戶請另外改負責業務（可以在「已刪除」還原）。',
+    staffRename: '改名字後，這個人名下的客戶、拜訪會一起換成新名字，他的手機會登出、要重新登入。確定？',
+  };
+  async function runAdmin(btn) {
+    const a = admState(), op = btn.dataset.admop;
+    let arg = {}; try { arg = JSON.parse(btn.dataset.admarg || '{}'); } catch (e) { return; }
+    if (ADM_ASK[op] && !confirm(ADM_ASK[op])) return;
+    const input = btn.dataset.admval ? document.getElementById(btn.dataset.admval) : null;
+    const value = input ? input.value : '';
+    btn.disabled = true;
+    let r;
+    try {
+      // 種植日期照舊走主管原本的 custFix（主管頁客戶履歷也是這個）
+      r = op === 'plantDate' ? await api({ action: 'custFix', cid: arg.cid, what: 'plantDate', value })
+        : await api(Object.assign({ action: 'admin', op, value }, arg));
+    } catch (e) { r = null; }
+    btn.disabled = false;
+    if (!r || !r.ok) { a.msg = '沒有存成功：' + ((r && r.message) || '請再試一次'); render(); return; }
+    a.msg = op.indexOf('Delete') >= 0 ? '已刪除（可以在最下面「已刪除」還原）' : op.indexOf('Restore') >= 0 ? '已還原' : '已存好';
+    if (op === 'staffDelete' && r.customersLeft) a.msg += `；他名下還有 ${r.customersLeft} 位客戶，請改負責業務`;
+    a.hist = {};
+    a.list = null;
+    await load(); // 主管頁全部資料重讀（清單、拜訪、試作跟著更新）
+  }
+  function bindAdmin() {
+    const a = admState();
+    const q = $('admQ'), list = $('admCustList');
+    if (q) q.addEventListener('input', () => { a.q = q.value; a.open = ''; list.innerHTML = admCustomers(); });
+    const panel = $('panel');
+    if (panel.dataset.admBound) return;
+    panel.dataset.admBound = '1';
+    panel.addEventListener('click', e => {
+      if (state.tab !== 'admin') return;
+      const btn = e.target.closest && e.target.closest('[data-admop]');
+      if (btn) { runAdmin(btn); return; }
+      const sum = e.target.closest && e.target.closest('details.admcust > summary');
+      if (!sum) return;
+      e.preventDefault();
+      const id = sum.parentNode.dataset.admcust;
+      a.open = a.open === id ? '' : id;
+      $('admCustList').innerHTML = admCustomers(); // 每次重畫後清單是新的元素，要當下再找
+
+    });
   }
   function renderErrors() {
     const e = state.errs;
