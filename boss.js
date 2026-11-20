@@ -2036,6 +2036,8 @@
   const ADM_MAX = 30;
   const ADM_FARMER_KINDS = [['一般農民', '一般農民'], ['試作農民', '對照農民'], ['推廣農民', '推廣農民']];
   const ADM_DEALER_KINDS = [['盤商', '盤商'], ['種子商', '種子商']];
+  /** 基本資料欄：[主管頁資料的鍵（也是後台 field）, 畫面名稱, 最多幾字] */
+  const ADM_INFO_FIELDS = [['name', '名字', 60], ['phone', '電話', 30], ['area', '地區', 60], ['town', '鎮', 60], ['village', '村', 60], ['owner', '老闆名字', 60], ['address', '地址', 200]];
   const admState = () => state.adm || (state.adm = { q: '', open: '', list: null, hist: {}, msg: '' });
   async function loadAdminList() {
     const a = admState();
@@ -2075,7 +2077,11 @@
       : visits.slice().reverse().map(v => `<div class="admrow"><span>${esc(v.time || '')}・${esc(v.staff || '')}・${esc(v.cat || '')}</span>
         <input type="date" id="admVd_${esc(v.id)}" value="${esc(String(v.time || '').slice(0, 10))}" aria-label="拜訪日期">${admBtn('visitDate', { vid: v.id }, '改日期', 'admVd_' + v.id)}
         ${admBtn('visitDelete', { vid: v.id }, '刪除這筆拜訪', '', true)}</div>`).join('');
+    // 基本資料：一欄一個框＋存（第28任 董事長「資料管理裡面農民的資料可以刪除跟更改」）
+    const infoHtml = ADM_INFO_FIELDS.map(([field, label, max]) => `<label>${label} <input id="admI_${field}_${esc(id)}" value="${esc(c[field] || '')}" maxlength="${max}"></label>`
+      + admBtn('custInfo', { cid: id, field }, '存' + label, `admI_${field}_${id}`)).join('');
     return `<div class="admbody">
+      <div class="admrow">${infoHtml}</div>
       <div class="admrow"><label>類型 <select id="admK_${esc(id)}">${admOptions(kinds, curKind)}</select></label>${admBtn('custType', { cid: id }, '存類型', 'admK_' + id)}
         <label>負責業務 <select id="admS_${esc(id)}">${staffOpts}</select></label>${admBtn('custStaff', { cid: id }, '存負責業務', 'admS_' + id)}</div>
       <div class="admrow"><label>作物 <input id="admC_${esc(id)}" value="${esc(c.crop || '')}" maxlength="60"></label>${admBtn('custCrop', { cid: id, field: 'crop' }, '存作物', 'admC_' + id)}
