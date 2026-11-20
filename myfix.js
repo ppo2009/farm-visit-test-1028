@@ -18,11 +18,19 @@
   const MY_CLASS = '[' + MY_LO + '-' + MY_HI + ']';
   const isMyanmarCode = code => code >= 0x1000 && code <= 0x109f;
   let map = {};
-  let pairs = []; // [原本, 改好]，長的先換（短的可能是長的一部分）
+  let pairs = []; // [原本, 改好]；換字用 map 整段比對，這裡只拿來判斷「有沒有修正」
   // 換過的節點記下「原本的值、寫進去的值」：同一個值不再換第二次；修正表改了（含還原）時，先把畫面上換過的換回原本的字再重換
   const written = new WeakMap(); // 文字節點 → { orig, val }；元素 → { 屬性: { orig, val } }
   const touched = new Set();
 
+  /** 至少有一個緬文字母（只有緬文句號、逗號、數字的片段不列、不換：改了會動到每一句的句尾、每個數字） */
+  function hasLetter(s) {
+    for (let i = 0; i < s.length; i++) {
+      const code = s.charCodeAt(i);
+      if ((code >= 0x1000 && code <= 0x103f) || (code >= 0x1050 && code <= 0x109f)) return true;
+    }
+    return false;
+  }
   function hasMyanmar(s) {
     for (let i = 0; i < s.length; i++) if (isMyanmarCode(s.charCodeAt(i))) return true;
     return false;
@@ -33,16 +41,21 @@
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
     Object.keys(raw).forEach(from => {
       const to = raw[from];
-      if (typeof to !== 'string' || !to.trim() || to === from || !hasMyanmar(from)) return;
+      if (typeof to !== 'string' || !to.trim() || to === from || !hasLetter(from)) return;
       out[from] = to;
     });
     return out;
   }
+  /* 整段一樣才換（抓BUG第16輪 手機1、2）：用跟「緬文對照」清單同一個規則（FRAG_RE）切出字串裡每一整段緬文，
+     那一整段剛好是修正表裡的原字才換。原本是「字串裡出現就換」：
+       ① 緬文詞之間沒有空格，短的一段常常是別句長句的一部分 → 改一句，上百句不相干的跟著變
+       ② 改好的字含原字時，程式把換過的字存起來再寫回（例：登出鈕），會再換一次、越換越長
+     整段比對：換完那段就是「改好的字」，後台不准它又是另一句的原字，所以同一串字換幾次都一樣 */
+  const own = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
   function fixStr(s) {
-    let text = String(s == null ? '' : s);
+    const text = String(s == null ? '' : s);
     if (!pairs.length || !hasMyanmar(text)) return text;
-    pairs.forEach(([from, to]) => { if (text.indexOf(from) >= 0) text = text.split(from).join(to); });
-    return text;
+    return text.replace(FRAG_RE, frag => (own(map, frag) ? map[frag] : frag));
   }
   function skipped(node) {
     for (let p = node.parentNode; p; p = p.parentNode) {
@@ -126,7 +139,7 @@
       if (!hasMyanmar(line)) return;
       let m;
       FRAG_RE.lastIndex = 0;
-      while ((m = FRAG_RE.exec(line))) found.push({ my: m[0], zh: zhBefore(line, m.index) });
+      while ((m = FRAG_RE.exec(line))) if (hasLetter(m[0])) found.push({ my: m[0], zh: zhBefore(line, m.index) });
     });
     return found;
   }

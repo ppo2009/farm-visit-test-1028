@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="build-20261120-114400">
+<meta name="app-build" content="build-20261120-130802">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
-<title>田間打卡 လယ်ကွင်း မှတ်တမ်း</title><!-- 0.4.94 低2 中緬並列 -->
+<title>業務登入</title><!-- 第28任 2026-11-20 老闆「田間打卡改業務登入」（瀏覽器分頁標題）；原本中緬並列（0.4.94 低2），新名字的緬文待譯 F23 -->
 <script src="inapp.js"></script>
 <script src="myfix.js"></script><!-- 第28任：主管改好的畫面緬文 -->
 <style>
@@ -522,7 +522,9 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
   </div>
   <!-- 第24任 第六批⑧：「快速打卡」搬到首頁最上方（田間打卡分頁） -->
   <!-- 0.4.75 董事長截圖：右欄打叉拿掉——每月目標跟「我的進度」的「主管訂的目標」同一份，合成一份（todoPlan 拿掉，app.js 沒有這格就略過）；日程清單搬到「我的進度」 -->
-  </div>
+  <!-- 第28任 2026-11-20 老闆「左邊是主管派發，右邊是我的對照，怎麼又合在一邊了」：第24任把快速打卡搬走後兩欄只剩左欄，
+       下面這幾段（我的對照、主管訂的目標、日程清單、我負責的客戶）放回右欄；手機窄螢幕照舊上下排，任務在上 -->
+  <div class="todocol" id="todoMine">
   <!-- 0.5.12 董事長截圖「以下都放入執行中任務」：主管訂的目標、農民種植進度、日程清單從「歷史成就」搬到這裡（id 都不變），放在任務兩欄下面、我負責的客戶上面 -->
   <div class="mine">
   <!-- 0.5.13 董事長「還沒做完的都算是執行任務那邊」：我的試作（進行中的試作、推廣）從歷史成就搬過來（id 不變） -->
@@ -583,6 +585,8 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
     <div class="progress vhist" id="closeHistory" hidden aria-live="polite"></div>
   </section>
   </div>
+  </div><!-- /todoMine（右欄） -->
+  </div><!-- /todoboard（兩欄） -->
   </div>
 
   <!-- 分頁 4 我的進度：我的試作、月計劃、工作進度 -->

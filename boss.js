@@ -462,6 +462,14 @@
   function eachVisit(id, fn) {
     [].concat(state.data.visits || [], ...Object.values(state.hist || {})).forEach(v => { if (v && v.id === id) fn(v); });
   }
+  /* 客戶資料改好後，畫面上的資料跟著換。名字另外存在拜訪、任務、試作各一份（後台 renameCustomerCopies_ 也一起換），
+     不換的話「最新拜訪」「任務」要等重新整理才看到新名字（抓BUG第16輪 主管2） */
+  function renameLocal(cid, field, value) {
+    (state.data.customers || []).forEach(c => { if (c.id === cid) c[field] = value; });
+    if (field !== 'name') return;
+    const copies = [].concat(state.data.visits || [], ...Object.values(state.hist || {}), state.data.tasks || [], state.data.trials || []);
+    copies.forEach(x => { if (x && x.cid === cid) x.name = value; });
+  }
   async function saveFix(btn, clear) {
     const key = btn.dataset.fixsave || btn.dataset.fixclear || '', i = key.indexOf(':'), kind = key.slice(0, i), id = key.slice(i + 1);
     const box = btn.parentNode || btn, inp = box.querySelector('[data-fixin]'), msg = box.querySelector('[data-fixmsg]');
@@ -475,7 +483,7 @@
     if (kind === 'text') eachVisit(id, v => { v.text = r.text; });
     else if (kind === 'my' && r.field === 'transcript') (state.transcripts = state.transcripts || {})[r.visitId] = r.text;
     else if (kind === 'my') { if (r.my) eachVisit(r.visitId, v => { v.my = r.my; }); }
-    else if (kind === 'ctext') (state.data.customers || []).forEach(c => { if (c.id === r.cid) c[r.field] = r.value; });
+    else if (kind === 'ctext') renameLocal(r.cid, r.field, r.value);
     else if (kind === 'cropDays') state.data.cropDays = r.cropDays || {};
     else (state.data.customers || []).forEach(c => { if (c.id === id) c[kind] = kind === 'nextDue' ? r.nextDue : r.plantDate; });
     // 抓BUG第5輪 主管組1：快採收清單跟著後台重算的換；主管組2：畫面資料改了 dataGen 加一（出發較早的重讀晚到時不採用、改重讀）
@@ -1339,7 +1347,7 @@
       const open = k in state.grpOpen ? state.grpOpen[k] : openDefault;
       return `<details class="grp" data-grp="${esc(k)}"${open ? ' open' : ''}><summary>${k === NO_STAFF ? esc(k) : staffTag(k)}（${groups[k].length}）</summary><ul>${sortByAttn(groups[k]).map(c => {
         const a = listPillOf(c);
-        return `<li><button type="button" class="crow" data-go="${esc(c.id)}" aria-current="${sel && sel.id === c.id}"><span><b>${esc(c.name)}</b><span class="sub">${esc(c.kind || c.type || '農民')}`
+        return `<li><button type="button" class="crow" data-go="${esc(c.id)}" aria-current="${sel && sel.id === c.id}"><span><b data-nomyfix>${esc(c.name)}</b><span class="sub">${esc(c.kind || c.type || '農民')}`
           + `${c.crop ? '・' + esc(cropText(c.crop)) : ''}${c.area ? '・' + esc(c.area) : ''}</span></span>${a ? `<span class="pill ${a.cls}">${esc(a.text)}</span>` : ''}</button></li>`;
       }).join('')}</ul></details>`;
     }).join('');
@@ -1389,7 +1397,8 @@
   function myLine(v, k) {
     const s = v && v.my && typeof v.my[k] === 'string' ? v.my[k].trim() : '';
     if (!s) return '';
-    return `<div class="my-line" lang="my">${esc(s)}</div>${v.id ? myFixHtml(v, k, s) : '' /* 第28任：主管改緬甸錯字 */}`;
+    // data-nomyfix：這是資料（Gemini 寫的緬文版），不是程式寫死的字，「緬文對照」的換字不碰（抓BUG第16輪 主管1）
+    return `<div class="my-line" lang="my" data-nomyfix>${esc(s)}</div>${v.id ? myFixHtml(v, k, s) : '' /* 第28任：主管改緬甸錯字 */}`;
   }
 
   /**
@@ -1410,9 +1419,9 @@
     const dealer = c.type === '盤商' || c.type === '種子商';
     const kv = (k, val) => val !== '' && val != null ? `<span>${k}：${esc(val)}</span>` : '';
     // 第28任 2026-11-20 老闆「主管要能改緬甸錯字」：名字、鎮、村、老闆、地址旁邊多一個「✎ 改」
-    const kvFix = (k, val, field) => val !== '' && val != null ? `<span>${k}：${esc(val)} ${ctextFixHtml(c, field)}</span>` : '';
+    const kvFix = (k, val, field) => val !== '' && val != null ? `<span>${k}：<span data-nomyfix>${esc(val)}</span> ${ctextFixHtml(c, field)}</span>` : '';
     const signTag = dealer && c.signed === true ? ' <span class="pill p-grn">已簽約</span>' : ''; // 第28任 抓BUG第11輪 主管3：簽約後不再改已結束，另外標出來（新字待譯）
-    return `<div class="card profile"><span><b>${esc(c.name)}</b>（${esc(c.id)}・${esc(c.kind || c.type || '農民')}）${signTag} ${ctextFixHtml(c, 'name')}</span><span>${esc(c.area || '')}</span>${kvFix('鎮／မြို့နယ်', c.town, 'town')}`
+    return `<div class="card profile"><span><b data-nomyfix>${esc(c.name)}</b>（${esc(c.id)}・${esc(c.kind || c.type || '農民')}）${signTag} ${ctextFixHtml(c, 'name')}</span><span>${esc(c.area || '')}</span>${kvFix('鎮／မြို့နယ်', c.town, 'town')}`
       + `${kvFix('村／ကျေးရွာ', c.village, 'village') /* 0.4.75 董事長「農民改鎮跟村」：鄉改村、鎮放前面 */}${kv('電話／ဖုန်း', c.phone)}
         ${dealer ? kvFix('老闆／ဆိုင်ရှင်', c.owner, 'owner') + kvFix('地址／လိပ်စာ', c.address, 'address') + kv('作物', cropText(c.crop)) + kv('品牌（舊資料）／တံဆိပ်（ဒေတာဟောင်း）', c.brand) + kv('其他／အခြား', c.fertilizer) /* 0.4.73 董事長：盤商、種子商品牌改作物；舊的品牌資料有才顯示 */
           : kv('作物', cropText(c.crop)) + kv('品種／မျိုး', c.variety) + kv('代碼／ကုဒ်', c.varCode) + kv('目前種植面積／လက်ရှိ စိုက်ဧက', c.areaNow === '' || c.areaNow == null ? '' : c.areaNow + ' ' + (state.data.areaUnit || '英畝'))
@@ -1445,7 +1454,7 @@
         <dt>摘要</dt><dd>${esc(v.summary || noSummaryText(v))}${errDetail(v)}${myLine(v, 'summary')}</dd>
         ${v.noMeet ? `<dt>沒拜訪<span class="my">မသွားဖြစ်ပါ</span></dt><dd><span class="pill p-yel">沒拜訪<span class="my">မသွားဖြစ်ပါ</span></span> ${esc(v.noMeet)}</dd>` : ''}`
           + `${v.closing ? `<dt>結案</dt><dd>${esc(v.closing)}</dd>` : ''}${v.plantFail ? `<dt>種植失敗<span class="my">စိုက်ပျိုးမှု မအောင်မြင်</span></dt><dd>${esc(v.plantFail)}</dd>` : ''}`
-          + `${v.text ? `<dt>打字</dt><dd class="pre">${esc(v.text)}${v.id ? fixBoxHtml('text:' + v.id, '改內容', `<textarea data-fixin maxlength="3000" rows="4" aria-label="打字內容">${esc(v.text)}</textarea>`) : '' /* 第27任：主管改業務打錯的字 */}</dd>` : ''}`
+          + `${v.text ? `<dt>打字</dt><dd class="pre" data-nomyfix>${esc(v.text)}${v.id ? fixBoxHtml('text:' + v.id, '改內容', `<textarea data-fixin maxlength="3000" rows="4" aria-label="打字內容">${esc(v.text)}</textarea>`) : '' /* 第27任：主管改業務打錯的字 */}</dd>` : ''}`
           + `${v.id && v.audio ? `<dt>逐字稿</dt><dd>${transcriptFixHtml(v)}</dd>` : '' /* 第28任：主管改緬甸錯字 */}`
           + `${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') + histStatusHtml(c, list.length > 0)}</div>`;
   }
@@ -1942,7 +1951,10 @@
     const f = state.mf || (state.mf = { q: '', fixed: false, msg: '' });
     const fixes = window.FarmMyFix ? window.FarmMyFix.get() : {};
     const q = f.q.trim().toLowerCase();
-    const hit = state.myList.items.filter(x => (!f.fixed || x.my in fixes)
+    // 修正表裡有、程式檔裡已經找不到的句子（例：之後照譯稿回填改了那句）也要列，不然看不到、還原不了（抓BUG第16輪 主管3）
+    const known = new Set(state.myList.items.map(x => x.my));
+    const orphans = Object.keys(fixes).filter(k => !known.has(k)).map(k => ({ my: k, zh: ['（程式裡已經找不到這句，可以按還原）'], where: [] }));
+    const hit = orphans.concat(state.myList.items).filter(x => (!f.fixed || x.my in fixes)
       && (!q || x.my.toLowerCase().includes(q) || x.zh.some(z => z.toLowerCase().includes(q))));
     return { hit, fixes };
   }
@@ -1968,7 +1980,7 @@
     return `<section data-nomyfix><h3>緬文對照 <span class="sub">畫面上固定的緬文翻錯了，在這裡改；手機下次同步、主管頁重新整理後就換成新的字</span></h3>
       <p class="sub"><input type="search" id="mfQ" value="${esc(f.q)}" placeholder="打中文或緬文找句子，例如：送出" aria-label="找句子">
       <label><input type="checkbox" id="mfFixed"${f.fixed ? ' checked' : ''}> 只看改過的</label></p>
-      <p class="sub" aria-live="polite">${esc(f.msg || '')}</p><div id="mfList">${renderMyFixRows()}</div></section>`;
+      <p class="sub" id="mfMsg" aria-live="polite">${esc(f.msg || '')}</p><div id="mfList">${renderMyFixRows()}</div></section>`;
   }
   function bindMyFixRows(root) {
     root.querySelectorAll('[data-mfsave]').forEach(b => b.addEventListener('click', () => saveMyFix(Number(b.dataset.mfsave), false)));
@@ -1981,6 +1993,13 @@
     if (fx) fx.addEventListener('change', () => { state.mf.fixed = fx.checked; list.innerHTML = renderMyFixRows(); bindMyFixRows(list); });
     if (list) bindMyFixRows(list);
   }
+  /* 存檔失敗：除了那一列，也寫在上方的提示列。等後台回來的時候主管可能在搜尋框打字、清單重畫過，
+     那一列已經不在畫面上，只寫那裡會看不到（抓BUG第16輪 主管4） */
+  function showMyFixFail(rowMsg, text) {
+    if (rowMsg) rowMsg.textContent = text;
+    state.mf.msg = '沒有存成功：' + text;
+    const top = $('mfMsg'); if (top) top.textContent = state.mf.msg;
+  }
   async function saveMyFix(i, undo) {
     const it = (state.mfShown || [])[i], row = document.querySelector(`[data-mfrow="${i}"]`);
     if (!it || !row) return;
@@ -1990,7 +2009,7 @@
     row.querySelectorAll('button').forEach(b => { b.disabled = true; });
     let r; try { r = await api({ action: 'myFixSet', from: it.my, to }); } catch (e) { r = null; }
     row.querySelectorAll('button').forEach(b => { b.disabled = false; });
-    if (!r || !r.ok) { if (msg) msg.textContent = (r && r.message) || '沒有存成功，請再試一次'; else state.mf.msg = (r && r.message) || '沒有存成功'; return; }
+    if (!r || !r.ok) { showMyFixFail(msg, (r && r.message) || '沒有存成功，請再試一次'); return; }
     state.data.myFixes = r.myFixes;
     if (window.FarmMyFix) window.FarmMyFix.set(r.myFixes, true);
     state.mf.msg = undo ? '已還原成原本的字' : '已存好；手機下次同步後也會換成新的字';
