@@ -2120,7 +2120,7 @@
       + `<div class="pre aires" data-nomyfix>${esc(a.result.text)}</div>` : '';
     return `<section class="aidiag"><h3 data-tr="待譯">AI 診斷</h3>
       <p class="sub" data-tr="待譯">把最近 7 天的錯誤紀錄（先拿掉農民名字、電話）送給 AI，用白話說哪裡出錯、可能原因、建議怎麼修。只會給建議，不會改程式；要修的請交給工程師。</p>
-      <p data-tr="待譯">本月已花 <b id="aiSpent">${st.spentUsd.toFixed(2)}</b> 美元／上限 ${st.capUsd} 美元（${esc(st.month)}）</p>
+      <p data-tr="待譯" id="aiSpent">本月（${esc(st.month)}）已花：${Object.keys(st.spent || {}).map(k => `${k} <b>${Number(st.spent[k] || 0).toFixed(2)}</b> 美元`).join('、')}（兩家各自上限 ${st.capUsd} 美元）</p>
       <p><label data-tr="待譯">用哪一家 <select id="aiProv">${opts}</select></label>
         <button class="btn" type="button" id="aiRun"${a.busy || noKey ? ' disabled' : ''} data-tr="待譯">${a.busy ? '診斷中…（大約 1 分鐘）' : '開始診斷'}</button></p>
       ${noKey ? `<p class="err" data-tr="待譯">${esc(a.provider)} 還沒放金鑰：請董事長到 Apps Script「專案設定 → 指令碼屬性」貼上 ${a.provider === 'OpenAI' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY'}</p>` : ''}
