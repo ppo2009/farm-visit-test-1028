@@ -433,7 +433,8 @@
   function fixLabelMy(label) {
     if (FIX_LABEL_MY[label]) return FIX_LABEL_MY[label];
     const crop = String(label).match(/^改（(.+)全部一起改）$/);
-    return crop ? `ပြင်မည်（${crop[1]} အားလုံး အတူတူ ပြင်မည်）` : '';
+    // 抓BUG第17輪 主管2：作物名只放中文那半（「Tomato／緬文名」的緬文名跟後面的緬文黏成一段，緬文對照就對不上這句）
+    return crop ? `ပြင်မည်（${crop[1].split('／')[0]} အားလုံး အတူတူ ပြင်မည်）` : '';
   }
   /** 修改框下面的提示字：中文後面接「／緬文」（譯稿 D、E4、F20） */
   const FIX_MSG_MY = {
@@ -1472,7 +1473,7 @@
     const err = (state.histErr || {})[c.id];
     // 緬文照譯稿 F3
     if (err) {
-      return `<p class="err">完整拜訪紀錄沒讀到（${esc(err)}）。<span class="my">သွားရောက်မှု မှတ်တမ်း အပြည့်အစုံ ဖတ်မရပါ（${esc(err)}）。</span>`
+      return `<p class="err">完整拜訪紀錄沒讀到（${esc(err)}）。<span class="my">သွားရောက်မှု မှတ်တမ်း အပြည့်အစုံ ဖတ်မရပါ。</span>` // 抓BUG第17輪 主管1：原因 err 本身已是「中文／緬文」，緬文這行不再印一次
         + ` <button type="button" class="btn" data-histretry="${esc(c.id)}">重試<span class="my">ပြန်စမ်းရန်</span></button></p>`;
     }
     if (hasList) return '';
@@ -1983,7 +1984,8 @@
      畫面上固定的緬文（按鈕、標題、提示）翻錯時在這裡改。清單是把手機、主管頁的程式檔讀下來，
      找出每一段緬文和它前面的中文（例：「送出／…」→ 中文「送出」配那段緬文），主管打中文關鍵字找到那句就能改。
      改好的字存在後台設定「緬文修正」，web/myfix.js 在手機和主管頁的畫面上換掉；程式裡的緬文不動。
-     清單本身掛 data-nomyfix：要看得到程式原本的字，才知道改了什麼。後台回的訊息（錯誤提示等）不在清單裡 */
+     清單裡「原本」「改成」那兩格掛 data-nomyfix：要看得到程式原本的字，才知道改了什麼。後台回的訊息（錯誤提示等）不在清單裡。
+     抓BUG第17輪 主管3：原本整頁都掛 data-nomyfix，這頁自己的標題、按鈕緬文列在清單上卻改了也換不掉 → 只掛在那兩格（改緬文的框是 textarea，換字本來就不碰） */
   const MY_FILES = [['index.html', '手機'], ['app.js', '手機'], ['core.js', '手機'], ['unlock.js', '手機'], ['voice.js', '手機'], ['inapp.js', '手機'],
     ['boss.html', '主管頁'], ['boss.js', '主管頁']];
   const MY_LIST_MAX = 100;
@@ -2030,8 +2032,8 @@
     const rows = state.mfShown.map((x, i) => {
       const now = fixes[x.my];
       return `<li data-mfrow="${i}"><b>${esc(x.zh.join('｜') || '（找不到旁邊的中文）')}</b> <span class="sub">${esc(x.where.join('、'))}</span>`
-        + `<div class="sub">原本（မူရင်း）：<span lang="my">${esc(x.my)}</span></div>`
-        + `${now ? `<div>改成（ပြင်ဆင်ချက်）：<b lang="my">${esc(now)}</b> <button class="btn" type="button" data-mfundo="${i}">還原<span class="my">ပြန်ယူမည်</span></button></div>` : ''}`
+        + `<div class="sub">原本（မူရင်း）：<span lang="my" data-nomyfix>${esc(x.my)}</span></div>`
+        + `${now ? `<div>改成（ပြင်ဆင်ချက်）：<b lang="my" data-nomyfix>${esc(now)}</b> <button class="btn" type="button" data-mfundo="${i}">還原<span class="my">ပြန်ယူမည်</span></button></div>` : ''}`
         + `<details class="stfix"><summary>✎ 改緬文<span class="my">မြန်မာစာ ပြင်</span></summary><textarea data-mfin lang="my" rows="2" maxlength="300" aria-label="改好的緬文">${esc(now || x.my)}</textarea>`
         + ` <button class="btn" type="button" data-mfsave="${i}">存<span class="my">သိမ်းမည်</span></button> <span class="sub" data-mfmsg></span></details></li>`;
     }).join('');
@@ -2043,7 +2045,7 @@
     if (!L.ok) return `<p class="empty">${esc(L.message)}</p><button class="btn" type="button" id="mfReload">重新讀取</button>`;
     const f = state.mf || (state.mf = { q: '', fixed: false, msg: '' });
     // 緬文照董事長譯稿 F21
-    return `<section data-nomyfix><h3>緬文對照<span class="my">မြန်မာစာ တိုက်ဆိုင်ချက်</span> <span class="sub">畫面上固定的緬文翻錯了，在這裡改；手機下次同步、主管頁重新整理後就換成新的字`
+    return `<section><h3>緬文對照<span class="my">မြန်မာစာ တိုက်ဆိုင်ချက်</span> <span class="sub">畫面上固定的緬文翻錯了，在這裡改；手機下次同步、主管頁重新整理後就換成新的字`
       + `<span class="my">စာမျက်နှာပေါ်ရှိ ပုံသေ မြန်မာစာ ဘာသာပြန် မှားနေပါက ဤနေရာတွင် ပြင်ပါ၊ ဖုန်း နောက်တစ်ကြိမ် စင့်ခ်လုပ်ပြီး မန်နေဂျာ စာမျက်နှာ ပြန်ဖွင့်ပြီးနောက် စာသားအသစ်သို့ ပြောင်းသွားမည်</span></span></h3>
       <p class="sub"><input type="search" id="mfQ" value="${esc(f.q)}" placeholder="打中文或緬文找句子，例如：送出／တရုတ် သို့မဟုတ် မြန်မာစာ ရိုက်၍ ဝါကျရှာပါ၊ ဥပမာ - ပို့မည်" aria-label="找句子">
       <label><input type="checkbox" id="mfFixed"${f.fixed ? ' checked' : ''}> 只看改過的<span class="my">ပြင်ထားသည်များသာ ကြည့်မည်</span></label></p>
