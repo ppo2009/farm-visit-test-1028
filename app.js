@@ -4477,7 +4477,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261120-221402'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261120-223124'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -4801,7 +4801,51 @@
       $('farmerMenu').hidden = true; $('farmerBtn').setAttribute('aria-expanded', 'false');
       openNewFarmer(b.dataset.newkind);
     }));
-    hubSel('dealerSel', async cat => { state.lockNext = true; await openVisit(cat); });
+    hubSel('dealerSel', async cat => {
+      const newDealer = newDealerKindOf(cat);
+      if (newDealer) { await openNewDealer(newDealer); return; } // 第28任：「＋ 新增盤商／種子商」直接打開新店家表單
+      state.lockNext = true;
+      await openVisit(cat);
+    });
+    addNewDealerOptions();
+  }
+  /*
+   * 首頁「盤商或種子商」下拉也直接列「＋ 新增盤商」「＋ 新增種子商」（第28任 2026-11-20 董事長：「盤商跟種子商也要改」，同農民的做法）。
+   * 選了就打開那一種的打卡畫面、客戶選單直接撥到「新增」，不用進去再選一次。
+   * 緬文用程式裡現成的類別緬文＋「အသစ်」（打卡畫面客戶選單「＋ 新增盤商」本來就這樣寫），沒有新寫緬文。
+   */
+  const NEW_DEALER_KINDS = ['盤商', '種子商'];
+  const NEW_DEALER_PREFIX = '__newdealer:';
+  /** 下拉選到的值是不是「新增盤商／種子商」；是就回傳那一種，不是回傳空字串 */
+  function newDealerKindOf(value) {
+    const text = String(value || '');
+    if (text.indexOf(NEW_DEALER_PREFIX) !== 0) return '';
+    const kind = text.slice(NEW_DEALER_PREFIX.length);
+    return NEW_DEALER_KINDS.indexOf(kind) >= 0 ? kind : '';
+  }
+  /** 跟 addNewFarmerOptions 一樣寫在程式裡（手機快取混版時舊程式看不到，不會當成類別出錯） */
+  function addNewDealerOptions() {
+    const sel = document.getElementById('dealerSel');
+    if (!sel) return;
+    NEW_DEALER_KINDS.forEach(kind => {
+      const value = NEW_DEALER_PREFIX + kind;
+      if ([...sel.options].some(o => o.value === value)) return;
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = '＋ 新增' + kind + '／' + CAT_MY[kind] + ' အသစ်';
+      sel.appendChild(opt);
+    });
+  }
+  /** 打開新盤商／種子商的表單：跟首頁選盤商一樣進打卡畫面，再把客戶選單撥到「新增」、收起選客戶那一塊 */
+  async function openNewDealer(cat) {
+    state.lockNext = true;
+    await openVisit(cat);
+    if (state.view !== 'visit' || state.cat !== cat) return; // 沒登入被送回登入頁、或途中改選別的
+    const hasNew = [...$('farmer').options].some(o => o.value === '__new');
+    if (!hasNew) return;
+    $('farmer').value = '__new';
+    onFarmerChange();
+    hideFarmerPicker(true);
   }
   /*
    * 首頁「＋ 新增農民」（第28任 2026-11-20 董事長：「新增哪一種農民，點進來用下拉式選項就好了」）：
