@@ -122,7 +122,6 @@
 
   function show(view) {
     state.view = view;
-    if (typeof showNewFarmerPick === 'function') showNewFarmerPick(false); // 換畫面（進打卡、回首頁、登出）就把首頁「新增哪一種農民？」收起來（抓BUG第12輪 手機1）
     if (document.body && document.body.dataset) document.body.dataset.view = view; // 第24任 第六批①⑱
     const hh = document.getElementById('homeHdr'); if (hh) { hh.classList.remove('open'); const mb = document.getElementById('menuBtn'); if (mb) mb.setAttribute('aria-expanded', 'false'); }
     ['setup', 'home', 'visit'].forEach(v => { $(v).hidden = v !== view; });
@@ -1968,6 +1967,8 @@
     state.catLocked = !!state.lockNext && ['農戶', '試作', '推廣', '盤商', '種子商'].indexOf(cat) >= 0; state.lockNext = false; // 0.4.53 盤商、種子商也鎖
     if (state.catLocked) state.catManual = true; // 鎖死就不自動切到試作
     state.signOnly = !!state.signNext; state.signNext = false; // 0.4.82 結案分頁的盤商、種子商結案：只走「已簽約」
+    state.farmerPicked = customerId || ''; // 客戶選單「目前選的那位」：新增警告按取消時撥回這位
+    hideFarmerPicker(false); // 上一次從「＋ 新增○○農民」進來時收起的客戶選單，這次先打開（新增的話 openNewFarmer 再收）
     applyCatLabels();
     resetForm();
     await loadOptions();
@@ -4427,7 +4428,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261120-133805'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261120-155936'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -4739,41 +4740,84 @@
       s.addEventListener('change', async () => { const v = s.value; s.value = ''; if (v) await go(v); });
     };
     hubSel('farmerSel', async cat => {
-      if (cat === '__newfarmer') { showNewFarmerPick(true); return; } // 第28任：「＋ 新增農民」先選一種，不直接進打卡
-      showNewFarmerPick(false); // 改選一般／對照／推廣：剛剛開著的三選一收起來
+      const newKind = newFarmerKindOf(cat);
+      if (newKind) { await openNewFarmer(newKind); return; } // 第28任：「＋ 新增○○農民」直接打開那一種的新農民表單
       state.lockNext = true;
       await openVisit(cat);
       if (cat !== '農戶') state.catManual = true;
     });
-    bindNewFarmerPick();
+    addNewFarmerOptions();
+    // 後備的按鈕選單（平常點不到）也一樣：三種新增各一顆
+    document.querySelectorAll('[data-newkind]').forEach(b => b.addEventListener('click', () => {
+      $('farmerMenu').hidden = true; $('farmerBtn').setAttribute('aria-expanded', 'false');
+      openNewFarmer(b.dataset.newkind);
+    }));
     hubSel('dealerSel', async cat => { state.lockNext = true; await openVisit(cat); });
   }
-  /**
-   * 首頁「＋ 新增農民」（第28任 2026-11-19 董事長做法 A）：每位新農民一定屬於一般／對照／推廣其中一種，
-   * 所以選了「新增農民」先在農民卡片下面列這三種讓業務再選一次；選了就跟從選單選那一種一樣進打卡（一樣鎖住類別），
-   * 再把客戶選單直接撥到「＋ 新增農民」，打開新農民表單。例：選新增農民 → 點對照農民 → 出現「新對照資料」表單。
+  /*
+   * 首頁「＋ 新增農民」（第28任 2026-11-20 董事長：「新增哪一種農民，點進來用下拉式選項就好了」）：
+   * 農民下拉直接列「＋ 新增一般拜訪農民／＋ 新增對照農民／＋ 新增推廣農民」，選了就打開那一種的新農民表單，
+   * 不再另外跳出三顆按鈕讓業務選第二次。例：下拉選「＋ 新增對照農民」→ 直接出現新對照農民的表單。
    */
-  function showNewFarmerPick(open) {
-    const box = document.getElementById('newFarmerPick');
-    if (!box) return; // 舊頁面（快取混版）沒有這一塊：什麼都不做
-    const opening = open && box.hidden;
-    box.hidden = !open;
-    // 打開時把焦點移到第一顆（讀螢幕的業務才知道下面多了三個選擇、鍵盤不用先跳過盤商卡；抓BUG第13輪 手機2）
-    if (opening) { const first = box.querySelector('[data-newkind]'); if (first && first.focus) first.focus(); }
+  const NEW_FARMER_KINDS = [['農戶', '一般拜訪農民'], ['試作', '對照農民'], ['推廣', '推廣農民']];
+  const NEW_FARMER_PREFIX = '__newfarmer:';
+  /** 下拉選到的值是不是「新增某一種農民」；是就回傳那一種（農戶／試作／推廣），不是回傳空字串 */
+  function newFarmerKindOf(value) {
+    const text = String(value || '');
+    if (text.indexOf(NEW_FARMER_PREFIX) !== 0) return '';
+    const kind = text.slice(NEW_FARMER_PREFIX.length);
+    return NEW_FARMER_KINDS.some(pair => pair[0] === kind) ? kind : '';
   }
-  /** 首頁農民下拉加「＋ 新增農民」這一項：寫在程式裡、不寫在網頁裡，手機快取混版（新網頁＋舊程式）時舊程式就看不到它（抓BUG第12輪 手機4） */
-  function addNewFarmerOption() {
+  /** 這三項寫在程式裡、不寫在網頁裡：手機快取混版（新網頁＋舊程式）時舊程式看不到它們，不會把它當成類別而出錯（抓BUG第12輪 手機4） */
+  function addNewFarmerOptions() {
     const sel = document.getElementById('farmerSel');
-    // 手機快取混版的另一個方向（舊網頁＋新程式）：網頁上沒有三選一那一塊，就不加這一項（不然選了沒有任何反應；抓BUG第13輪 手機1）
-    if (!sel || !document.getElementById('newFarmerPick') || [...sel.options].some(o => o.value === '__newfarmer')) return;
-    const opt = document.createElement('option');
-    opt.value = '__newfarmer';
-    opt.textContent = '＋ 新增農民';
-    opt.setAttribute('data-tr', '待譯');
-    sel.appendChild(opt);
+    if (!sel) return;
+    NEW_FARMER_KINDS.forEach(([kind, label]) => {
+      const value = NEW_FARMER_PREFIX + kind;
+      if ([...sel.options].some(o => o.value === value)) return;
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = '＋ 新增' + label;
+      opt.setAttribute('data-tr', '待譯');
+      sel.appendChild(opt);
+    });
+  }
+  /**
+   * 從首頁新增進來的表單：上面的「選擇農民」下拉和「也可以打字找」搜尋框用不到（本來就是要新增），收起來。
+   * 從首頁選一般／對照／推廣（找舊客戶）進來時 openVisit 會再打開。（第28任 2026-11-20 董事長截圖）
+   */
+  function hideFarmerPicker(hide) {
+    const box = document.getElementById('farmerPickBox');
+    if (box) box.hidden = !!hide;
+  }
+  /*
+   * 新增農民前先跳警告（第28任 2026-11-20 董事長：「要從根本預防……一開始就要跳警告視窗出來」）。
+   * 起因：Sai Wai Yan 把兩位推廣農民用「一般拜訪」建檔，沒有推廣紀錄，主管頁一直是綠色，只能事後由主管改。
+   * 所以不管從哪裡新增（首頁「＋ 新增○○農民」、或打卡畫面客戶選單的「＋ 新增農民」），都先寫清楚選的是哪一種、
+   * 那一種代表什麼；選錯就按取消，什麼都不建。例：選了一般拜訪 → 視窗說「不做推廣、對照，要做的請取消改選」。
+   * 盤商、種子商不跳（不會跟農民的三種搞混）。緬文待譯（_翻譯/待譯_第28任_20261120.md F25）。
+   */
+  const NEW_FARMER_WARN = {
+    農戶: '你要新增的是【一般拜訪農民】：只拜訪，不做推廣、不做對照。\n'
+      + '這位如果要做推廣或對照，請按「取消」，回首頁改選「＋ 新增推廣農民」或「＋ 新增對照農民」。\n確定是一般拜訪農民嗎？',
+    試作: '你要新增的是【對照農民】：存檔時會一起開始對照紀錄。\n不是對照農民的話，請按「取消」，回首頁改選別種。\n確定是對照農民嗎？',
+    推廣: '你要新增的是【推廣農民】：存檔時會一起開始推廣紀錄。\n不是推廣農民的話，請按「取消」，回首頁改選別種。\n確定是推廣農民嗎？',
+  };
+  /** 跳新增農民的警告；業務按確定（或這一類不用警告）回 true，按取消回 false */
+  function confirmNewFarmerKind(cat) {
+    const text = NEW_FARMER_WARN[cat];
+    if (!text) return true;
+    return confirm(text);
+  }
+  /** 打卡畫面客戶選單選了一項：選「＋ 新增農民」先跳警告，按取消就撥回原本選的那位（或空白），不打開新農民表單 */
+  function onFarmerPicked() {
+    const sel = $('farmer');
+    if (sel.value === '__new' && !confirmNewFarmerKind(state.cat)) sel.value = state.farmerPicked || '';
+    state.farmerPicked = sel.value === '__new' ? state.farmerPicked : sel.value;
+    onFarmerChange();
   }
   async function openNewFarmer(cat) {
-    showNewFarmerPick(false);
+    if (!confirmNewFarmerKind(cat)) return; // 按取消：留在首頁，什麼都不開
     state.lockNext = true;
     await openVisit(cat);
     // 沒登入被送回登入頁、或載入途中業務又改選了別的類別（抓BUG第12輪 手機待查 1、2）：不要把那張表單撥成新增
@@ -4783,38 +4827,7 @@
     if (!hasNew) return; // 這種類別不能新增：停在原本的畫面
     $('farmer').value = '__new';
     onFarmerChange();
-  }
-  /** 畫面上有沒有東西蓋著首頁：上鎖、或任何顯示中的 aria-modal 對話框（鎖畫面、解鎖方式設定…） */
-  function coveredByDialog() {
-    if (typeof FarmLock !== 'undefined' && FarmLock.isLocked && FarmLock.isLocked()) return true;
-    return [...document.querySelectorAll('[aria-modal="true"]')].some(d => !d.hidden && d.getClientRects().length > 0);
-  }
-  function bindNewFarmerPick() {
-    addNewFarmerOption();
-    // 點三選一以外的地方就收起來（點農民卡片本身除外：那是要打開選單）（抓BUG第12輪 手機1）
-    document.addEventListener('click', e => {
-      const t = e.target;
-      if (t && t.closest && t.closest('#newFarmerPick, #farmerSel, #farmerBtn, [data-newfarmer]')) return;
-      showNewFarmerPick(false);
-    });
-    document.querySelectorAll('[data-newkind]').forEach(b => b.addEventListener('click', () => openNewFarmer(b.dataset.newkind)));
-    document.querySelectorAll('[data-newcancel]').forEach(b => b.addEventListener('click', () => showNewFarmerPick(false)));
-    // 按 Esc 收起，焦點回到農民下拉（抓BUG第13輪 手機2）。
-    // 鎖畫面或其他對話框（aria-modal）蓋在上面時不處理，不能動到對話框後面的東西（第14輪 手機1）。
-    // 第15輪 手機1：第14輪原本用「焦點要在三選一裡」來擋，擋太寬——點了框裡的標題字、Tab 離開後按 Esc 都收不起來；改成只擋「有東西蓋著」。
-    //   焦點原本在三選一裡（或沒有停在任何欄位）才搬回農民下拉；焦點在別的欄位就只收起、不搶焦點
-    document.addEventListener('keydown', e => {
-      const box = document.getElementById('newFarmerPick');
-      if (e.key !== 'Escape' || !box || box.hidden || coveredByDialog()) return;
-      const focusWasInside = box.contains(document.activeElement) || document.activeElement === document.body;
-      showNewFarmerPick(false);
-      const sel = document.getElementById('farmerSel');
-      if (focusWasInside && sel && sel.focus) sel.focus();
-    });
-    document.querySelectorAll('[data-newfarmer]').forEach(b => b.addEventListener('click', () => {
-      $('farmerMenu').hidden = true; $('farmerBtn').setAttribute('aria-expanded', 'false');
-      showNewFarmerPick(true);
-    }));
+    hideFarmerPicker(true);
   }
   /** 打卡畫面：返回、選客戶、客戶資料欄、結案欄、照片錄音、儲存 */
   function bindVisitForm() {
@@ -4824,7 +4837,7 @@
       if (state.rec) state.rec.stop();
       resetForm(); showHome();
     });
-    $('farmer').addEventListener('change', onFarmerChange);
+    $('farmer').addEventListener('change', onFarmerPicked); // 第28任：選「＋ 新增農民」先跳警告
     bindFarmerPick(); // 第24任 第六批④
     Object.values(PROFILE_INPUTS).forEach(id => $n(id).addEventListener('input', refreshSave)); // 0.4.71 $n：舊頁面沒有新欄位時初始化不中斷
     $n('quickFill').addEventListener('change', applyQuickFill); // 0.4.82 新增時從已結案的舊客戶帶入基本資料
