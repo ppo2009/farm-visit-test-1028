@@ -4427,7 +4427,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261119-214553'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261120-084527'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -4784,6 +4784,11 @@
     $('farmer').value = '__new';
     onFarmerChange();
   }
+  /** 畫面上有沒有東西蓋著首頁：上鎖、或任何顯示中的 aria-modal 對話框（鎖畫面、解鎖方式設定…） */
+  function coveredByDialog() {
+    if (typeof FarmLock !== 'undefined' && FarmLock.isLocked && FarmLock.isLocked()) return true;
+    return [...document.querySelectorAll('[aria-modal="true"]')].some(d => !d.hidden && d.getClientRects().length > 0);
+  }
   function bindNewFarmerPick() {
     addNewFarmerOption();
     // 點三選一以外的地方就收起來（點農民卡片本身除外：那是要打開選單）（抓BUG第12輪 手機1）
@@ -4795,14 +4800,16 @@
     document.querySelectorAll('[data-newkind]').forEach(b => b.addEventListener('click', () => openNewFarmer(b.dataset.newkind)));
     document.querySelectorAll('[data-newcancel]').forEach(b => b.addEventListener('click', () => showNewFarmerPick(false)));
     // 按 Esc 收起，焦點回到農民下拉（抓BUG第13輪 手機2）。
-    // 只在焦點就在三選一裡面時處理：鎖畫面等對話框蓋在上面時按 Esc，不能把焦點搬到對話框後面（第14輪 手機1）
+    // 鎖畫面或其他對話框（aria-modal）蓋在上面時不處理，不能動到對話框後面的東西（第14輪 手機1）。
+    // 第15輪 手機1：第14輪原本用「焦點要在三選一裡」來擋，擋太寬——點了框裡的標題字、Tab 離開後按 Esc 都收不起來；改成只擋「有東西蓋著」。
+    //   焦點原本在三選一裡（或沒有停在任何欄位）才搬回農民下拉；焦點在別的欄位就只收起、不搶焦點
     document.addEventListener('keydown', e => {
       const box = document.getElementById('newFarmerPick');
-      if (e.key !== 'Escape' || !box || box.hidden || !box.contains(document.activeElement)) return;
-      if (typeof FarmLock !== 'undefined' && FarmLock.isLocked && FarmLock.isLocked()) return; // 鎖畫面蓋著：不動後面的東西
+      if (e.key !== 'Escape' || !box || box.hidden || coveredByDialog()) return;
+      const focusWasInside = box.contains(document.activeElement) || document.activeElement === document.body;
       showNewFarmerPick(false);
       const sel = document.getElementById('farmerSel');
-      if (sel && sel.focus) sel.focus();
+      if (focusWasInside && sel && sel.focus) sel.focus();
     });
     document.querySelectorAll('[data-newfarmer]').forEach(b => b.addEventListener('click', () => {
       $('farmerMenu').hidden = true; $('farmerBtn').setAttribute('aria-expanded', 'false');

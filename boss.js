@@ -865,9 +865,19 @@
     const ids = kind === 'close' ? hideTest(state.data.closings || []).map(c => c.visitId) : suspiciousList().map(v => v.id);
     state.review = { kind, ids, i: 0, rej: null }; state.tab = 'review'; render();
   }
+  /**
+   * 第15輪 主管1：審核卡原本只記「第幾張」（R.i）。按確認後清單換新，前面少了一筆（例如別的主管剛確認了），同一個位置就變成別家店，
+   * 失敗訊息卻還是剛剛那家的。按確認／退回時記下「這一筆」（R.keep），換新清單後先找它在哪裡；找不到（成功了、已從清單移除）才照位置往下一筆
+   */
+  function followKeptItem(R, items) {
+    if (!R.keep) return;
+    const at = items.findIndex(it => (R.kind === 'close' ? it.visitId : it.id) === R.keep);
+    if (at >= 0) R.i = at; else R.keep = null;
+  }
   function renderReview() {
     const R = state.review, items = reviewItems();
     if (!R || !items.length) { state.review = null; state.tab = 'today'; return renderToday(); }
+    followKeptItem(R, items);
     if (R.i >= items.length) R.i = items.length - 1;
     const x = items[R.i], close = R.kind === 'close';
     const v = close ? state.data.visits.find(y => y.id === x.visitId) : x;
@@ -921,7 +931,7 @@
   function bindReview() {
     const box = $('panel').querySelector ? $('panel').querySelector('#reviewCard') : null; if (!box) return; // 舊測試的假畫面沒有 querySelector
     const R = state.review, items = reviewItems(), x = items[R.i], close = R.kind === 'close';
-    const go = d => { R.i = Math.max(0, Math.min(items.length - 1, R.i + d)); R.rej = null; state.closeMsg = ''; render(); window.scrollTo(0, 0); };
+    const go = d => { R.keep = null; R.i = Math.max(0, Math.min(items.length - 1, R.i + d)); R.rej = null; state.closeMsg = ''; render(); window.scrollTo(0, 0); }; // 自己換張：不再跟著剛剛那筆
     let sx = null; // 左右滑動切換
     box.addEventListener('touchstart', e => { sx = e.touches[0].clientX; }, { passive: true });
     box.addEventListener('touchend', e => { if (sx == null) return; const dx = e.changedTouches[0].clientX - sx; sx = null; if (Math.abs(dx) > 60 && !R.rej) go(dx < 0 ? 1 : -1); });
@@ -965,6 +975,7 @@
         const reasons = ok ? [] : [...box.querySelectorAll('input[name=rj]:checked')].map(i => i.value), note = ok ? '' : $('rejNote').value.trim();
         box.querySelectorAll('[data-rv]').forEach(y => { y.disabled = true; });
         state.closeSending = x.visitId;
+        R.keep = x.visitId; // 第15輪 主管1：換新清單後先找回這一筆（失敗時留在同一家，成功時它不在了才往下一筆）
         let r;
         try { r = await api(Object.assign({ action: 'closeDecide', visitId: x.visitId, decision: ok ? 'confirm' : 'reject' }, ok ? {} : { reasons, note })); } catch (e) { r = { ok: false, message: '連不上伺服器／ဆာဗာနှင့် ချိတ်မရပါ' }; } finally { state.closeSending = null; }
         // 抓BUG第2輪 主管組3：後台回「已處理過」時原本一律當成功、說「別人處理過了」→ 別人做的跟我相反（我退回、他已確認）也看不出來。
