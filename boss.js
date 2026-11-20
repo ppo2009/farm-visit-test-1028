@@ -1266,12 +1266,20 @@
   function listPillOf(c) {
     const attn = attnOf(c);
     const dealer = c.type === '盤商' || c.type === '種子商';
-    if (dealer || c.status === '已結束') return attn;
-    const grow = growDayText(c, state.data.today);
+    if (dealer || c.status === '已結束' || c.status === '暫停') return attn; // 老闆 2026-11-20：暫停的不顯示
+    const grow = listGrowText(c);
     if (!grow) return attn;
-    if (!attn) return { cls: 'p-grn', text: '種植' + grow };
+    if (!attn) return { cls: 'p-grn', text: grow };
     if (attn.cls !== 'p-grn') return attn;
-    return { cls: attn.cls, text: attn.text + '・種植' + grow };
+    return { cls: attn.cls, text: attn.text + '・' + grow };
+  }
+  /* 清單標籤的種植天數。老闆 2026-11-20「換個寫法」：超過作物生長天數（例：種了 400 天、番茄 120 天）多半已經採收、
+     種植日期沒改成新的一季，寫「種植日期待更新（已過 280 天）」；沒超過照舊「種植第 N 天／T 天」 */
+  function listGrowText(c) {
+    const n = growDayOf(c, state.data.today), total = cropDaysOf(c.crop);
+    if (n == null) return '';
+    if (total && n > total) return `種植日期待更新（已過 ${n - total} 天）`;
+    return '種植' + growDayText(c, state.data.today);
   }
   const NO_STAFF = '（未指派）';
   /** 符合篩選的客戶。有打搜尋字時找全部客戶（不限「要注意的」），找不到人才不會以為客戶不見 */
