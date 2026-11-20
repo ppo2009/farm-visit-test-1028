@@ -267,6 +267,8 @@
     if (accTab) { accTab.textContent = data.role === '總經理' ? '業務、主管帳號' : '業務帳號'; biDom(accTab.parentNode); }
     const admTab = document.querySelector('.tab[data-tab="admin"]');
     if (admTab) admTab.hidden = data.role !== '總經理'; // 第28任：資料管理只有總經理看得到
+    const aiBtn = document.getElementById('aiBtn');
+    if (aiBtn) aiBtn.hidden = data.role !== '總經理'; // 第28任 2026-11-21：AI 診斷只有總經理看得到
     $('updated').textContent = (t => '更新於 ' + t + '（緬甸時間）／' + t + ' တွင် အပ်ဒိတ်လုပ်ပြီး (မြန်မာစံတော်ချိန်)')((() => { try { return new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Yangon' }); } catch (e) { return new Date(Date.now() + 6.5 * 3600000).toISOString().slice(11, 16); } })()); // 0.5.18 C8：原本用手機／電腦自己的時區，台灣看差一個半小時
     // 0.4.38 董事長：「開啟試算表」只有總經理有（後台只給總經理網址，主管拿到的是空的就藏起來）
     $('sheetLink').href = data.sheetUrl || '#';
@@ -355,13 +357,14 @@
     $('briefBadge').hidden = !unread; $('briefBadge').textContent = unread ? String(unread) : '';
     // 抓BUG第6輪 主管組3：整頁重畫（重新整理、離開 10 分鐘切回來自動重讀）也保留同一位客戶打開的修改框和打到一半的字
     const d0 = $('custDetail'), keepCid = d0 ? d0.dataset.cid : '', keepBoxes = d0 ? openFixBoxes(d0) : [];
-    $('panel').innerHTML = segBar() + ({ today: renderToday, overdue: renderOverdue, review: renderReview, moremenu: renderMoreMenu, latest: renderLatest, cal: renderCal, trial: renderTrial, map: renderMap, table: renderTable, reports: renderReports, progress: () => staffCards() + renderProgress(), tasks: renderTasks, accounts: renderAccounts, briefs: renderBriefs, errors: renderErrors, myfix: renderMyFix, admin: renderAdmin })[state.tab](); // 第24任 第七批：今天、逾期、審核、更多（手機）；本月目標、每位業務卡片搬到工作進度
+    $('panel').innerHTML = segBar() + ({ today: renderToday, overdue: renderOverdue, review: renderReview, moremenu: renderMoreMenu, latest: renderLatest, cal: renderCal, trial: renderTrial, map: renderMap, table: renderTable, reports: renderReports, progress: () => staffCards() + renderProgress(), tasks: renderTasks, accounts: renderAccounts, briefs: renderBriefs, errors: renderErrors, myfix: renderMyFix, admin: renderAdmin, aidiag: renderAiDiag })[state.tab](); // 第24任 第七批：今天、逾期、審核、更多（手機）；本月目標、每位業務卡片搬到工作進度
     if (state.tab === 'tasks') bindTasks();
     if (state.tab === 'briefs') bindBriefs();
     if (state.tab === 'accounts') bindAccounts();
     if (state.tab === 'errors') bindErrors();
     if (state.tab === 'myfix') bindMyFix();
     if (state.tab === 'admin') bindAdmin(); // 第28任：資料管理
+    if (state.tab === 'aidiag') bindAiDiag(); // 第28任：AI 診斷
     if (state.tab === 'trial') bindCustomers();
     bindGo($('panel'));
     biDom($('panel')); biDom($('stats')); // 補緬文
@@ -755,7 +758,7 @@
 
   /* ───── 第24任 第七批（老闆核准「設計版」＋「升級版」）：主管頁改成「今天」待辦頁、連續審核、精簡拜訪卡片、手機 4 個導覽 ───── */
   // 導覽分組：手機底部「今天｜拜訪｜客戶｜更多」；電腦頂部 7 個（今天、拜訪、客戶、任務、試作報告、主管匯報、更多）
-  const NAV = { today: ['today', 'overdue', 'review'], visits: ['latest', 'table', 'cal'], customers: ['trial', 'map'], more: ['moremenu', 'tasks', 'reports', 'briefs', 'progress', 'accounts', 'errors', 'myfix', 'admin'] };
+  const NAV = { today: ['today', 'overdue', 'review'], visits: ['latest', 'table', 'cal'], customers: ['trial', 'map'], more: ['moremenu', 'tasks', 'reports', 'briefs', 'progress', 'accounts', 'errors', 'myfix', 'admin', 'aidiag'] };
   const navGroup = t => Object.keys(NAV).find(g => NAV[g].indexOf(t) >= 0) || 'today';
   const SEGS = { visits: [['latest', '卡片<span class="my">ကတ်ပုံစံ</span>'], ['table', '表格<span class="my">ဇယားပုံစံ</span>'], ['cal', '日曆']], customers: [['trial', '清單<span class="my">စာရင်းပုံစံ</span>'], ['map', '地圖<span class="my">မြေပုံ</span>']] };
   const MORE_ITEMS = [['tasks', '任務'], ['reports', '試作報告'], ['briefs', '主管匯報'], ['progress', '工作進度<span class="my">လုပ်ငန်း တိုးတက်မှု</span>'], ['accounts', '業務帳號'], ['errors', '錯誤紀錄<span class="my">အမှား မှတ်တမ်း</span>'], ['myfix', '緬文對照<span class="my">မြန်မာစာ တိုက်ဆိုင်ချက်</span>'], ['admin', '資料管理<span class="my">ဒေတာ စီမံခန့်ခွဲမှု</span>']]; // 第28任：資料管理只有總經理（renderMoreMenu 會濾掉） // 第28任：主管改畫面緬文
@@ -2086,6 +2089,60 @@
     render();
   }
   /*
+   * AI 診斷（第28任 2026-11-21 董事長：「加入 Claude 跟 OpenAI API KEY 功能，讓網頁可以自己除錯」，選「AI 診斷助手」、預設 Claude、每月上限 10 美元）。
+   * 總經理按右上角「AI 診斷」→ 這一頁：看本月花了多少、選 Claude 或 OpenAI、按「開始診斷」→ 後台把最近 7 天錯誤紀錄（拿掉個資）送去，
+   * 回來的白話診斷顯示在下面，也存在試算表「AI診斷」分頁。不會改任何程式。新字只有中文，緬文待譯（只有總經理用）。
+   */
+  function aiState() { return state.ai || (state.ai = { st: null, loading: false, busy: false, msg: '', result: null, provider: 'Claude' }); }
+  async function loadAiStatus() {
+    const a = aiState();
+    if (a.loading) return;
+    a.loading = true;
+    let r; try { r = await api({ action: 'aiDiag', op: 'status' }); } catch (e) { r = null; }
+    a.loading = false;
+    a.st = r && r.ok ? r : { ok: false, message: (r && r.message) || '讀不到 AI 診斷的狀態，請按重新整理' };
+    if (a.st.ok && !a.st.hasKey[a.provider]) { const other = Object.keys(a.st.hasKey).find(k => a.st.hasKey[k]); if (other) a.provider = other; }
+    if (state.tab === 'aidiag') render();
+  }
+  function aiHistoryHtml(list) {
+    if (!list.length) return '<p class="sub" data-tr="待譯">還沒有診斷紀錄</p>';
+    return '<ul class="list">' + list.map(h => `<li><details><summary>${esc(h.time)}・${esc(h.provider)}・${h.count} 筆錯誤・${h.cost.toFixed(3)} 美元</summary>`
+      + `<div class="pre" data-nomyfix>${esc(h.text)}</div></details></li>`).join('') + '</ul>';
+  }
+  function renderAiDiag() {
+    if (!isGM()) return '<p class="empty" data-tr="待譯">只有總經理能用 AI 診斷</p>';
+    const a = aiState(), st = a.st;
+    if (!st) { loadAiStatus(); return '<p class="sub">讀取中…<span class="my">ဖတ်နေသည်…</span></p>'; }
+    if (!st.ok) return `<p class="err">${esc(st.message)}</p>`;
+    const opts = Object.keys(st.hasKey).map(k => `<option value="${k}"${k === a.provider ? ' selected' : ''}>${k}${st.hasKey[k] ? '' : '（還沒放金鑰）'}</option>`).join('');
+    const noKey = !st.hasKey[a.provider];
+    const res = a.result ? `<h4 data-tr="待譯">這次的診斷（${esc(a.result.provider)}・${a.result.count} 筆錯誤・花 ${Number(a.result.costUsd || 0).toFixed(3)} 美元）</h4>`
+      + `<div class="pre aires" data-nomyfix>${esc(a.result.text)}</div>` : '';
+    return `<section class="aidiag"><h3 data-tr="待譯">AI 診斷</h3>
+      <p class="sub" data-tr="待譯">把最近 7 天的錯誤紀錄（先拿掉農民名字、電話）送給 AI，用白話說哪裡出錯、可能原因、建議怎麼修。只會給建議，不會改程式；要修的請交給工程師。</p>
+      <p data-tr="待譯">本月已花 <b id="aiSpent">${st.spentUsd.toFixed(2)}</b> 美元／上限 ${st.capUsd} 美元（${esc(st.month)}）</p>
+      <p><label data-tr="待譯">用哪一家 <select id="aiProv">${opts}</select></label>
+        <button class="btn" type="button" id="aiRun"${a.busy || noKey ? ' disabled' : ''} data-tr="待譯">${a.busy ? '診斷中…（大約 1 分鐘）' : '開始診斷'}</button></p>
+      ${noKey ? `<p class="err" data-tr="待譯">${esc(a.provider)} 還沒放金鑰：請董事長到 Apps Script「專案設定 → 指令碼屬性」貼上 ${a.provider === 'OpenAI' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY'}</p>` : ''}
+      <p class="sub" id="aiMsg" aria-live="polite">${esc(a.msg)}</p>${res}
+      <h4 data-tr="待譯">最近 5 次</h4>${aiHistoryHtml(st.history || [])}</section>`;
+  }
+  function bindAiDiag() {
+    const sel = $('aiProv'), btn = $('aiRun');
+    if (sel) sel.addEventListener('change', () => { aiState().provider = sel.value; render(); });
+    if (btn) btn.addEventListener('click', runAiDiag);
+  }
+  async function runAiDiag() {
+    const a = aiState();
+    if (a.busy) return;
+    a.busy = true; a.msg = ''; render();
+    let r; try { r = await api({ action: 'aiDiag', op: 'run', provider: a.provider }); } catch (e) { r = null; }
+    a.busy = false;
+    if (r && r.ok) { a.result = r; a.msg = ''; a.st = null; } // 重讀狀態（本月花費、最近 5 次）
+    else a.msg = (r && r.message) || '沒有診斷成功，請再試一次（沒有花錢）';
+    if (state.tab === 'aidiag') render();
+  }
+  /*
    * 資料管理（第28任 2026-11-20 董事長：「做一個後台，可以刪改業務、農民、盤商，可修改日期、改錯字、刪改種植作物、日期、拜訪日期」）。
    * 只有總經理看得到（董事長選）。刪除都是標記刪除，下面「已刪除」清單可以還原。
    * 畫面：上面搜尋客戶 → 點開一位：改類型、負責業務、作物、品種、種植日期、推廣／對照紀錄、他的每一筆拜訪（改日期、刪除）、刪除這位；
@@ -2523,6 +2580,8 @@
     if (state.data) render(); else $('moreTabs').hidden = !state.moreOpen;
   });
   $('reload').addEventListener('click', load);
+  // 第28任 2026-11-21：右上角「AI 診斷」（只有總經理看得到，見 onLogin）
+  { const aiBtn = document.getElementById('aiBtn'); if (aiBtn) aiBtn.addEventListener('click', () => { state.tab = 'aidiag'; state.moreOpen = false; render(); }); }
   // 第24任 第七批：手機底部導覽（今天｜拜訪｜客戶｜更多）；記住拜訪、客戶上次看的是哪一種顯示方式
   const lastOf = { visits: 'latest', customers: 'trial' };
   document.querySelectorAll('#bnav [data-bnav]').forEach(b => b.addEventListener('click', () => {
