@@ -2092,9 +2092,21 @@
       <div class="admrow">${admBtn('custDelete', { cid: id }, '刪除這位客戶（可以還原）', '', true)}</div>
     </div>`;
   }
+  /*
+   * 先選類別再列客戶（第28任 2026-11-20 董事長：「一次把所有的農民、盤商、種子商拉出來太亂了，要改成下拉選單，
+   * 分成一般農民、對照農民、推廣農民、種子商、盤商」）。沒選類別就不列；選了再用搜尋框在那一類裡找。
+   * 舊資料只寫「農民」沒有分類的，算一般農民。
+   */
+  const ADM_KIND_OPTIONS = [['一般農民', '一般農民'], ['試作農民', '對照農民'], ['推廣農民', '推廣農民'], ['種子商', '種子商'], ['盤商', '盤商']];
+  function admKindOf(c) {
+    if (c.type === '盤商' || c.type === '種子商') return c.type;
+    return c.kind || '一般農民';
+  }
   function admCustomers() {
     const a = admState(), q = a.q.trim().toLowerCase();
-    const all = ((state.data && state.data.customers) || []).filter(c => !q || [c.id, c.name, c.staff, c.crop, c.area].some(x => String(x || '').toLowerCase().includes(q)));
+    if (!a.kind) return '<p class="sub">請先在上面選一類（一般農民、對照農民、推廣農民、種子商、盤商）</p>';
+    const all = ((state.data && state.data.customers) || []).filter(c => admKindOf(c) === a.kind)
+      .filter(c => !q || [c.id, c.name, c.staff, c.crop, c.area].some(x => String(x || '').toLowerCase().includes(q)));
     const rows = all.slice(0, ADM_MAX).map(c => `<details class="admcust" data-admcust="${esc(c.id)}"${a.open === c.id ? ' open' : ''}>
       <summary><b data-nomyfix>${esc(c.name || '')}</b>（${esc(c.id)}・${esc(admKindLabel(c))}・${esc(c.staff || '沒有負責業務')}）</summary>
       ${a.open === c.id ? admCustomerBody(c) : ''}</details>`).join('');
@@ -2127,7 +2139,8 @@
     return `<section class="admin"><h3>資料管理 <span class="sub">只有總經理看得到；刪除的資料可以在最下面還原</span></h3>
       <p id="admMsg" class="sub" role="status" aria-live="polite">${esc(a.msg)}</p>
       <h4>客戶（農民、盤商、種子商）</h4>
-      <input type="search" id="admQ" value="${esc(a.q)}" placeholder="打名字、編號、業務、作物找客戶" aria-label="找客戶">
+      <div class="admrow"><select id="admKind" aria-label="選客戶類別"><option value="">— 請選類別 —</option>${admOptions(ADM_KIND_OPTIONS, a.kind || '')}</select>
+      <input type="search" id="admQ" value="${esc(a.q)}" placeholder="在這一類裡打名字、編號、業務、作物找" aria-label="找客戶"></div>
       <div id="admCustList">${admCustomers()}</div>
       <h4>業務、主管</h4>${a.list ? admPeople() : '<p class="sub">讀取中…</p>'}
       <h4>已刪除（可以還原）</h4>${a.list ? admDeleted() : '<p class="sub">讀取中…</p>'}
@@ -2160,6 +2173,7 @@
     if (!r || !r.ok) { a.msg = '沒有存成功：' + ((r && r.message) || '請再試一次'); render(); return; }
     a.msg = op.indexOf('Purge') >= 0 ? '已確定刪除' : op.indexOf('Delete') >= 0 ? '已刪除（可以在最下面「已刪除」還原）' : op.indexOf('Restore') >= 0 ? '已還原' : '已存好';
     if (op === 'staffDelete' && r.customersLeft) a.msg += `；他名下還有 ${r.customersLeft} 位客戶，請改負責業務`;
+    if (op === 'custType') { a.kind = value; a.open = arg.cid; } // 換了類型：下拉跟著換到新的那一類，這位照樣開著
     a.hist = {};
     a.list = null;
     await load(); // 主管頁全部資料重讀（清單、拜訪、試作跟著更新）
@@ -2168,6 +2182,8 @@
     const a = admState();
     const q = $('admQ'), list = $('admCustList');
     if (q) q.addEventListener('input', () => { a.q = q.value; a.open = ''; list.innerHTML = admCustomers(); });
+    const kind = $('admKind');
+    if (kind) kind.addEventListener('change', () => { a.kind = kind.value; a.open = ''; list.innerHTML = admCustomers(); });
     const panel = $('panel');
     if (panel.dataset.admBound) return;
     panel.dataset.admBound = '1';
