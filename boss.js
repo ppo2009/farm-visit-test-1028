@@ -1313,16 +1313,18 @@
   /* 客戶清單右邊的標籤要寫什麼。老闆 2026-11-20：拜訪紀錄那邊有「種植第 N 天」，清單也要有（一般、推廣、對照農民都要）。
      沒在做試作、有填種植日期的農民：綠標後面加「・種植第 N 天／T 天」；原本沒有標籤的，單獨出一個綠標。
      這裡只管「顯示」：排序和「要注意的」篩選照舊看 attnOf，
-     例：20 天前拜訪的推廣農民多了天數標籤，但不會因此變成要注意（第28任） */
+     例：20 天前拜訪的推廣農民多了天數標籤，但不會因此變成要注意（第28任）
+     老闆 2026-11-20 晚「客戶只要有種植天數一律改為橘色」：帶了種植天數的標籤改用橘色（p-yel，跟試作／推廣進行中那顆同色）；
+     紅色（逾期、該量測）照舊紅色、不加天數 */
   function listPillOf(c) {
     const attn = attnOf(c);
     const dealer = c.type === '盤商' || c.type === '種子商';
     if (dealer || c.status === '已結束' || c.status === '暫停') return attn; // 老闆 2026-11-20：暫停的不顯示
     const grow = listGrowText(c);
     if (!grow) return attn;
-    if (!attn) return { cls: 'p-grn', text: grow };
+    if (!attn) return { cls: 'p-yel', text: grow };
     if (attn.cls !== 'p-grn') return attn;
-    return { cls: attn.cls, text: attn.text + '・' + grow };
+    return { cls: 'p-yel', text: attn.text + '・' + grow };
   }
   /* 清單標籤的種植天數。老闆 2026-11-20「換個寫法」：超過作物生長天數（例：種了 400 天、番茄 120 天）多半已經採收、
      種植日期沒改成新的一季，寫「種植日期待更新（已過 280 天）」；沒超過照舊「種植第 N 天／T 天」 */
