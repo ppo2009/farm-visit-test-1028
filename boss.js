@@ -1192,6 +1192,20 @@
     if (c.lastVisit && c.lastVisit >= addDays(d.today, -6)) return { cls: 'p-grn', text: `${md(c.lastVisit)} 拜訪／${md(c.lastVisit)} သွားရောက်မှု`, rank: 3 }; // 主管BUG(2號)#11：7 天＝今天往前 6 天（原本 -7 算了 8 天，跟「近 7 天拜訪次數」不一致）
     return null;
   }
+  /* 客戶清單右邊的標籤要寫什麼。老闆 2026-11-20：拜訪紀錄那邊有「種植第 N 天」，清單也要有（一般、推廣、對照農民都要）。
+     沒在做試作、有填種植日期的農民：綠標後面加「・種植第 N 天／T 天」；原本沒有標籤的，單獨出一個綠標。
+     這裡只管「顯示」：排序和「要注意的」篩選照舊看 attnOf，
+     例：20 天前拜訪的推廣農民多了天數標籤，但不會因此變成要注意（第28任） */
+  function listPillOf(c) {
+    const attn = attnOf(c);
+    const dealer = c.type === '盤商' || c.type === '種子商';
+    if (dealer || c.status === '已結束') return attn;
+    const grow = growDayText(c, state.data.today);
+    if (!grow) return attn;
+    if (!attn) return { cls: 'p-grn', text: '種植' + grow };
+    if (attn.cls !== 'p-grn') return attn;
+    return { cls: attn.cls, text: attn.text + '・種植' + grow };
+  }
   const NO_STAFF = '（未指派）';
   /** 符合篩選的客戶。有打搜尋字時找全部客戶（不限「要注意的」），找不到人才不會以為客戶不見 */
   function custFiltered() {
@@ -1265,7 +1279,7 @@
     return `<p class="sub" style="margin:0 0 6px">共 ${list.length} 位<span class="my">စုစုပေါင်း ${list.length} ဦး</span></p>` + names.map(k => {
       const open = k in state.grpOpen ? state.grpOpen[k] : openDefault;
       return `<details class="grp" data-grp="${esc(k)}"${open ? ' open' : ''}><summary>${k === NO_STAFF ? esc(k) : staffTag(k)}（${groups[k].length}）</summary><ul>${sortByAttn(groups[k]).map(c => {
-        const a = attnOf(c);
+        const a = listPillOf(c);
         return `<li><button type="button" class="crow" data-go="${esc(c.id)}" aria-current="${sel && sel.id === c.id}"><span><b>${esc(c.name)}</b><span class="sub">${esc(c.kind || c.type || '農民')}`
           + `${c.crop ? '・' + esc(cropText(c.crop)) : ''}${c.area ? '・' + esc(c.area) : ''}</span></span>${a ? `<span class="pill ${a.cls}">${esc(a.text)}</span>` : ''}</button></li>`;
       }).join('')}</ul></details>`;
