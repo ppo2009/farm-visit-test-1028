@@ -731,7 +731,7 @@
   const NAV = { today: ['today', 'overdue', 'review'], visits: ['latest', 'table', 'cal'], customers: ['trial', 'map'], more: ['moremenu', 'tasks', 'reports', 'briefs', 'progress', 'accounts', 'errors', 'myfix', 'admin'] };
   const navGroup = t => Object.keys(NAV).find(g => NAV[g].indexOf(t) >= 0) || 'today';
   const SEGS = { visits: [['latest', '卡片<span class="my">ကတ်ပုံစံ</span>'], ['table', '表格<span class="my">ဇယားပုံစံ</span>'], ['cal', '日曆']], customers: [['trial', '清單<span class="my">စာရင်းပုံစံ</span>'], ['map', '地圖<span class="my">မြေပုံ</span>']] };
-  const MORE_ITEMS = [['tasks', '任務'], ['reports', '試作報告'], ['briefs', '主管匯報'], ['progress', '工作進度<span class="my">လုပ်ငန်း တိုးတက်မှု</span>'], ['accounts', '業務帳號'], ['errors', '錯誤紀錄<span class="my">အမှား မှတ်တမ်း</span>'], ['myfix', '緬文對照'], ['admin', '資料管理']]; // 第28任：資料管理只有總經理（renderMoreMenu 會濾掉） // 第28任：主管改畫面緬文
+  const MORE_ITEMS = [['tasks', '任務'], ['reports', '試作報告'], ['briefs', '主管匯報'], ['progress', '工作進度<span class="my">လုပ်ငန်း တိုးတက်မှု</span>'], ['accounts', '業務帳號'], ['errors', '錯誤紀錄<span class="my">အမှား မှတ်တမ်း</span>'], ['myfix', '緬文對照'], ['admin', '資料管理<span class="my">ဒေတာ စီမံခန့်ခွဲမှု</span>']]; // 第28任：資料管理只有總經理（renderMoreMenu 會濾掉） // 第28任：主管改畫面緬文
   /** 主管頁設定（後台設定分頁：主管頁還早時間、沒拜訪提醒天數、測試帳號）；舊後台沒送就用預設 */
   function cfg7() {
     const c = (state.data && state.data.bossCfg) || {};
@@ -2038,7 +2038,19 @@
   const ADM_DEALER_KINDS = [['盤商', '盤商'], ['種子商', '種子商']];
   /** 基本資料欄：[主管頁資料的鍵（也是後台 field）, 畫面名稱, 最多幾字] */
   const ADM_INFO_FIELDS = [['name', '名字', 60], ['phone', '電話', 30], ['area', '地區', 60], ['town', '鎮', 60], ['village', '村', 60], ['owner', '老闆名字', 60], ['address', '地址', 200]];
-  const admState = () => state.adm || (state.adm = { q: '', open: '', list: null, hist: {}, msg: '' });
+  /*
+   * 資料管理畫面的緬文：照董事長在 Antigravity 譯好的 _翻譯/資料管理_待譯_第28任_20261120.md 回填（G1～G75）。
+   * 中文後面接一個緬文小字 <span class="my">；按鈕裡的緬文自己一行（CSS），不跟中文黏在一起被拆字。
+   * ADM_MY 是欄位名稱（G12～G25），「存電話」這種按鈕就用「欄位緬文＋သိမ်းမည်」（G26）。
+   */
+  const ADM_MY = { 名字: 'နာမည်', 電話: 'ဖုန်း', 地區: 'ဒေသ', 鎮: 'မြို့နယ်', 村: 'ကျေးရွာ', 老闆名字: 'ဆိုင်ရှင် နာမည်', 地址: 'လိပ်စာ',
+    類型: 'အမျိုးအစား', 負責業務: 'တာဝန်ခံ ဝန်ထမ်း', 作物: 'သီးနှံ', 品種: 'မျိုး', 種植日期: 'စိုက်ရက်', 品項: 'ပစ္စည်း', 開始日: 'စတင်ရက်' };
+  const admMy = (zh, my) => `${zh}<span class="my">${my}</span>`;
+  const admLabel = label => admMy(label, ADM_MY[label]);
+  const admSave = label => admMy('存' + label, ADM_MY[label] + ' သိမ်းမည်');
+  /** 類別的緬文：對照農民是新字（G6），其他四類主管頁原本就有 */
+  const admKindMy = kind => (kind === '對照農民' ? 'နှိုင်းယှဉ် လယ်သမား' : BI[kind] || '');
+  const admState = () => state.adm || (state.adm = { q: '', open: '', list: null, hist: {}, msg: '', msgMy: '' });
   async function loadAdminList() {
     const a = admState();
     let r; try { r = await api({ action: 'admin', op: 'list' }); } catch (e) { r = null; }
@@ -2056,6 +2068,8 @@
     return `<button type="button" class="btn${danger ? ' ghost' : ''}" data-admop="${op}" data-admarg="${esc(JSON.stringify(arg))}"${valId ? ` data-admval="${valId}"` : ''}>${label}</button>`;
   }
   const admOptions = (pairs, cur) => pairs.map(([v, n]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(n)}</option>`).join('');
+  /** 類別下拉：選項裡放不了小字，緬文直接接在中文後面（跟 biDom 補選項的寫法一樣） */
+  const admKindOptions = (pairs, cur) => admOptions(pairs.map(([v, n]) => [v, admKindMy(n) ? n + '／' + admKindMy(n) : n]), cur);
   function admKindLabel(c) {
     const kind = c.kind || c.type || '農民';
     return kind === '試作農民' ? '對照農民' : kind;
@@ -2070,26 +2084,28 @@
     const trials = ((state.data && state.data.trials) || []).filter(t => t.cid === id && t.status === '進行中');
     const visits = a.hist[id];
     if (!visits) loadAdminHistory(id);
-    const trialHtml = trials.map(t => `<div class="admrow"><b>${t.cat === '推廣' ? '推廣' : '對照'} ${esc(t.id)}</b>
-      <label>品項 <input id="admTi_${esc(t.id)}" value="${esc(t.item || '')}" maxlength="60"></label>${admBtn('trialFix', { tid: t.id, field: 'item' }, '存品項', 'admTi_' + t.id)}
-      <label>開始日 <input type="date" id="admTs_${esc(t.id)}" value="${esc(t.start || '')}"></label>${admBtn('trialFix', { tid: t.id, field: 'start' }, '存開始日', 'admTs_' + t.id)}</div>`).join('');
-    const visitHtml = !visits ? '<p class="sub">拜訪讀取中…</p>' : !visits.length ? '<p class="sub">沒有拜訪紀錄</p>'
+    const trialTag = t => (t.cat === '推廣' ? admMy('推廣', 'မြှင့်တင်') : admMy('對照', 'နှိုင်းယှဉ်'));
+    const trialHtml = trials.map(t => `<div class="admrow"><b>${trialTag(t)} ${esc(t.id)}</b>
+      <label>${admLabel('品項')} <input id="admTi_${esc(t.id)}" value="${esc(t.item || '')}" maxlength="60"></label>${admBtn('trialFix', { tid: t.id, field: 'item' }, admSave('品項'), 'admTi_' + t.id)}
+      <label>${admLabel('開始日')} <input type="date" id="admTs_${esc(t.id)}" value="${esc(t.start || '')}"></label>${admBtn('trialFix', { tid: t.id, field: 'start' }, admSave('開始日'), 'admTs_' + t.id)}</div>`).join('');
+    const visitHtml = !visits ? `<p class="sub">${admMy('拜訪讀取中…', 'သွားရောက်မှု ဖတ်နေသည်…')}</p>`
+      : !visits.length ? `<p class="sub">${admMy('沒有拜訪紀錄', 'သွားရောက်မှု မှတ်တမ်း မရှိပါ')}</p>`
       : visits.slice().reverse().map(v => `<div class="admrow"><span>${esc(v.time || '')}・${esc(v.staff || '')}・${esc(v.cat || '')}</span>
-        <input type="date" id="admVd_${esc(v.id)}" value="${esc(String(v.time || '').slice(0, 10))}" aria-label="拜訪日期">${admBtn('visitDate', { vid: v.id }, '改日期', 'admVd_' + v.id)}
-        ${admBtn('visitDelete', { vid: v.id }, '刪除這筆拜訪', '', true)}</div>`).join('');
+        <input type="date" id="admVd_${esc(v.id)}" value="${esc(String(v.time || '').slice(0, 10))}" aria-label="拜訪日期／သွားရောက်သည့် ရက်စွဲ">${admBtn('visitDate', { vid: v.id }, admMy('改日期', 'ရက်စွဲ ပြင်မည်'), 'admVd_' + v.id)}
+        ${admBtn('visitDelete', { vid: v.id }, admMy('刪除這筆拜訪', 'ဤသွားရောက်မှု ဖျက်မည်'), '', true)}</div>`).join('');
     // 基本資料：一欄一個框＋存（第28任 董事長「資料管理裡面農民的資料可以刪除跟更改」）
-    const infoHtml = ADM_INFO_FIELDS.map(([field, label, max]) => `<label>${label} <input id="admI_${field}_${esc(id)}" value="${esc(c[field] || '')}" maxlength="${max}"></label>`
-      + admBtn('custInfo', { cid: id, field }, '存' + label, `admI_${field}_${id}`)).join('');
+    const infoHtml = ADM_INFO_FIELDS.map(([field, label, max]) => `<label>${admLabel(label)} <input id="admI_${field}_${esc(id)}" value="${esc(c[field] || '')}" maxlength="${max}"></label>`
+      + admBtn('custInfo', { cid: id, field }, admSave(label), `admI_${field}_${id}`)).join('');
     return `<div class="admbody">
       <div class="admrow">${infoHtml}</div>
-      <div class="admrow"><label>類型 <select id="admK_${esc(id)}">${admOptions(kinds, curKind)}</select></label>${admBtn('custType', { cid: id }, '存類型', 'admK_' + id)}
-        <label>負責業務 <select id="admS_${esc(id)}">${staffOpts}</select></label>${admBtn('custStaff', { cid: id }, '存負責業務', 'admS_' + id)}</div>
-      <div class="admrow"><label>作物 <input id="admC_${esc(id)}" value="${esc(c.crop || '')}" maxlength="60"></label>${admBtn('custCrop', { cid: id, field: 'crop' }, '存作物', 'admC_' + id)}
-        <label>品種 <input id="admV_${esc(id)}" value="${esc(c.variety || '')}" maxlength="60"></label>${admBtn('custCrop', { cid: id, field: 'variety' }, '存品種', 'admV_' + id)}
-        <label>種植日期 <input type="date" id="admP_${esc(id)}" value="${esc(c.plantDate || '')}"></label>${admBtn('plantDate', { cid: id }, '存種植日期', 'admP_' + id)}</div>
+      <div class="admrow"><label>${admLabel('類型')} <select id="admK_${esc(id)}">${admKindOptions(kinds, curKind)}</select></label>${admBtn('custType', { cid: id }, admSave('類型'), 'admK_' + id)}
+        <label>${admLabel('負責業務')} <select id="admS_${esc(id)}">${staffOpts}</select></label>${admBtn('custStaff', { cid: id }, admSave('負責業務'), 'admS_' + id)}</div>
+      <div class="admrow"><label>${admLabel('作物')} <input id="admC_${esc(id)}" value="${esc(c.crop || '')}" maxlength="60"></label>${admBtn('custCrop', { cid: id, field: 'crop' }, admSave('作物'), 'admC_' + id)}
+        <label>${admLabel('品種')} <input id="admV_${esc(id)}" value="${esc(c.variety || '')}" maxlength="60"></label>${admBtn('custCrop', { cid: id, field: 'variety' }, admSave('品種'), 'admV_' + id)}
+        <label>${admLabel('種植日期')} <input type="date" id="admP_${esc(id)}" value="${esc(c.plantDate || '')}"></label>${admBtn('plantDate', { cid: id }, admSave('種植日期'), 'admP_' + id)}</div>
       ${trialHtml}
-      <h4>拜訪</h4>${visitHtml}
-      <div class="admrow">${admBtn('custDelete', { cid: id }, '刪除這位客戶（可以還原）', '', true)}</div>
+      <h4>${admMy('拜訪', 'သွားရောက်မှု')}</h4>${visitHtml}
+      <div class="admrow">${admBtn('custDelete', { cid: id }, admMy('刪除這位客戶（可以還原）', 'ဤဖောက်သည် ဖျက်မည်（ပြန်ယူနိုင်သည်）'), '', true)}</div>
     </div>`;
   }
   /*
@@ -2102,60 +2118,90 @@
     if (c.type === '盤商' || c.type === '種子商') return c.type;
     return c.kind || '一般農民';
   }
+  /** 客戶那一行後面的緬文：類別；沒有負責業務時也寫出來（G6、G11） */
+  function admSummaryMy(c) {
+    const parts = [admKindMy(admKindLabel(c))];
+    if (!c.staff) parts.push('တာဝန်ခံ ဝန်ထမ်း မရှိပါ');
+    const text = parts.filter(Boolean).join('・');
+    return text ? `<span class="my">${text}</span>` : '';
+  }
   function admCustomers() {
     const a = admState(), q = a.q.trim().toLowerCase();
-    if (!a.kind) return '<p class="sub">請先在上面選一類（一般農民、對照農民、推廣農民、種子商、盤商）</p>';
+    if (!a.kind) {
+      return `<p class="sub">${admMy('請先在上面選一類（一般農民、對照農民、推廣農民、種子商、盤商）',
+        'အပေါ်တွင် အမျိုးအစား တစ်ခု အရင်ရွေးပါ（ပုံမှန် လယ်သမား၊ နှိုင်းယှဉ် လယ်သမား၊ မြှင့်တင် လယ်သမား၊ မျိုးစေ့ဆိုင်၊ ကုန်သည်）')}</p>`;
+    }
     const all = ((state.data && state.data.customers) || []).filter(c => admKindOf(c) === a.kind)
       .filter(c => !q || [c.id, c.name, c.staff, c.crop, c.area].some(x => String(x || '').toLowerCase().includes(q)));
     const rows = all.slice(0, ADM_MAX).map(c => `<details class="admcust" data-admcust="${esc(c.id)}"${a.open === c.id ? ' open' : ''}>
-      <summary><b data-nomyfix>${esc(c.name || '')}</b>（${esc(c.id)}・${esc(admKindLabel(c))}・${esc(c.staff || '沒有負責業務')}）</summary>
+      <summary><b data-nomyfix>${esc(c.name || '')}</b>（${esc(c.id)}・${esc(admKindLabel(c))}・${esc(c.staff || '沒有負責業務')}）${admSummaryMy(c)}</summary>
       ${a.open === c.id ? admCustomerBody(c) : ''}</details>`).join('');
-    return `<p class="sub">找到 ${all.length} 位${all.length > ADM_MAX ? `，先列前 ${ADM_MAX} 位，請打更多字縮小範圍` : ''}</p>${rows}`;
+    const more = all.length > ADM_MAX;
+    const foundZh = `找到 ${all.length} 位${more ? `，先列前 ${ADM_MAX} 位，請打更多字縮小範圍` : ''}`;
+    const foundMy = `${all.length} ဦး တွေ့သည်${more ? `၊ ပထမ ${ADM_MAX} ဦးသာ ပြထားသည်၊ စာပိုရိုက်ပြီး ရှာပါ` : ''}`;
+    return `<p class="sub">${admMy(foundZh, foundMy)}</p>${rows}`;
   }
   function admPeople() {
     const people = (admState().list && admState().list.people) || [];
-    if (!people.length) return '<p class="sub">沒有可以管理的帳號</p>';
-    return people.map(p => `<div class="admrow"><span>${esc(p.name)}（${esc(p.account)}・${esc(p.role)}${p.active ? '' : '・停用'}）</span>
-      <input id="admN_${esc(p.account)}" value="${esc(p.name)}" maxlength="40" aria-label="新名字">${admBtn('staffRename', { account: p.account }, '改名字', 'admN_' + p.account)}
-      ${admBtn('staffDelete', { account: p.account }, '刪除帳號', '', true)}</div>`).join('');
+    if (!people.length) return `<p class="sub">${admMy('沒有可以管理的帳號', 'စီမံနိုင်သော အကောင့် မရှိပါ')}</p>`;
+    return people.map(p => `<div class="admrow"><span>${esc(p.name)}（${esc(p.account)}・${esc(p.role)}${p.active ? '' : '・停用'}）${p.active ? '' : '<span class="my">ပိတ်ထား</span>'}</span>
+      <input id="admN_${esc(p.account)}" value="${esc(p.name)}" maxlength="40" aria-label="新名字／နာမည်အသစ်">${admBtn('staffRename', { account: p.account }, admMy('改名字', 'နာမည် ပြင်မည်'), 'admN_' + p.account)}
+      ${admBtn('staffDelete', { account: p.account }, admMy('刪除帳號', 'အကောင့် ဖျက်မည်'), '', true)}</div>`).join('');
   }
   function admDeleted() {
     const l = admState().list;
     if (!l || !l.ok) return '';
     // 每一筆：還原、確定刪除（董事長「這邊要多一個確定刪除的按鈕，按下去就確定刪除了」）
-    const c = l.customers.map(x => `<div class="admrow"><span>客戶 ${esc(x.name)}（${esc(x.cid)}・${esc(x.type)}・${esc(x.staff)}）<small>${esc(x.mark)}</small></span>`
-      + `${admBtn('custRestore', { cid: x.cid }, '還原')}${admBtn('custPurge', { cid: x.cid }, '確定刪除', '', true)}</div>`);
-    const v = l.visits.map(x => `<div class="admrow"><span>拜訪 ${esc(x.at)}・${esc(x.name)}・${esc(x.staff)}<small>${esc(x.mark)}</small></span>`
-      + `${admBtn('visitRestore', { vid: x.vid }, '還原')}${admBtn('visitPurge', { vid: x.vid }, '確定刪除', '', true)}</div>`);
-    const s = l.staff.map(x => `<div class="admrow"><span>帳號 ${esc(x.name)}（${esc(x.account)}）<small>${esc(x.mark)}</small></span>`
-      + `${admBtn('staffRestore', { account: x.account }, '還原')}${admBtn('staffPurge', { account: x.account }, '確定刪除', '', true)}</div>`);
+    const restore = admMy('還原', 'ပြန်ယူမည်'), purge = admMy('確定刪除', 'အပြီးဖျက်မည်');
+    const c = l.customers.map(x => `<div class="admrow"><span>${admMy('客戶', 'ဖောက်သည်')} ${esc(x.name)}（${esc(x.cid)}・${esc(x.type)}・${esc(x.staff)}）<small>${esc(x.mark)}</small></span>`
+      + `${admBtn('custRestore', { cid: x.cid }, restore)}${admBtn('custPurge', { cid: x.cid }, purge, '', true)}</div>`);
+    const v = l.visits.map(x => `<div class="admrow"><span>${admMy('拜訪', 'သွားရောက်မှု')} ${esc(x.at)}・${esc(x.name)}・${esc(x.staff)}<small>${esc(x.mark)}</small></span>`
+      + `${admBtn('visitRestore', { vid: x.vid }, restore)}${admBtn('visitPurge', { vid: x.vid }, purge, '', true)}</div>`);
+    const s = l.staff.map(x => `<div class="admrow"><span>${admMy('帳號', 'အကောင့်')} ${esc(x.name)}（${esc(x.account)}）<small>${esc(x.mark)}</small></span>`
+      + `${admBtn('staffRestore', { account: x.account }, restore)}${admBtn('staffPurge', { account: x.account }, purge, '', true)}</div>`);
     const all = c.concat(v, s);
-    return all.length ? all.join('') : '<p class="sub">沒有刪除的資料</p>';
+    return all.length ? all.join('') : `<p class="sub">${admMy('沒有刪除的資料', 'ဖျက်ထားသော ဒေတာ မရှိပါ')}</p>`;
   }
   function renderAdmin() {
-    if (!isGM()) return '<p class="empty">只有總經理能用資料管理</p>';
+    if (!isGM()) return `<p class="empty">${admMy('只有總經理能用資料管理', 'အထွေထွေမန်နေဂျာသာ ဒေတာ စီမံခန့်ခွဲမှု သုံးနိုင်သည်')}</p>`;
     const a = admState();
     if (!a.list) loadAdminList();
-    return `<section class="admin"><h3>資料管理 <span class="sub">只有總經理看得到；刪除的資料可以在最下面還原</span></h3>
-      <p id="admMsg" class="sub" role="status" aria-live="polite">${esc(a.msg)}</p>
-      <h4>客戶（農民、盤商、種子商）</h4>
-      <div class="admrow"><select id="admKind" aria-label="選客戶類別"><option value="">— 請選類別 —</option>${admOptions(ADM_KIND_OPTIONS, a.kind || '')}</select>
-      <input type="search" id="admQ" value="${esc(a.q)}" placeholder="在這一類裡打名字、編號、業務、作物找" aria-label="找客戶"></div>
+    const loading = `<p class="sub">${admMy('讀取中…', 'ဖတ်နေသည်…')}</p>`;
+    const msgMy = a.msgMy ? `<span class="my">${esc(a.msgMy)}</span>` : '';
+    return `<section class="admin"><h3>${admMy('資料管理', 'ဒေတာ စီမံခန့်ခွဲမှု')} <span class="sub">${admMy('只有總經理看得到；刪除的資料可以在最下面還原', 'အထွေထွေမန်နေဂျာသာ မြင်ရသည်၊ ဖျက်ထားသော ဒေတာများကို အောက်ဆုံးတွင် ပြန်ယူနိုင်သည်')}</span></h3>
+      <p id="admMsg" class="sub" role="status" aria-live="polite">${esc(a.msg)}${msgMy}</p>
+      <h4>${admMy('客戶（農民、盤商、種子商）', 'ဖောက်သည်（လယ်သမား၊ ကုန်သည်၊ မျိုးစေ့ဆိုင်）')}</h4>
+      <div class="admrow"><select id="admKind" aria-label="選客戶類別"><option value="">— 請選類別 —／— အမျိုးအစား ရွေးပါ —</option>${admKindOptions(ADM_KIND_OPTIONS, a.kind || '')}</select>
+      <input type="search" id="admQ" value="${esc(a.q)}" placeholder="在這一類裡打名字、編號、業務、作物找／ဤအမျိုးအစားထဲတွင် နာမည်၊ နံပါတ်၊ ဝန်ထမ်း၊ သီးနှံ ရိုက်၍ ရှာပါ" aria-label="找客戶"></div>
       <div id="admCustList">${admCustomers()}</div>
-      <h4>業務、主管</h4>${a.list ? admPeople() : '<p class="sub">讀取中…</p>'}
-      <h4>已刪除（可以還原）</h4>${a.list ? admDeleted() : '<p class="sub">讀取中…</p>'}
+      <h4>${admMy('業務、主管', 'ဝန်ထမ်း၊ မန်နေဂျာ')}</h4>${a.list ? admPeople() : loading}
+      <h4>${admMy('已刪除（可以還原）', 'ဖျက်ထားသည်များ（ပြန်ယူနိုင်သည်）')}</h4>${a.list ? admDeleted() : loading}
     </section>`;
   }
   /** 刪除前一定再問一次；改名字也問（那個人的手機會登出） */
   const ADM_ASK = {
-    custDelete: '確定要刪除這位客戶？手機、主管頁、報表都會看不到他和他的拜訪（可以在「已刪除」還原）。',
-    visitDelete: '確定要刪除這筆拜訪？（可以在「已刪除」還原）',
-    staffDelete: '確定要刪除這個帳號？他會馬上被登出、不能再登入；名下的客戶請另外改負責業務（可以在「已刪除」還原）。',
-    custPurge: '確定刪除後，這位客戶和他的拜訪、推廣對照、任務都會從資料表拿掉，不能在這裡還原（整列內容會留在試算表「刪除封存」分頁）。確定？',
-    visitPurge: '確定刪除後，這筆拜訪會從資料表拿掉，不能在這裡還原（內容會留在試算表「刪除封存」分頁）。確定？',
-    staffPurge: '確定刪除後，這個帳號會從資料表拿掉，不能在這裡還原（內容會留在試算表「刪除封存」分頁）。確定？',
-    staffRename: '改名字後，這個人名下的客戶、拜訪會一起換成新名字，他的手機會登出、要重新登入。確定？',
+    custDelete: biText('確定要刪除這位客戶？手機、主管頁、報表都會看不到他和他的拜訪（可以在「已刪除」還原）。',
+      'ဤဖောက်သည်ကို ဖျက်ရန် သေချာပါသလား။ ဖုန်း၊ မန်နေဂျာ စာမျက်နှာ၊ အစီရင်ခံစာတို့တွင် ၎င်းနှင့် ၎င်း၏ သွားရောက်မှုများကို မြင်ရတော့မည် မဟုတ်ပါ（「ဖျက်ထားသည်များ」 တွင် ပြန်ယူနိုင်သည်）။'),
+    visitDelete: biText('確定要刪除這筆拜訪？（可以在「已刪除」還原）',
+      'ဤသွားရောက်မှုကို ဖျက်ရန် သေချာပါသလား（「ဖျက်ထားသည်များ」 တွင် ပြန်ယူနိုင်သည်）'),
+    staffDelete: biText('確定要刪除這個帳號？他會馬上被登出、不能再登入；名下的客戶請另外改負責業務（可以在「已刪除」還原）。',
+      'ဤအကောင့်ကို ဖျက်ရန် သေချာပါသလား။ ချက်ချင်း အကောင့်ထွက်သွားပြီး ပြန်ဝင်နိုင်တော့မည် မဟုတ်ပါ၊ ၎င်းတာဝန်ယူထားသော ဖောက်သည်များအတွက် တာဝန်ခံ ဝန်ထမ်း သီးခြား ပြောင်းပေးပါ（「ဖျက်ထားသည်များ」 တွင် ပြန်ယူနိုင်သည်）။'),
+    custPurge: biText('確定刪除後，這位客戶和他的拜訪、推廣對照、任務都會從資料表拿掉，不能在這裡還原（整列內容會留在試算表「刪除封存」分頁）。確定？',
+      'အပြီးဖျက်ပြီးနောက် ဤဖောက်သည်နှင့် ၎င်း၏ သွားရောက်မှု၊ မြှင့်တင် နှိုင်းယှဉ်၊ လုပ်ငန်းများအားလုံး ဒေတာဇယားမှ ဖယ်ရှားသွားမည်ဖြစ်ပြီး ဤနေရာတွင် ပြန်ယူ၍ မရတော့ပါ（အချက်အလက်အားလုံး Sheet ၏ 「ဖျက်သိမ်းမှတ်တမ်း」 စာမျက်နှာတွင် ကျန်ရှိနေမည်）။ သေချာပါသလား။'),
+    visitPurge: biText('確定刪除後，這筆拜訪會從資料表拿掉，不能在這裡還原（內容會留在試算表「刪除封存」分頁）。確定？',
+      'အပြီးဖျက်ပြီးနောက် ဤသွားရောက်မှုသည် ဒေတာဇယားမှ ဖယ်ရှားသွားမည်ဖြစ်ပြီး ဤနေရာတွင် ပြန်ယူ၍ မရတော့ပါ（အချက်အလက်များ Sheet ၏ 「ဖျက်သိမ်းမှတ်တမ်း」 စာမျက်နှာတွင် ကျန်ရှိနေမည်）။ သေချာပါသလား။'),
+    staffPurge: biText('確定刪除後，這個帳號會從資料表拿掉，不能在這裡還原（內容會留在試算表「刪除封存」分頁）。確定？',
+      'အပြီးဖျက်ပြီးနောက် ဤအကောင့်သည် ဒေတာဇယားမှ ဖယ်ရှားသွားမည်ဖြစ်ပြီး ဤနေရာတွင် ပြန်ယူ၍ မရတော့ပါ（အချက်အလက်များ Sheet ၏ 「ဖျက်သိမ်းမှတ်တမ်း」 စာမျက်နှာတွင် ကျန်ရှိနေမည်）။ သေချာပါသလား။'),
+    staffRename: biText('改名字後，這個人名下的客戶、拜訪會一起換成新名字，他的手機會登出、要重新登入。確定？',
+      'နာမည် ပြင်ပြီးနောက် ၎င်းတာဝန်ယူထားသော ဖောက်သည်နှင့် သွားရောက်မှုများအားလုံး နာမည်အသစ်သို့ အတူတူ ပြောင်းသွားမည်ဖြစ်ပြီး ၎င်း၏ ဖုန်းမှ အကောင့်ထွက်သွားကာ ပြန်ဝင်ရမည်။ သေချာပါသလား။'),
   };
+  /** 做完之後上面那行提示：[中文, 緬文]（G58～G61） */
+  function admDoneMsg(op) {
+    if (op.indexOf('Purge') >= 0) return ['已確定刪除', 'အပြီးဖျက်ပြီးပြီ'];
+    if (op.indexOf('Delete') >= 0) return ['已刪除（可以在最下面「已刪除」還原）', 'ဖျက်ပြီးပြီ（အောက်ဆုံးရှိ 「ဖျက်ထားသည်များ」 တွင် ပြန်ယူနိုင်သည်）'];
+    if (op.indexOf('Restore') >= 0) return ['已還原', 'ပြန်ယူပြီးပြီ'];
+    return ['已存好', 'သိမ်းပြီးပြီ'];
+  }
   async function runAdmin(btn) {
     const a = admState(), op = btn.dataset.admop;
     let arg = {}; try { arg = JSON.parse(btn.dataset.admarg || '{}'); } catch (e) { return; }
@@ -2170,9 +2216,21 @@
         : await api(Object.assign({ action: 'admin', op, value }, arg));
     } catch (e) { r = null; }
     btn.disabled = false;
-    if (!r || !r.ok) { a.msg = '沒有存成功：' + ((r && r.message) || '請再試一次'); render(); return; }
-    a.msg = op.indexOf('Purge') >= 0 ? '已確定刪除' : op.indexOf('Delete') >= 0 ? '已刪除（可以在最下面「已刪除」還原）' : op.indexOf('Restore') >= 0 ? '已還原' : '已存好';
-    if (op === 'staffDelete' && r.customersLeft) a.msg += `；他名下還有 ${r.customersLeft} 位客戶，請改負責業務`;
+    if (!r || !r.ok) {
+      // 後台的原因本身已經是「中文／緬文」，緬文小字只補「沒有存成功」；沒有原因時兩邊都寫「請再試一次」
+      const reason = r && r.message;
+      a.msg = '沒有存成功：' + (reason || '請再試一次');
+      a.msgMy = 'သိမ်းဆည်းမှု မအောင်မြင်ပါ' + (reason ? '' : '：ထပ်ကြိုးစားပါ');
+      render();
+      return;
+    }
+    const done = admDoneMsg(op);
+    a.msg = done[0];
+    a.msgMy = done[1];
+    if (op === 'staffDelete' && r.customersLeft) {
+      a.msg += `；他名下還有 ${r.customersLeft} 位客戶，請改負責業務`;
+      a.msgMy += `၊ ၎င်းတာဝန်ယူထားသော ဖောက်သည် ${r.customersLeft} ဦး ကျန်သေးသည်၊ တာဝန်ခံ ဝန်ထမ်း ပြောင်းပေးပါ`;
+    }
     if (op === 'custType') { a.kind = value; a.open = arg.cid; } // 換了類型：下拉跟著換到新的那一類，這位照樣開著
     a.hist = {};
     a.list = null;
