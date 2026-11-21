@@ -2545,6 +2545,21 @@
     return { wait: w, trials };
   }
   function PROGRESS_WAIT_HTML() { return `<p class="err">⏳ ${esc('這位已送結案、等主管確認中，不能再送一次（主管確認或退回後才能再送）／ပိတ်သိမ်းရန် ပို့ပြီးပါပြီ၊ မန်နေဂျာ စစ်ဆေးနေဆဲ၊ ထပ်မပို့ရ')}</p>`; }
+  /* 第28任 2026-11-21 董事長「之前進度也要分左右兩組」（截圖：上次拜訪那筆對照農民的三段字和照片擠在同一欄）：
+     對照農民的拜訪（打字有【自己的】【別間公司】【別的作物】三段）在進度卡也切兩欄：左「公司內部」放自己的那段和照片，
+     右「對照組」放別間公司、別的作物和它們的照片（跟生長過程同一套拆法 cmpSplitText、照片照段落編號分邊）。
+     日期｜業務｜類別、緬文翻譯、結案文字照舊整行；一般拜訪照舊一欄。裡面不能有 </li>（下面用 </li> 切每一筆）。 */
+  function progressCmpItemHtml(v) {
+    const p = cmpSplitText(v.text);
+    const cmpNos = [].concat(...p.cmp.map(cmpPhotoNos));
+    const photos = (v.photos || []).map((id, i) => ({ id, no: pno(v, i) }));
+    const grid = list => (list.length ? `<div class="pgrid">${list.map(ph => `<button type="button" class="btn2 small" data-hph="${esc(ph.id)}">📷 照片 ${ph.no}／ဓာတ်ပုံ ${ph.no}</button>`).join('')}</div>` : '');
+    const col = (title, text, list) => `<div class="gcol"><h4>${title}</h4>${text ? `<div class="ptxt">${esc(text).replace(/\n/g, '<br>')}</div>` : ''}${grid(list)}</div>`;
+    return `<li>${esc(v.time)}｜${esc(v.staff)}｜${esc(CAT_LABEL(v.cat))}`
+      + `<div class="growsplit pcmp">${col('公司內部', p.own, photos.filter(ph => cmpNos.indexOf(ph.no) < 0))}${col('對照組', p.cmp.join('\n'), photos.filter(ph => cmpNos.indexOf(ph.no) >= 0))}</div>`
+      + `${v.textMy && v.textMy !== v.text ? `<span class="my">${esc(v.textMy)}</span>` : ''}`
+      + `${v.plantFail ? `<br><span class="pill late">種植失敗 စိုက်ပျိုးမှု မအောင်မြင်</span> ${esc(v.plantFail)}` : ''}${v.closing ? `<br>${esc(v.closing)}` : ''}</li>`;
+  }
   /** ① 進度卡內容（top＝標題＋多久沒回訪＋等確認）：最後拜訪、下次回訪、進行中的試作、最近一次拜訪（更早的收進「看更早的」） */
   function progressCardHtml(c, trials, recent, online, top) {
     // 0.5.16 第2輪 低：週數跟「我的試作」同一把尺（緬甸日期相減的天數 ÷ 7），原本用手機現在時刻減 UTC 零點，第 7 天 06:30 後兩邊差一週
@@ -2556,10 +2571,10 @@
     const tr = trials.map(t => t && t.held === null ? `<li><b>${esc(t.cat)}：結案狀態未知，請洽主管</b>：${esc(cropText(t.item || '（未填品項）'))}<span class="my">${esc(t.cat)} - ပိတ်သိမ်းမှု အခြေအနေ မသိ၊ မန်နေဂျာကို မေးပါ - ${esc(cropText(t.item || '（未填品項）'))}</span></li>` : `<li><b>${esc(t.cat)}`
       + `進行中</b>：${esc(cropText(t.item || '（未填品項）'))}${t.start ? `，${esc(t.start)} 開始${wk(t.start) != null ? `（第 ${wk(t.start)} 天）` : ''}` : ''}<span class="my">${esc(t.cat)}`
       + ` လုပ်ဆောင်ဆဲ - ${esc(cropText(t.item || '（未填品項）'))}${t.start ? `၊ ${esc(t.start)} စတင်${wk(t.start) != null ? `（${wk(t.start)} ရက်မြောက်）` : ''}` : ''}</span></li>`).join('');
-    const vs = recent.map(v => `<li>${esc(v.time)}｜${esc(v.staff)}｜${esc(CAT_LABEL(v.cat))}${v.text ? `：${esc(v.text).replace(/\n/g, '<br>') /* 第26任：業務原文的換行、「🎤 逐字稿」另起一行照樣顯示 */}` : ''}`
+    const vs = recent.map(v => (cmpSplitText(v.text).cmp.length ? progressCmpItemHtml(v) : `<li>${esc(v.time)}｜${esc(v.staff)}｜${esc(CAT_LABEL(v.cat))}${v.text ? `：${esc(v.text).replace(/\n/g, '<br>') /* 第26任：業務原文的換行、「🎤 逐字稿」另起一行照樣顯示 */}` : ''}`
       + `${v.textMy && v.textMy !== v.text ? `<span class="my">${esc(v.textMy)}</span>` : ''}${v.plantFail ? `<br><span class="pill late">種植失敗 စိုက်ပျိုးမှု မအောင်မြင်</span> ${esc(v.plantFail)}` : ''}`
       + `${v.closing ? `<br>${esc(v.closing)}` : ''}${(v.photos || []).length ? `<div class="pgrid">${v.photos.map((id, i) => `<button type="button" class="btn2 small" data-hph="${esc(id)}`
-      + `">📷 照片 ${pno(v, i)}／ဓာတ်ပုံ ${pno(v, i)}</button>`).join('')}</div>` : ''}</li>`).join(''); // 第26任：上次拜訪的照片（董事長「這邊要有上次拜訪的圖片」）
+      + `">📷 照片 ${pno(v, i)}／ဓာတ်ပုံ ${pno(v, i)}</button>`).join('')}</div>` : ''}</li>`)).join(''); // 第26任：上次拜訪的照片（董事長「這邊要有上次拜訪的圖片」）
     // 0.4.44 只露最近一次拜訪，其他收進「看更早的」
     const vItems = vs ? vs.split('</li>').filter(Boolean).map(x => x + '</li>') : [];
     const more = vItems.length > 1 ? `<details><summary>看更早的 ${vItems.length - 1} 筆／ယခင် မှတ်တမ်းများ ကြည့်ရန်</summary><ul>${vItems.slice(1).join('')}</ul></details>` : '';
@@ -4574,7 +4589,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261121-220902'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261121-221904'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
