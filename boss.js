@@ -1011,8 +1011,12 @@
         <div><span class="sub">結果</span><b>${esc(x.result || closeGroupTxt(x) || ((v && v.plantFail) ? '種植失敗／စိုက်ပျိုးမှု မအောင်မြင်' : noResultCol(x) ? '洽談結果沒記到（結案分頁少了「結果」欄，請在試算表按「第一次安裝／升級」）／ဆွေးနွေးမှု ရလဒ် မမှတ်မိပါ (ပိတ်သိမ်း စာမျက်နှာတွင် 「ရလဒ်」 ကော်လံ လိုနေသည်၊ Sheet တွင် 「ပထမအကြိမ် တပ်ဆင်／အပ်ဒိတ်」 နှိပ်ပါ)' : '收成結案／ရိတ်သိမ်း ပိတ်သိမ်း'))}`
           + `</b></div></div>
       ${closeTags(x) ? `<p class="rtags">${closeTags(x)}</p>` : ''}${closeExtra(x) ? `<p class="sub">${closeExtra(x)}</p>` : ''}` : '';
-    const ph = photos.length ? `<div class="rphotos">${photos.map((id, i) => `<figure class="pfig"><button type="button" class="rthumb" data-photo="${esc(id)}" data-big="${esc(id)}`
-      + `" aria-label="看大圖 照片 ${(nosOf || [])[i] || i + 1} ပုံကြီးကြည့်ရန် ဓာတ်ပုံ ${(nosOf || [])[i] || i + 1}">讀取中…<span class="my">ဖတ်နေသည်</span></button><figcaption>照片 ${(nosOf || [])[i] || i + 1}<span class="my">ဓာတ်ပုံ ${(nosOf || [])[i] || i + 1}</span></figcaption></figure>`).join('')}</div>` /* 第27任：照片加編號，對得上打字裡的「照片 N」 */ : '<p class="sub">（沒有照片）<span class="my">（ဓာတ်ပုံ မရှိပါ）</span></p>';
+    const rFig = (id, no) => `<figure class="pfig"><button type="button" class="rthumb" data-photo="${esc(id)}" data-big="${esc(id)}`
+      + `" aria-label="看大圖 照片 ${no} ပုံကြီးကြည့်ရန် ဓာတ်ပုံ ${no}">讀取中…<span class="my">ဖတ်နေသည်</span></button><figcaption>照片 ${no}<span class="my">ဓာတ်ပုံ ${no}</span></figcaption></figure>`; /* 第27任：照片加編號，對得上打字裡的「照片 N」 */
+    const sides = !close ? cmpSidesOf(x) : null; // 第28任 2026-11-22：可疑拜訪是對照農民的 → 照片分兩邊（結案卡的照片來自好幾筆拜訪，照舊一排）
+    const ph = sides ? `<div class="cmp2">${[['公司內部', sides.own], ['對照組', sides.cmp]].map(([title, sd]) => `<div class="cmpcol"><h4>${title}</h4>`
+      + `${sd.photos.length ? `<div class="rphotos">${sd.photos.map(p => rFig(p.id, p.no)).join('')}</div>` : ''}${sd.text ? `<p class="pre" data-nomyfix>${esc(sd.text)}</p>` : ''}</div>`).join('')}</div>`
+      : photos.length ? `<div class="rphotos">${photos.map((id, i) => rFig(id, (nosOf || [])[i] || i + 1)).join('')}</div>` : '<p class="sub">（沒有照片）<span class="my">（ဓာတ်ပုံ မရှိပါ）</span></p>';
     const fl = flags.length ? `<div class="flags big">${flags.map(f => `<span class="flag f-${f.k}">${esc(f.txt)}</span>`).join('')}</div>` : '';
     const sum = v && v.summary ? `<p class="rsum"><button class="btn" type="button" data-speak="${esc(v.id)}" aria-label="念中文摘要">🔊</button> ${esc(v.summary)}</p>` : v ? `<p class="sub">${esc(noSummaryText(v))}</p>` : '';
     const miss = close ? closeMissing(x, v) : [];
@@ -1145,6 +1149,14 @@
     return '照片_' + t.getFullYear() + two(t.getMonth() + 1) + two(t.getDate()) + two(t.getHours()) + two(t.getMinutes()) + two(t.getSeconds()) + '.' + ext;
   }
   /* ───── 設計版 D：最新拜訪改精簡卡片（一行標題、有問題才出現警示、縮圖一列、摘要 3 行、展開看全部） ───── */
+  /** 最新拜訪卡片的縮圖：一般拜訪照舊一排最多 4 張；對照農民分兩邊，各最多 2 張（第28任 2026-11-22 老闆「要分」） */
+  function vcardThumbsHtml(v, ph) {
+    const thumb = id => `<span class="vthumb lazy" data-lazyphoto="${esc(id)}"></span>`;
+    const s = cmpSidesOf(v);
+    if (!s) return ph.length ? `<div class="vthumbs">${ph.map(thumb).join('')}</div>` : '';
+    const col = (title, side) => `<div class="cmpcol"><h4>${title}</h4>${side.photos.length ? `<div class="vthumbs">${side.photos.slice(0, 2).map(p => thumb(p.id)).join('')}</div>` : ''}</div>`;
+    return `<div class="cmp2">${col('公司內部', s.own)}${col('對照組', s.cmp)}</div>`;
+  }
   function vcard(v) {
     const f = flagsOf(v), ph = (v.photos || []).slice(0, 4);
     const chk = String(v.check || '').split('｜').map(s => s.trim()).filter(Boolean);
@@ -1160,7 +1172,7 @@
     return `<li class="vcard${f.length ? ' hasflag' : ''}"><div class="vh">${catPill(v)}<b><a href="javascript:void 0" data-go="${esc(v.cid)}">${esc(v.name)}</a></b><span class="sub">・${staffTag(v.staff)}`
       + `${isTestStaff(v.staff) ? '（測試／စမ်းသပ်）' : ''}・${esc(v.time.slice(5, 16))}</span></div>
       ${f.length ? `<div class="flags">${f.map(x => `<span class="flag f-${x.k}">${esc(x.txt)}</span>`).join('')}</div>` : ''}
-      ${ph.length ? `<div class="vthumbs">${ph.map(id => `<span class="vthumb lazy" data-lazyphoto="${esc(id)}"></span>`).join('')}</div>` : ''}
+      ${vcardThumbsHtml(v, ph)}
       <details class="vmore" data-vid="${esc(v.id)}"${state.openCards && state.openCards[v.id] ? ' open' : ''}><summary class="vsum">${v.summary ? esc(v.summary) : `<span class="sub">${esc(noSummaryText(v))}</span>`}`
         + ` <span class="vexp">展開<span class="my">ချဲ့ကြည့်</span></span></summary>${more}</details></li>`; // 點摘要本身就展開（不另佔一行）
   }
@@ -1523,6 +1535,45 @@
     if (!(state.hist || {})[c.id]) return '<p class="sub">讀取完整拜訪紀錄中…<span class="my">သွားရောက်မှု မှတ်တမ်း အပြည့်အစုံ ဖတ်နေသည်…</span></p>';
     return '<p class="empty">這位客戶還沒有拜訪紀錄。<span class="my">ဤဖောက်သည်တွင် သွားရောက်မှု မှတ်တမ်း မရှိသေးပါ။</span></p>';
   }
+  /* 第28任 2026-11-22 老闆「要分」：主管頁的客戶履歷、審核卡、最新拜訪卡片裡，對照農民的拜訪也跟手機一樣分左右兩邊（左「公司內部」、右「對照組」）。
+     拆法跟手機 app.js cmpSplitText、後台 frCmpSplit_ 同一套：段落標題只認一行的開頭；「〔」開頭的附加說明、第一個標題前的字放左邊；
+     照片照打字裡寫的「（照片 N）」分邊，沒寫到的放左邊。不是對照農民的打字（沒有別間公司／別的作物段）照原本一欄 */
+  const CMP_HEAD_RE = /^【(自己的|別間公司[^】]*|別的作物[^】]*)】/;
+  function cmpSplitText(text) {
+    const segs = [], before = [], notes = [];
+    let cur = null;
+    String(text || '').split('\n').forEach(line => {
+      const m = CMP_HEAD_RE.exec(line);
+      if (m) { cur = { title: m[1], lines: [line] }; segs.push(cur); return; }
+      if (/^〔/.test(line.trim())) { notes.push(line.trim()); return; }
+      if (!cur) { before.push(line.trim()); return; }
+      cur.lines.push(line);
+    });
+    const whole = g => g.lines.join('\n').trim();
+    const own = before.concat(segs.filter(g => g.title === '自己的').map(g => whole(g).replace(CMP_HEAD_RE, '').trim()), notes).filter(Boolean).join('\n');
+    return { own, cmp: segs.filter(g => g.title !== '自己的').map(whole) };
+  }
+  const cmpPhotoNos = seg => { const m = /^【[^】]*】（照片 ([\d、 ]+)）/.exec(String(seg || '')); return m ? m[1].split('、').map(x => Number(x.trim())).filter(Boolean) : []; };
+  /** 一筆拜訪分兩邊：{ own: { text, photos: [{ id, no }] }, cmp: {…} }；不是對照農民的打字回 null */
+  function cmpSidesOf(v) {
+    const sp = cmpSplitText(v && v.text);
+    if (!sp.cmp.length) return null;
+    const nos = [].concat(...sp.cmp.map(cmpPhotoNos));
+    const photos = ((v && v.photos) || []).map((id, i) => ({ id, no: (v.photoNos || [])[i] || i + 1 }));
+    return { own: { text: sp.own, photos: photos.filter(p => nos.indexOf(p.no) < 0) }, cmp: { text: sp.cmp.join('\n'), photos: photos.filter(p => nos.indexOf(p.no) >= 0) } };
+  }
+  const histFig = (id, no) => `<figure class="pfig"><div class="photo" data-photo="${esc(id)}">載入中…／ဖတ်နေသည်…</div><figcaption>照片 ${no}<span class="my">ဓာတ်ပုံ ${no}</span></figcaption></figure>`;
+  /** 履歷一筆拜訪的照片格子（一般拜訪，原本那一排；第27任 董事長「要，加編號」：對照農民打字寫「照片 N」，格子下面標第幾張） */
+  function histPhotosHtml(v) {
+    return `<div class="photos">${v.photos.length ? v.photos.map((id, i) => histFig(id, (v.photoNos || [])[i] || i + 1)).join('') : '<div class="photo">沒有照片／ဓာတ်ပုံ မရှိပါ</div>'}</div>`;
+  }
+  /** 履歷一筆對照農民拜訪：左右兩欄，各自放照片和那一段字 */
+  function cmpHistHtml(v) {
+    const s = cmpSidesOf(v);
+    const col = (title, side) => `<div class="cmpcol"><h4>${title}</h4>${side.photos.length ? `<div class="photos">${side.photos.map(p => histFig(p.id, p.no)).join('')}</div>` : ''}`
+      + `${side.text ? `<p class="pre" data-nomyfix>${esc(side.text)}</p>` : ''}</div>`;
+    return `<div class="cmp2">${col('公司內部', s.own)}${col('對照組', s.cmp)}</div>`;
+  }
   function renderCustDetail(c) {
     const list = visitsOf(c.id), s = dueState(c);
     const dealer = c.type === '盤商' || c.type === '種子商';
@@ -1555,15 +1606,13 @@
         <div class="sub">${v.lat != null && v.lng != null ? `📍 <a href="${esc(v.nav)}" target="_blank" rel="noopener">${v.lat.toFixed(5)}, ${v.lng.toFixed(5)}（導航／လမ်းညွှန်）</a>` : '📍 <span style="color:var(--chili)">無定位／တည်နေရာ မရှိ</span>'}`
           + `
         　📷 ${v.check ? esc(v.check) : '現場拍攝／ကွင်းထဲတွင် ရိုက်ထားသည်'}</div>
-        <div class="box"><div class="photos">${v.photos.length ? v.photos.map((id, i) => `<figure class="pfig"><div class="photo" data-photo="${esc(id)}">載入中…／ဖတ်နေသည်…</div><figcaption>照片 ${(v.photoNos || [])[i] || i + 1}`
-          + `<span class="my">ဓာတ်ပုံ ${(v.photoNos || [])[i] || i + 1}</span></figcaption></figure>`).join('') /* 第27任 董事長「要，加編號」：對照農民打字寫「照片 N」，格子下面標第幾張 */ : '<div class="photo">沒有照片／ဓာတ်ပုံ မရှိပါ</div>'}`
-          + `</div>
+        <div class="box">${cmpSidesOf(v) ? cmpHistHtml(v) : histPhotosHtml(v)}
         <dl class="kv"><dt>${dealer ? '行情' : '作物'}</dt><dd>${esc(v.crop || '—')}${myLine(v, 'crop')}</dd><dt>反應</dt><dd>${esc(v.feedback || '—')}${myLine(v, 'feedback')}`
           + `</dd><dt>問題</dt><dd>${esc(v.issue || '—')}${myLine(v, 'issue')}</dd><dt>下一步</dt><dd>${esc(v.next || '—')}${myLine(v, 'next')}</dd>
         <dt>摘要</dt><dd>${esc(v.summary || noSummaryText(v))}${errDetail(v)}${myLine(v, 'summary')}</dd>
         ${v.noMeet ? `<dt>沒拜訪<span class="my">မသွားဖြစ်ပါ</span></dt><dd><span class="pill p-yel">沒拜訪<span class="my">မသွားဖြစ်ပါ</span></span> ${esc(v.noMeet)}</dd>` : ''}`
           + `${v.closing ? `<dt>結案</dt><dd>${esc(v.closing)}</dd>` : ''}${v.plantFail ? `<dt>種植失敗<span class="my">စိုက်ပျိုးမှု မအောင်မြင်</span></dt><dd>${esc(v.plantFail)}</dd>` : ''}`
-          + `${v.text ? `<dt>打字</dt><dd class="pre" data-nomyfix>${esc(v.text)}${v.id ? fixBoxHtml('text:' + v.id, '改內容', `<textarea data-fixin maxlength="3000" rows="4" aria-label="打字內容">${esc(v.text)}</textarea>`) : '' /* 第27任：主管改業務打錯的字 */}</dd>` : ''}`
+          + `${v.text ? `<dt>打字</dt><dd class="pre" data-nomyfix>${cmpSidesOf(v) ? '（對照農民：內容分在上面兩欄）' /* 第28任 2026-11-22 不重複印；改內容照舊在下面 */ : esc(v.text)}${v.id ? fixBoxHtml('text:' + v.id, '改內容', `<textarea data-fixin maxlength="3000" rows="4" aria-label="打字內容">${esc(v.text)}</textarea>`) : '' /* 第27任：主管改業務打錯的字 */}</dd>` : ''}`
           + `${v.id && v.audio ? `<dt>逐字稿</dt><dd>${transcriptFixHtml(v)}</dd>` : '' /* 第28任：主管改緬甸錯字 */}`
           + `${v.prices ? `<dt>價格</dt><dd class="pre">${esc(v.prices)}</dd>` : ''}</dl></div>${soundBtns(v)}</div>`).join('') + histStatusHtml(c, list.length > 0)}</div>`;
   }
