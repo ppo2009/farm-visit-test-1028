@@ -1319,7 +1319,7 @@
     const t = activeTrialOf(c.id);
     const mw = measureDue(t, c.lastVisit, d.today);
     if (mw) return { cls: 'p-red', text: `試作第 ${mw * 7} 天該量測／နှိုင်းယှဉ် ${mw * 7} ရက်မြောက် တိုင်းတာရန်`, rank: 1.5 }; // 第27任：週改天（量測照試作開始日算：第 2、4、8 週＝第 14、28、56 天；緬文照譯稿 E2）
-    if (t) { const g = growPhrase(c, d.today); return { cls: 'p-yel', text: `${trialCatBi(t.cat || '試作')}${g ? ' ' + g : '中／လုပ်ဆောင်ဆဲ'}`, rank: 2 }; } // 第27任：第幾週改種植第幾天
+    if (t) { const g = growPhrase(c, d.today); return { cls: 'p-yel', text: trialPillText(t.cat || '試作', g), rank: 2 }; } // 第27任：第幾週改種植第幾天
     if (c.lastVisit && c.lastVisit >= addDays(d.today, -6)) return { cls: 'p-grn', text: `${md(c.lastVisit)} 拜訪／${md(c.lastVisit)} သွားရောက်မှု`, rank: 3 }; // 主管BUG(2號)#11：7 天＝今天往前 6 天（原本 -7 算了 8 天，跟「近 7 天拜訪次數」不一致）
     return null;
   }
@@ -1360,7 +1360,10 @@
      地區名稱還沒有緬文譯稿 → 先跟手機一樣加英文（曼德勒區 Mandalay），緬文待譯 J7。
      例：「推廣農民・Cauliflower／ပန်းဂေါ်ဖီ・Sai Wai Yan -曼德勒區」→「推廣農民／မြှင့်တင် လယ်သမား・Cauliflower／ပန်းဂေါ်ဖီ・Sai Wai Yan -曼德勒區 Mandalay」 */
   /** 進行中標籤前面的「對照／推廣」也帶緬文（對照＝နှိုင်းယှဉ်，同上面「試作第 N 天該量測」那句的譯稿字） */
-  const trialCatBi = cat => (cat === '試作' ? '試作／နှိုင်းယှဉ်' : BI[cat] ? cat + '／' + BI[cat] : cat);
+  const trialCatMy = cat => (cat === '試作' ? 'နှိုင်းယှဉ်' : BI[cat] || '');
+  const trialCatBi = cat => (trialCatMy(cat) ? cat + '／' + trialCatMy(cat) : cat);
+  /** 進行中標籤：有種植天數「推廣／緬文 種植第 N 天…」；沒有「推廣中／緬文 進行中緬文」——中文都在斜線前（抓BUG第18輪 主管1：原本「中」黏在緬文後面） */
+  const trialPillText = (cat, grow) => (grow ? trialCatBi(cat) + ' ' + grow : cat + '中／' + (trialCatMy(cat) ? trialCatMy(cat) + ' ' : '') + 'လုပ်ဆောင်ဆဲ');
   const kindBi = k => { const my = k === '試作農民' ? admKindMy('對照農民') : BI[k]; return my ? k + '／' + my : k; };
   const listCropBi = c => (c === '其他' ? '其他／အခြား' : cropText(c));
   const REGION_EN = { 曼德勒區: 'Mandalay', 仰光區: 'Yangon', 奈比多區: 'Nay Pyi Taw' };
@@ -1371,7 +1374,7 @@
     const f = state.cf, q = f.q.trim().toLowerCase();
     // 0.4.85 中4（第11任 0.4.84 清單）：搜尋框寫「搜尋全部客戶」→ 有搜尋字時真的搜全部，不受業務、地區、類型篩選限制；
     // 篩選本身沒動，清空搜尋就回到原本的篩選
-    if (q) return state.data.customers.filter(c => [c.name, c.phone, c.id, c.crop, c.crop ? cropText(String(c.crop)) : '', c.area].some(x => String(x == null ? '' : x).toLowerCase().includes(q))); // 0.5.18 C3：畫面上作物寫「英文／緬文」，用看到的字也要搜得到
+    if (q) return state.data.customers.filter(c => [c.name, c.phone, c.id, c.crop, c.crop ? cropText(String(c.crop)) : '', c.area, c.area ? regionBi(String(c.area)) : ''].some(x => String(x == null ? '' : x).toLowerCase().includes(q))); // 0.5.18 C3：畫面上作物寫「英文／緬文」，用看到的字也要搜得到
     return state.data.customers.filter(c => (!f.staff || (c.staff || NO_STAFF) === f.staff) && (!f.area || c.area === f.area) && (!f.type || (c.kind || c.type || '農民') === f.type) /* 0.5.11 低B：篩選照一般／試作／推廣農民 */
       && (f.show !== 'attn' || attnOf(c)));
   }

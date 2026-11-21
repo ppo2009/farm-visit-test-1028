@@ -140,6 +140,8 @@
   }
   async function showLock(c) {
     ensureDom(); locked = true;
+    // 抓BUG第18輪 手機1（第28任）：照片大圖（#bigPhoto，層級比解鎖畫面高）開著時上鎖 → 沒解鎖也看得到、存得到照片。上鎖先把大圖關掉
+    const big = document.getElementById('bigPhoto'); if (big) big.hidden = true;
     const cfg = (await H.getConfig()) || {};
     el('lockWho').textContent = (cfg.name || cfg.account || '') + (c.method === 'pattern' && c.fails ? `（已錯 ${c.fails} 次，錯 ${MAX_FAILS} 次要用密碼重新登入）／（${c.fails} ကြိမ် မှားပြီး၊ ${MAX_FAILS}`
       + ` ကြိမ် မှားလျှင် စကားဝှက်ဖြင့် ပြန်ဝင်ရမည်）` : '');

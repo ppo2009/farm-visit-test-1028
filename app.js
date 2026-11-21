@@ -140,6 +140,7 @@
   function showLogin(msg) {
     // 2號 0.4.69 清單低3（第8任）：換帳號後「我的報告」還用上一位的名字篩 → 回到登入畫面就清掉報告清單、範圍、我是誰
     state.me = ''; state.reportScope = 'all'; state.reports = null;
+    if (typeof document !== 'undefined' && document.getElementById('bigPhoto')) document.getElementById('bigPhoto').hidden = true; // 抓BUG第18輪 手機1：回登入頁（登出、被踢）也關掉照片大圖
     if (typeof document !== 'undefined' && document.getElementById('bossTip')) document.getElementById('bossTip').hidden = true; // 0.5.26 抓BUG 低3：登出、登入失效回登入頁，主管提示要收起來
     state.navStack = []; // 第26任：換人登入不帶上一位的「上一頁」
     state.homeMonth = ''; state.homeTop = null; // 0520R4 I3（第19任）：換人登入不要停在上一位點的月份（下一位的首頁照第一次畫的規則）
@@ -1060,19 +1061,28 @@
      對照農民的拜訪打字是三段合成的（cmpCompose：【自己的】（照片 1）…\n【別間公司：西批】（照片 2）…\n【別的作物：草類】（照片 3）…），
      這裡照【】把它拆開：「自己的」那段和它的照片放左欄，「別間公司」「別的作物」兩段和它們的照片放右欄。
      沒有分段的拜訪（開始對照那筆、一般打字）整筆放左欄；段落裡沒寫到的照片也放左欄（不會不見）。一般、推廣農民照舊一欄。 */
-  const CMP_SEG_RE = /【(自己的|別間公司[^】]*|別的作物[^】]*)】/g;
-  /** 把一筆拜訪的打字拆成 { own: 自己的那段（不含標題）, cmp: [別間公司、別的作物那幾段（含標題）] }；沒有三組標題回 { own: 原文, cmp: [] } */
+  /* 抓BUG第18輪 手機2、3（第28任）：原本在整段字裡到處找【】標題 →
+     ① 業務自己打「比【別間公司】的高一倍」，後半句被搬到右欄；② 存檔時接在最後的「〔沒選生長階段的原因：…〕」被算進別間公司那段、跑到右欄。
+     改成：標題只認「一行的開頭」（cmpCompose 每段本來就各起一行）；「〔」開頭的附加行（程式加的說明）一律放左欄。 */
+  const CMP_HEAD_RE = /^【(自己的|別間公司[^】]*|別的作物[^】]*)】/;
+  /** 把一筆拜訪的打字拆成 { own: 自己的那段（不含標題）, cmp: [別間公司、別的作物那幾段（含標題）] }；沒有段落標題回 { own: 原文, cmp: [] } */
   function cmpSplitText(text) {
     const s = String(text || '');
-    const heads = [];
-    let m;
-    CMP_SEG_RE.lastIndex = 0;
-    while ((m = CMP_SEG_RE.exec(s))) heads.push({ at: m.index, end: CMP_SEG_RE.lastIndex, title: m[1] });
-    if (!heads.length) return { own: s, cmp: [] };
-    const segs = heads.map((h, i) => ({ title: h.title, whole: s.slice(h.at, i + 1 < heads.length ? heads[i + 1].at : s.length).trim(), body: s.slice(h.end, i + 1 < heads.length ? heads[i + 1].at : s.length).trim() }));
-    const before = s.slice(0, heads[0].at).trim();
-    const own = [before].concat(segs.filter(g => g.title === '自己的').map(g => g.body)).filter(Boolean).join('\n');
-    return { own, cmp: segs.filter(g => g.title !== '自己的').map(g => g.whole) };
+    const segs = [], extra = [];
+    let cur = null;
+    s.split('\n').forEach(line => {
+      const m = CMP_HEAD_RE.exec(line);
+      if (m) { cur = { title: m[1], lines: [line] }; segs.push(cur); return; }
+      if (/^〔/.test(line.trim()) || !cur) { extra.push(line); return; } // 附加說明、第一個標題之前的字 → 左欄
+      cur.lines.push(line);
+    });
+    if (!segs.length) return { own: s, cmp: [] };
+    const whole = g => g.lines.join('\n').trim();
+    const ownSegs = segs.filter(g => g.title === '自己的').map(g => whole(g).replace(CMP_HEAD_RE, '').trim());
+    const isNote = x => /^〔/.test(x.trim());
+    const before = extra.filter(x => !isNote(x)).map(x => x.trim()), notes = extra.filter(isNote).map(x => x.trim());
+    const own = before.concat(ownSegs, notes).filter(Boolean).join('\n'); // 順序：標題前的字 → 自己的那段 → 附加說明
+    return { own, cmp: segs.filter(g => g.title !== '自己的').map(whole) };
   }
   /** 一段文字開頭寫的「（照片 1、2）」→ [1, 2] */
   const cmpPhotoNos = seg => { const m = /^【[^】]*】（照片 ([\d、 ]+)）/.exec(String(seg || '')); return m ? m[1].split('、').map(x => Number(x.trim())).filter(Boolean) : []; };
@@ -2153,7 +2163,7 @@
   const FAIL_IDS = ['fWeather', 'fTemp', 'fFert', 'fWater', 'fPest', 'fPestNote', 'fReason'];
   const visitDirty = () => !!(state.photos.length || state.busyPhotos || state.audio || state.rec || state.recBusy || $('note').value.trim() || $('plantFail').checked || ['cmpNote1', 'cmpNote2', 'cmpCo'].some(id => String(($n(id) || {}).value || '').trim())); // 0.4.87 高2：錄音處理中也算
   /** 業務BUG#5：返回首頁前要確認的「填了東西」——除了照片錄音打字，還有沒見到匯報、新客戶資料、結案欄位、盤商結案說明、價格、試作表單 */
-  const filled = id => { const e = $n(id); return e.type === 'checkbox' ? !!e.checked : !!String((e.value) || '').trim(); }; // 0.4.75 勾選框看有沒有勾（value 永遠是 on）
+  const filled = id => { const e = $n(id); return e.type === 'checkbox' ? !!e.checked && !e.disabled : !!String((e.value) || '').trim(); }; // 0.4.75 勾選框看有沒有勾（value 永遠是 on）；抓BUG第18輪 手機4：程式自己打勾又停用的（已簽約鎖住、結案分頁固定勾）不算業務有填
   // 結案七欄＋盤商結案說明（formDirty、換客戶共用）；2號 0.4.70 低3（第8任）：漏了結案地區 cRegion、洽談結果 dcOutcome（兩個下拉，預設空白、不會自動帶值）
   const CLOSE_IDS = ['cRegion', 'cPrice', 'cYield', 'cBuyer', 'cPhone', 'cReason', 'cProgress', 'dcOutcome', 'dcNote', 'cTrialOutcome', 'cPlantFail', 'dcSigned', 'mCount', 'mWeight', 'mHusk', 'mLength', 'mRows']; // 0.4.74 加試作結果；0.4.75 加種植失敗、已簽約勾選（filled、清除都認得勾選框）
   const formDirty = () => !!(visitDirty() || filled('nmNote')
@@ -4599,7 +4609,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261121-233045'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261122-002409'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
