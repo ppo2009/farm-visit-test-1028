@@ -3050,13 +3050,22 @@
   /** 0.4.80 高1：這家是不是我負責的（負責業務空白照舊算可以，跟後台 ownDc 同一規則） */
   const dealerIsMine = () => { const c = (state.allCustomers || []).find(x => x.id === $('farmer').value) || {}; return !String(c.staff || '') || String(c.staff) === String(state.myName || ''); };
   const dealerSignShown = () => dealerSignBase() && dealerIsMine();
-  const dealerSignOn = () => dealerSignShown() && !!$n('dcSigned').checked;
+  /* 第28任 2026-11-21 董事長「已簽約這個按鈕，主管確認過後結案就要鎖死，不能再改動」：
+     這家店已經有主管確認過的簽約（後台給的 signed＝true，名單上寫「已簽約」）→ 「已簽約」固定打勾、不能按，旁邊寫為什麼；
+     這次存檔當一般拜訪（不再送一次簽約結案給主管）。 */
+  const dealerSignLocked = () => { const c = (state.allCustomers || []).find(x => x.id === $('farmer').value) || {}; return c.signed === true; };
+  const dealerSignOn = () => dealerSignShown() && !!$n('dcSigned').checked && !dealerSignLocked();
   function refreshDealerSign() {
     const lab = $n('dcSignedLab'), cb = $n('dcSigned');
     lab.hidden = !dealerSignShown();
     $n('dcSignNote').hidden = !(dealerSignBase() && !dealerIsMine()); // 0.4.80 別人負責的：說清楚為什麼沒有「已簽約」
     const sh = typeof document !== 'undefined' && document.getElementById ? document.getElementById('signHint') : null; if (sh) sh.hidden = !state.signOnly; // 第24任 第六批⑫
     if (state.signOnly) { cb.checked = !lab.hidden; cb.disabled = true; } else cb.disabled = false; // 0.4.82 結案分頁進來：有見到就自動勾「已簽約」、不能取消（一定走簽約）
+    const locked = !lab.hidden && dealerSignLocked();
+    if (locked) { cb.checked = true; cb.disabled = true; } // 主管確認過的簽約：鎖住（第28任）
+    else if (state.signLockWas && !state.signOnly) cb.checked = false; // 從鎖住的店換到別家：剛才鎖住打的勾不能帶過去（不然別家會變成要送簽約）
+    state.signLockWas = locked;
+    const lockNote = $n('dcSignLock'); if (lockNote) lockNote.hidden = !locked;
     if (lab.hidden) cb.checked = false; // 換成農民、沒見到、換人：勾選一起取消
     if (state.dealerClose) return; // 舊的結案模式自己管結案框
     const on = dealerSignOn();
@@ -3960,7 +3969,7 @@
     $('note').placeholder = noteExample().join('\n'); // 範例跟著農民進度換
     // 0.5.26 生長階段：放在 profileProblem 前面（舊測試 test-073fix1112 檢查這行以 profileProblem() 結尾）；抽函式跑的舊測試沒有 stageProblem
     const tp = noMeetProblem() || trialProblem() || closeProblem() || priceProblem() || (typeof stageProblem === 'function' ? stageProblem() : '') || profileProblem() || (typeof photoProblem === 'function' ? photoProblem() : ''); // 第27任：農民拜訪要有照片
-    const signNeed = !!state.signOnly && !dealerSignOn(); // 0.4.82 結案分頁的盤商、種子商結案：一定要走「已簽約」才能送（沒見到、還沒按有見到都不能存）
+    const signNeed = !!state.signOnly && !dealerSignOn() && !(typeof dealerSignLocked === 'function' && dealerSignLocked()); // 第28任：主管已確認簽約的店鎖住，不算「還沒走簽約」（畫面寫已結案、照一般拜訪存）；0.4.82 結案分頁的盤商、種子商結案：一定要走「已簽約」才能送（沒見到、還沒按有見到都不能存）
     const ok = sel && nameOk && !state.rec && !state.recBusy && !state.recStarting && !state.busyPhotos && !tp && (isNew || hasContent) && !signNeed && !state.saving; // 業務BUG#4：存檔途中（等定位最多 15 秒）不能再按
     $('saveBtn').disabled = !ok;
     // 0.5.26（董事長：不能按的時候要紅字提示）：已簽約、簽約內容空白 → 簽約內容框下面紅字；存檔鈕下面的原因不能按時改紅字
@@ -4590,7 +4599,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261121-224710'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261121-230506'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');

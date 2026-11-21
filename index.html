@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="build-20261121-224710">
+<meta name="app-build" content="build-20261121-230506">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -807,6 +807,7 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
 
     <!-- 0.4.75 董事長「盤商跟種子商變成以簽約才結案」：盤商、種子商有見到之後勾「已簽約」→ 打開下面的結案框（只寫簽約內容），送主管確認後結案 -->
     <label class="chk" id="dcSignedLab" hidden><input type="checkbox" id="dcSigned"> <b>已簽約</b>（送主管確認後結案）<span class="my">စာချုပ်ချုပ်ပြီး (မန်နေဂျာ အတည်ပြုပြီးမှ ပိတ်သိမ်းမည်)</span></label>
+    <p class="sub" id="dcSignLock" hidden data-tr="待譯">🔒 主管已確認這家的簽約，已經結案，「已簽約」不能再改；這次存檔是一般拜訪。</p><!-- 第28任 2026-11-21 董事長「主管確認過後結案就要鎖死，不能再改動」 -->
     <p class="sub" id="dcSignNote" hidden>這家不是你負責的，只有負責業務能送「已簽約」結案；簽約了請告訴負責業務或主管。<br><span class="my">ဤဆိုင်သည် သင့်တာဝန် မဟုတ်ပါ၊ တာဝန်ခံ ဝန်ထမ်းသာ 「စာချုပ်ချုပ်ပြီး」 ပိတ်သိမ်းမှု ပို့နိုင်သည်။ စာချုပ်ချုပ်ပြီးပါက တာဝန်ခံ ဝန်ထမ်း သို့မဟုတ် မန်နေဂျာကို ပြောပါ။</span></p>
     <!-- 0.4.42 董事長：盤商、種子商結案＝洽談成功或失敗都送主管審核，主管確認才正式結案 -->
     <div id="dealerCloseBox" class="trial" hidden>
