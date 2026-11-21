@@ -17,6 +17,10 @@
       req.onerror = () => reject(req.error);
     });
   }
+  /* 交易出錯時，真正的原因在「出錯的那一個讀寫要求」身上（事件的 target.error）。
+     交易自己的 t.error 要等交易中止後才會有值，onerror 那一刻還是 null：
+     原本直接傳 t.error，錯誤紀錄只能寫「同步：不明」（tomtom 2026-11-18 那筆，背景瀏覽器實測 onerror 當下 t.error=null）。（第28任） */
+  const txErrOf = (t, ev) => t.error || (ev && ev.target && ev.target.error) || null;
   async function tx(store, mode, fn) {
     const db = await openDb();
     return new Promise((resolve, reject) => {
@@ -30,7 +34,7 @@
       try { p0 = Promise.resolve(fn(s)); } catch (e) { p0 = Promise.reject(e); }
       p0.then(v => { out = v; }, fail);
       t.oncomplete = () => { db.close(); if (failed) reject(failed); else resolve(out); };
-      t.onerror = () => { db.close(); reject(failed || t.error); };
+      t.onerror = ev => { db.close(); reject(failed || txErrOf(t, ev)); };
       // 手機空間不足時交易會被中止（abort），沒有這行畫面會一直卡在儲存中（2026-11-11 審查發現）
       t.onabort = () => { db.close(); reject(failed || t.error || new Error('存檔被中止／သိမ်းဆည်းမှု ရပ်ဆိုင်းသွားသည်')); };
     });
@@ -50,7 +54,7 @@
       try { fn(t.objectStore('visits'), t.objectStore('meta'), v => { out = v; }, e => { err = e; try { t.abort(); } catch (x) { /* 已經結束 */ } }); }
       catch (e) { err = e; try { t.abort(); } catch (x) { /* 已經結束 */ } }
       t.oncomplete = () => { db.close(); if (err) reject(err); else resolve(out); };
-      t.onerror = () => { db.close(); reject(err || t.error); };
+      t.onerror = ev => { db.close(); reject(err || txErrOf(t, ev)); };
       t.onabort = () => { db.close(); reject(err || t.error || new Error('存檔被中止／သိမ်းဆည်းမှု ရပ်ဆိုင်းသွားသည်')); };
     });
   }

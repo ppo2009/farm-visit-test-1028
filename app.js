@@ -48,7 +48,11 @@
      isCodeErr：程式本身的錯（TypeError 這類），不是手機資料庫寫不進去；errCode：給畫面和錯誤紀錄看的簡短原因；
      noteErr：寫進主控台，並記在手機資料庫 errQueue（最多 20 筆），下次同步成功時 sendErrs 送到後台「錯誤紀錄」 */
   const isCodeErr = e => !!e && ['TypeError', 'ReferenceError', 'SyntaxError', 'RangeError'].indexOf(e.name) >= 0;
-  const errCode = e => String((e && e.name && e.name !== 'Error' ? e.name + '：' : '') + ((e && e.message) || e || '不明')).slice(0, 120);
+  /* 丟出來的東西沒有說明時，至少記下「丟的是什麼」：原本一律寫「不明」，tomtom 2026-11-18「同步：不明」那筆查不出是哪一種錯。
+     例：丟 null → 「錯誤內容是空的（null）」；丟一個沒有 message 的物件 → 「沒有錯誤說明（object·Event）」（第28任） */
+  const errBlank = e => (e == null || e === '' ? '錯誤內容是空的（' + (e === '' ? '空字串' : String(e)) + '）'
+    : '沒有錯誤說明（' + typeof e + (e.constructor && e.constructor.name ? '·' + e.constructor.name : '') + '）');
+  const errCode = e => String((e && e.name && e.name !== 'Error' ? e.name + '：' : '') + ((e && e.message) || (e && typeof e !== 'object' ? String(e) : '') || errBlank(e))).slice(0, 120);
   async function noteErr(where, e) {
     try { console.error('[農場打卡]', where, e); } catch (x) { /* 沒有主控台 */ }
     // 抓BUG第4輪 手機組2：記下當時登入的帳號（換人登入後，上一位的錯誤原本會記成下一位的）
@@ -4488,7 +4492,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261121-012407'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261121-201631'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
