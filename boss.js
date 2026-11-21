@@ -1332,12 +1332,20 @@
   function listPillOf(c) {
     const attn = attnOf(c);
     const dealer = c.type === '盤商' || c.type === '種子商';
+    if (dealer && c.signed !== true && c.status !== '已結束') return unsignedPill(attn);
     if (dealer || c.status === '已結束' || c.status === '暫停') return attn; // 老闆 2026-11-20：暫停的不顯示
     const grow = listGrowText(c);
     if (!grow) return attn;
     if (!attn) return { cls: 'p-yel', text: grow };
     if (attn.cls !== 'p-grn') return attn;
     return { cls: 'p-yel', text: attn.text + '・' + grow };
+  }
+  /* 第28任 2026-11-21 董事長「主管網頁 客戶 未簽約種子商綠色，要顯示紅色未簽約字體」：
+     盤商、種子商還沒有主管確認過的簽約（後台 signed 不是 true）→ 右邊標籤一律紅色，開頭寫「未簽約」，原本的拜訪日期等字接在後面。
+     例：綠色「11/20 拜訪」→ 紅色「未簽約・11/20 拜訪」。已簽約的照舊。緬文照譯稿 A396（沒簽約）。排序、要注意的篩選照舊看 attnOf */
+  function unsignedPill(attn) {
+    const word = '未簽約／မချုပ်ရသေး';
+    return { cls: 'p-red', text: attn ? word + '・' + attn.text : word };
   }
   /* 清單標籤的種植天數。老闆 2026-11-20「換個寫法」：超過作物生長天數（例：種了 400 天、番茄 120 天）多半已經採收、
      種植日期沒改成新的一季，寫「種植日期待更新（已過 280 天）」；沒超過照舊「種植第 N 天／T 天」 */
