@@ -1319,7 +1319,7 @@
     const t = activeTrialOf(c.id);
     const mw = measureDue(t, c.lastVisit, d.today);
     if (mw) return { cls: 'p-red', text: `試作第 ${mw * 7} 天該量測／နှိုင်းယှဉ် ${mw * 7} ရက်မြောက် တိုင်းတာရန်`, rank: 1.5 }; // 第27任：週改天（量測照試作開始日算：第 2、4、8 週＝第 14、28、56 天；緬文照譯稿 E2）
-    if (t) { const g = growPhrase(c, d.today); return { cls: 'p-yel', text: `${t.cat || '試作'}${g ? ' ' + g : '中／လုပ်ဆောင်ဆဲ'}`, rank: 2 }; } // 第27任：第幾週改種植第幾天
+    if (t) { const g = growPhrase(c, d.today); return { cls: 'p-yel', text: `${trialCatBi(t.cat || '試作')}${g ? ' ' + g : '中／လုပ်ဆောင်ဆဲ'}`, rank: 2 }; } // 第27任：第幾週改種植第幾天
     if (c.lastVisit && c.lastVisit >= addDays(d.today, -6)) return { cls: 'p-grn', text: `${md(c.lastVisit)} 拜訪／${md(c.lastVisit)} သွားရောက်မှု`, rank: 3 }; // 主管BUG(2號)#11：7 天＝今天往前 6 天（原本 -7 算了 8 天，跟「近 7 天拜訪次數」不一致）
     return null;
   }
@@ -1347,6 +1347,16 @@
     if (total && n > total) return `種植日期待更新（已過 ${n - total} 天）／စိုက်ရက် မွမ်းမံရန် လိုသည်（${n - total} ရက် ကျော်ပြီး）`; // 緬文照譯稿 F24
     return growPhrase(c, state.data.today);
   }
+  /* 第28任 2026-11-21 董事長「主管 農戶拜訪總覽 客戶 這邊中文都要改成中文跟緬甸話並行，緬甸主管看不懂中文」：
+     客戶清單每一列灰字（類型・作物・地區）改成中緬並行。緬文全部用主管頁原本就有的譯稿字（BI、對照農民 G6、其他 အခြား），不新寫緬文；
+     地區名稱還沒有緬文譯稿 → 先跟手機一樣加英文（曼德勒區 Mandalay），緬文待譯 J7。
+     例：「推廣農民・Cauliflower／ပန်းဂေါ်ဖီ・Sai Wai Yan -曼德勒區」→「推廣農民／မြှင့်တင် လယ်သမား・Cauliflower／ပန်းဂေါ်ဖီ・Sai Wai Yan -曼德勒區 Mandalay」 */
+  /** 進行中標籤前面的「對照／推廣」也帶緬文（對照＝နှိုင်းယှဉ်，同上面「試作第 N 天該量測」那句的譯稿字） */
+  const trialCatBi = cat => (cat === '試作' ? '試作／နှိုင်းယှဉ်' : BI[cat] ? cat + '／' + BI[cat] : cat);
+  const kindBi = k => { const my = k === '試作農民' ? admKindMy('對照農民') : BI[k]; return my ? k + '／' + my : k; };
+  const listCropBi = c => (c === '其他' ? '其他／အခြား' : cropText(c));
+  const REGION_EN = { 曼德勒區: 'Mandalay', 仰光區: 'Yangon', 奈比多區: 'Nay Pyi Taw' };
+  const regionBi = s => String(s).replace(/曼德勒區|仰光區|奈比多區/g, m => m + ' ' + REGION_EN[m]);
   const NO_STAFF = '（未指派）';
   /** 符合篩選的客戶。有打搜尋字時找全部客戶（不限「要注意的」），找不到人才不會以為客戶不見 */
   function custFiltered() {
@@ -1421,8 +1431,8 @@
       const open = k in state.grpOpen ? state.grpOpen[k] : openDefault;
       return `<details class="grp" data-grp="${esc(k)}"${open ? ' open' : ''}><summary>${k === NO_STAFF ? esc(k) : staffTag(k)}（${groups[k].length}）</summary><ul>${sortByAttn(groups[k]).map(c => {
         const a = listPillOf(c);
-        return `<li><button type="button" class="crow" data-go="${esc(c.id)}" aria-current="${sel && sel.id === c.id}"><span><b data-nomyfix>${esc(c.name)}</b><span class="sub">${esc(c.kind || c.type || '農民')}`
-          + `${c.crop ? '・' + esc(cropText(c.crop)) : ''}${c.area ? '・' + esc(c.area) : ''}</span></span>${a ? `<span class="pill ${a.cls}">${esc(a.text)}</span>` : ''}</button></li>`;
+        return `<li><button type="button" class="crow" data-go="${esc(c.id)}" aria-current="${sel && sel.id === c.id}"><span><b data-nomyfix>${esc(c.name)}</b><span class="sub">${esc(kindBi(c.kind || c.type || '農民'))}`
+          + `${c.crop ? '・' + esc(listCropBi(c.crop)) : ''}${c.area ? '・' + esc(regionBi(c.area)) : ''}</span></span>${a ? `<span class="pill ${a.cls}">${esc(a.text)}</span>` : ''}</button></li>`;
       }).join('')}</ul></details>`;
     }).join('');
   }
