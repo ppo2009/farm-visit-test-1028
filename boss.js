@@ -1133,7 +1133,16 @@
       d.addEventListener('click', () => { d.hidden = true; });
       document.body.appendChild(d);
     }
-    d.innerHTML = `<img src="${src}" alt="照片大圖／ဓာတ်ပုံ အကြီး"><span class="sub">點一下關閉<span class="my">ပိတ်ရန် တစ်ချက်နှိပ်ပါ</span></span>`; d.hidden = false;
+    d.innerHTML = `<img src="${src}" alt="照片大圖／ဓာတ်ပုံ အကြီး"><span class="sub">點一下關閉<span class="my">ပိတ်ရန် တစ်ချက်နှိပ်ပါ</span></span>`
+      + `<a class="btn" data-bigsave href="${src}" download="${bigFileName(src)}">另存檔案</a>`; // 第28任 董事長「上傳的圖片…可以另存檔案」
+    d.querySelector('[data-bigsave]').addEventListener('click', ev => ev.stopPropagation()); // 按存檔不要順便關掉大圖
+    d.hidden = false;
+  }
+  /** 存檔用的檔名：照片_年月日時分秒.jpg（副檔名照圖片格式：png、webp 照實，其他當 jpg） */
+  function bigFileName(src) {
+    const ext = (/^data:image\/(png|webp)/.exec(String(src || '')) || [])[1] || 'jpg';
+    const t = new Date(), two = n => String(n).padStart(2, '0');
+    return '照片_' + t.getFullYear() + two(t.getMonth() + 1) + two(t.getDate()) + two(t.getHours()) + two(t.getMinutes()) + two(t.getSeconds()) + '.' + ext;
   }
   /* ───── 設計版 D：最新拜訪改精簡卡片（一行標題、有問題才出現警示、縮圖一列、摘要 3 行、展開看全部） ───── */
   function vcard(v) {

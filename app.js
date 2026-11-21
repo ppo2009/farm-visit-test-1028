@@ -1044,18 +1044,63 @@
       if (!st) { const pdOk = ymdValid(plantDate), vOk = ymdValid(v.time); if (pdOk && vOk) early++; else if (!pdOk) noPd++; else badDay++; return; }
       by[st].push({ v, guessed });
     });
-    const short = t => { const s = String(t || ''); return s.length > 80 ? s.slice(0, 80) + '…' : s; };
-    const li = STAGES.map(st => { const es = by[st];
-      return `<li class="${es.length ? 'has' : ''}"><span class="gst">${st} <span class="my">${STAGE_MY[st]}</span></span>`
-        + (es.length ? es.map(({ v, guessed }) => `<div class="gent"><b>${esc(String(v.time || '').slice(0, 10))}</b>${guessed ? '<small>（推算 ခန့်မှန်း）</small>' : ''}`
-          + `${v.text ? '　' + esc(short(v.text)) : v.closing ? '　' + esc(short(v.closing)) : '' /* 第27任 董事長「生長過程由業務填寫緬文即可，不用翻成中文」：後台 myHistory_ 的 text 已是原文（抓BUG第7輪：改回用 text，typed 沒有錄音逐字稿） */}`
-          + `${(v.photos || []).length ? `<div class="pgrid">${v.photos.map((id, i) => `<button type="button" class="btn2 small" data-hph="${esc(id)}">📷 照片 ${pno(v, i)}`
-            + `／ဓာတ်ပုံ ${pno(v, i)}</button>`).join('')}</div>` : ''}</div>`).join('')
-          : '<div class="gent"><small>還沒有照片／ဓာတ်ပုံ မရှိသေး</small></div>') + '</li>'; }).join('');
-    return `<h3>生長過程／ကြီးထွားမှု အဆင့်ဆင့်</h3>${noPd ? `<p class="sub">有 ${noPd} 筆拜訪沒標階段、也沒有種植日期，無法推算／အဆင့်နှင့် စိုက်ရက် မပါသည့် မှတ်တမ်းများ ရှိ၍ မခန့်မှန်းနိုင်ပါ</p>` : ''}`
+    // 每一筆先整理成「日期、推算、文字、照片（id＋第幾張）」，左右兩欄共用同一套畫法
+    const rows = st => by[st].map(({ v, guessed }) => ({
+      v, guessed, text: v.text || v.closing || '', /* 第27任 董事長「生長過程由業務填寫緬文即可，不用翻成中文」：後台 myHistory_ 的 text 已是原文（抓BUG第7輪：改回用 text，typed 沒有錄音逐字稿） */
+      photos: (v.photos || []).map((id, i) => ({ id, no: pno(v, i) }))
+    }));
+    const head = `<h3>生長過程／ကြီးထွားမှု အဆင့်ဆင့်</h3>${noPd ? `<p class="sub">有 ${noPd} 筆拜訪沒標階段、也沒有種植日期，無法推算／အဆင့်နှင့် စိုက်ရက် မပါသည့် မှတ်တမ်းများ ရှိ၍ မခန့်မှန်းနိုင်ပါ</p>` : ''}`
       + `${early ? `<p class="sub">有 ${early} 筆拜訪早於種植日期（上一季），不列在生長過程／စိုက်ရက်မတိုင်မီ (ယခင်ရာသီ) မှတ်တမ်းများ ရှိ၍ ကြီးထွားမှု အဆင့်ဆင့်တွင် မထည့်ပါ</p>` : ''}${badDay ? `<p class="sub">有 ${badDay}`
-        + ` 筆拜訪日期不明，無法推算階段／ရက်စွဲ မသိသည့် မှတ်တမ်းများ ရှိ၍ အဆင့် မခန့်မှန်းနိုင်ပါ</p>` : ''}`
-      + `<ol class="growtl">${li}</ol>`;
+        + ` 筆拜訪日期不明，無法推算階段／ရက်စွဲ မသိသည့် မှတ်တမ်းများ ရှိ၍ အဆင့် မခန့်မှန်းနိုင်ပါ</p>` : ''}`;
+    const isCmp = STAGES.some(st => by[st].some(({ v }) => cmpSplitText(v.text).cmp.length));
+    if (!isCmp) return head + `<ol class="growtl">${growthListHtml(rows)}</ol>`;
+    return head + growthSplitHtml(rows);
+  }
+  /* 第28任 2026-11-21 董事長「生長過程這邊要切左右視窗」（截圖：左邊框「公司內部」、右邊框「對照組」）：
+     對照農民的拜訪打字是三段合成的（cmpCompose：【自己的】（照片 1）…\n【別間公司：西批】（照片 2）…\n【別的作物：草類】（照片 3）…），
+     這裡照【】把它拆開：「自己的」那段和它的照片放左欄，「別間公司」「別的作物」兩段和它們的照片放右欄。
+     沒有分段的拜訪（開始對照那筆、一般打字）整筆放左欄；段落裡沒寫到的照片也放左欄（不會不見）。一般、推廣農民照舊一欄。 */
+  const CMP_SEG_RE = /【(自己的|別間公司[^】]*|別的作物[^】]*)】/g;
+  /** 把一筆拜訪的打字拆成 { own: 自己的那段（不含標題）, cmp: [別間公司、別的作物那幾段（含標題）] }；沒有三組標題回 { own: 原文, cmp: [] } */
+  function cmpSplitText(text) {
+    const s = String(text || '');
+    const heads = [];
+    let m;
+    CMP_SEG_RE.lastIndex = 0;
+    while ((m = CMP_SEG_RE.exec(s))) heads.push({ at: m.index, end: CMP_SEG_RE.lastIndex, title: m[1] });
+    if (!heads.length) return { own: s, cmp: [] };
+    const segs = heads.map((h, i) => ({ title: h.title, whole: s.slice(h.at, i + 1 < heads.length ? heads[i + 1].at : s.length).trim(), body: s.slice(h.end, i + 1 < heads.length ? heads[i + 1].at : s.length).trim() }));
+    const before = s.slice(0, heads[0].at).trim();
+    const own = [before].concat(segs.filter(g => g.title === '自己的').map(g => g.body)).filter(Boolean).join('\n');
+    return { own, cmp: segs.filter(g => g.title !== '自己的').map(g => g.whole) };
+  }
+  /** 一段文字開頭寫的「（照片 1、2）」→ [1, 2] */
+  const cmpPhotoNos = seg => { const m = /^【[^】]*】（照片 ([\d、 ]+)）/.exec(String(seg || '')); return m ? m[1].split('、').map(x => Number(x.trim())).filter(Boolean) : []; };
+  /** 一欄的時間軸：每個階段列那欄的紀錄；pick(row) 回 { text, photos } 或 null（這筆在這欄沒有東西） */
+  function growthListHtml(rows, pick) {
+    const short = t => { const s = String(t || ''); return s.length > 80 ? s.slice(0, 80) + '…' : s; };
+    const take = pick || (r => ({ text: r.text, photos: r.photos }));
+    // 左右兩欄時一段一行、每段各自截 80 字（右欄有別間公司、別的作物兩段，整串截會把第二段截掉）
+    const fit = pick ? t => String(t || '').split('\n').map(short).join('\n') : short;
+    return STAGES.map(st => {
+      // 兩欄時：這筆在這一欄沒有字也沒有照片就不列（例：只有自己的那段，右欄不放空的日期）；一欄時照舊每筆都列
+      const es = rows(st).map(r => Object.assign({ r }, take(r))).filter(e => !pick || e.text || e.photos.length);
+      if (!es.length) return `<li class=""><span class="gst">${st} <span class="my">${STAGE_MY[st]}</span></span><div class="gent"><small>還沒有照片／ဓာတ်ပုံ မရှိသေး</small></div></li>`;
+      return `<li class="has"><span class="gst">${st} <span class="my">${STAGE_MY[st]}</span></span>` + es.map(e => `<div class="gent"><b>${esc(String(e.r.v.time || '').slice(0, 10))}</b>`
+        + `${e.r.guessed ? '<small>（推算 ခန့်မှန်း）</small>' : ''}${e.text ? '　' + esc(fit(e.text)) : ''}`
+        + `${e.photos.length ? `<div class="pgrid">${e.photos.map(p => `<button type="button" class="btn2 small" data-hph="${esc(p.id)}">📷 照片 ${p.no}／ဓာတ်ပုံ ${p.no}</button>`).join('')}</div>` : ''}</div>`).join('') + '</li>';
+    }).join('');
+  }
+  /** 對照農民：左欄公司內部（自己的）、右欄對照組（別間公司、別的作物）；照片照每段寫的編號分邊 */
+  function growthSplitHtml(rows) {
+    const split = r => {
+      const p = cmpSplitText(r.text);
+      const cmpNos = [].concat(...p.cmp.map(cmpPhotoNos));
+      return { own: { text: p.own, photos: r.photos.filter(ph => cmpNos.indexOf(ph.no) < 0) }, cmp: { text: p.cmp.join('\n'), photos: r.photos.filter(ph => cmpNos.indexOf(ph.no) >= 0) } };
+    };
+    return '<div class="growsplit">'
+      + `<div class="gcol"><h4>公司內部</h4><ol class="growtl">${growthListHtml(rows, r => split(r).own)}</ol></div>`
+      + `<div class="gcol"><h4>對照組</h4><ol class="growtl">${growthListHtml(rows, r => split(r).cmp)}</ol></div></div>`;
   }
   /* 0.4.77 董事長「種植資料要詳細列出結案的照片、文字、重量、之前田間報告」＋範例紙卡：結案區塊（照片排格子、量測卡一行一項） */
   const MEASURE_ROWS = [['variety', '品種', 'မျိုး'], ['sample', '樣本', 'နမူနာ'], ['weight', '總重量', 'အလေးချိန်'], ['length', '長度', 'အရှည်'], ['rows', '穗行數', 'အစေ့တန်း'],
@@ -1182,11 +1227,48 @@
     }
     if (kind === 'photo') {
       const img = document.createElement('img'); img.src = x.url; img.alt = label; img.className = 'hphoto';
+      bindPhotoZoom(img, label);
       b.replaceWith(img);
     } else {
       const au = document.createElement('audio'); au.controls = true; au.src = x.url;
       b.replaceWith(au);
     }
+  }
+
+  /* 第28任 2026-11-21 董事長「上傳的圖片點兩下可以放大，然後可以另存檔案」：
+     照片下載好變成圖片後，點兩下（手機是連點兩下）開全螢幕大圖，下面有「另存檔案」（存成 照片_編號.jpg）和「關閉」；點黑色背景也關。
+     手機瀏覽器不一定送 dblclick，所以用兩次 click 的間隔自己判斷（400 毫秒內算兩下）。 */
+  const ZOOM_TAP_MS = 400;
+  function bindPhotoZoom(img, label) {
+    let lastTap = 0;
+    img.addEventListener('click', () => {
+      const now = Date.now();
+      if (now - lastTap > ZOOM_TAP_MS) { lastTap = now; return; }
+      lastTap = 0;
+      showBigPhoto(img.src, photoFileName(label, img.src));
+    });
+  }
+  /** 存檔用的檔名：「📷 照片 3／…」→「照片_3.jpg」；副檔名照圖片格式（png、webp 照實，其他當 jpg） */
+  function photoFileName(label, src) {
+    const no = (/照片 (\d+)/.exec(String(label || '')) || [])[1];
+    const ext = (/^data:image\/(png|webp)/.exec(String(src || '')) || [])[1] || 'jpg';
+    return (no ? '照片_' + no : '照片_' + Date.now()) + '.' + ext;
+  }
+  function showBigPhoto(src, fileName) {
+    let box = document.getElementById('bigPhoto');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'bigPhoto';
+      box.className = 'bigphoto';
+      box.setAttribute('role', 'dialog');
+      box.addEventListener('click', ev => { if (ev.target === box) box.hidden = true; }); // 點黑色背景關閉；點圖片、按鈕不關
+      document.body.appendChild(box);
+    }
+    box.innerHTML = `<img src="${esc(src)}" alt="照片大圖">`
+      + `<div class="bigbar"><a class="btn" href="${esc(src)}" download="${esc(fileName)}">另存檔案</a>`
+      + `<button type="button" class="btn2" data-bigclose>關閉</button></div>`;
+    box.querySelector('[data-bigclose]').addEventListener('click', () => { box.hidden = true; });
+    box.hidden = false;
   }
 
   /* ───── 0.4.72 董事長「執行任務清單：新增幾個一般農民、試作農民、推廣農民、盤商、種子商，詳細的要列出來」（1號）─────
@@ -4492,7 +4574,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261121-201631'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261121-220902'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
