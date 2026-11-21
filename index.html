@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="build-20261121-221904">
+<meta name="app-build" content="build-20261121-224710">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -832,10 +832,7 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
         <input type="text" id="cmpCo" maxlength="60" placeholder="別間公司的名字／အခြားကုမ္ပဏီ နာမည်" aria-label="別間公司的名字">
         <div class="cmpbtns"><button type="button" class="btn2" data-cmpcam="別家">📷 拍照<span class="my">ဓာတ်ပုံရိုက်</span></button><button type="button" class="btn2" data-cmpalb="別家">🖼 照片上傳<span class="my">ဓာတ်ပုံတင်</span></button><span class="sub" data-cmpn="別家"></span></div>
         <textarea id="cmpNote2" maxlength="600" placeholder="別間公司的作物怎麼樣／အခြားကုမ္ပဏီ သီးနှံ အခြေအနေ" aria-label="別間公司的紀錄"></textarea></div>
-      <div class="cmpg" data-g="別作物"><h4>③ 別的作物<span class="my">အခြားသီးနှံ</span></h4>
-        <input type="text" id="cmpCrop" maxlength="60" placeholder="是什麼作物／မည်သည့်သီးနှံ ဖြစ်သနည်း" aria-label="別的作物是什麼">
-        <div class="cmpbtns"><button type="button" class="btn2" data-cmpcam="別作物">📷 拍照<span class="my">ဓာတ်ပုံရိုက်</span></button><button type="button" class="btn2" data-cmpalb="別作物">🖼 照片上傳<span class="my">ဓာတ်ပုံတင်</span></button><span class="sub" data-cmpn="別作物"></span></div>
-        <textarea id="cmpNote3" maxlength="600" placeholder="別的作物怎麼樣／အခြားသီးနှံ အခြေအနေ" aria-label="別的作物的紀錄"></textarea></div>
+      <!-- 第28任 2026-11-21 董事長「別的作物這邊不需要，可以移除」：原本的「③ 別的作物」（作物名稱、拍照、照片上傳、紀錄）拿掉，只留自己的、別間公司兩組 -->
     </div>
     <div class="two media2" id="mediaRow">
       <label class="big" id="photoBtn">

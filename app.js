@@ -2151,7 +2151,7 @@
 
   // 業務BUG#1（2號小助手 2026-11-12）：換農民時上一位的打字、照片、錄音、種植失敗會留著，存檔就記到新農民身上
   const FAIL_IDS = ['fWeather', 'fTemp', 'fFert', 'fWater', 'fPest', 'fPestNote', 'fReason'];
-  const visitDirty = () => !!(state.photos.length || state.busyPhotos || state.audio || state.rec || state.recBusy || $('note').value.trim() || $('plantFail').checked || ['cmpNote1', 'cmpNote2', 'cmpNote3', 'cmpCo', 'cmpCrop'].some(id => String(($n(id) || {}).value || '').trim())); // 0.4.87 高2：錄音處理中也算
+  const visitDirty = () => !!(state.photos.length || state.busyPhotos || state.audio || state.rec || state.recBusy || $('note').value.trim() || $('plantFail').checked || ['cmpNote1', 'cmpNote2', 'cmpCo'].some(id => String(($n(id) || {}).value || '').trim())); // 0.4.87 高2：錄音處理中也算
   /** 業務BUG#5：返回首頁前要確認的「填了東西」——除了照片錄音打字，還有沒見到匯報、新客戶資料、結案欄位、盤商結案說明、價格、試作表單 */
   const filled = id => { const e = $n(id); return e.type === 'checkbox' ? !!e.checked : !!String((e.value) || '').trim(); }; // 0.4.75 勾選框看有沒有勾（value 永遠是 on）
   // 結案七欄＋盤商結案說明（formDirty、換客戶共用）；2號 0.4.70 低3（第8任）：漏了結案地區 cRegion、洽談結果 dcOutcome（兩個下拉，預設空白、不會自動帶值）
@@ -3672,8 +3672,10 @@
   /* ───── 第27任 2026-11-18 董事長「對照農民」雛形：三台相機（自己的、別間公司的、別的作物）＋三段打字 ─────
      類別值照舊是「試作」，只改畫面字。每張照片記 group；照片照三組的順序排（上傳後的編號跟打字裡寫的對得上）；
      三段打字合成一份寫進 #note（存檔、上傳、後台都照舊）。三組都要至少一張照片、都要打字；別間公司要寫名字、別的作物要寫是什麼。
-     開始／結束試作的表單照舊用一般畫面 */
-  const CMP_GROUPS = ['自己', '別家', '別作物'];
+     開始／結束試作的表單照舊用一般畫面
+     第28任 2026-11-21 董事長「別的作物這邊不需要，可以移除」：拿掉第三組，只剩自己的、別間公司兩組（兩組都要照片、打字，別間公司要寫名字）。
+     舊拜訪裡已經寫的【別的作物】照樣顯示（生長過程、進度卡放右邊「對照組」）。 */
+  const CMP_GROUPS = ['自己', '別家'];
   const CMP_TITLE = { 自己: '自己的', 別家: '別間公司', 別作物: '別的作物' };
   const CMP_TITLE_MY = { 自己: 'ကိုယ်ပိုင်', 別家: 'အခြားကုမ္ပဏီ', 別作物: 'အခြားသီးနှံ' }; // 董事長譯稿 E13
   const cmpOn = () => state.cat === '試作' && !state.trialMode;
@@ -3681,20 +3683,19 @@
   function cmpProblem() {
     const loose = (state.photos || []).filter(p => CMP_GROUPS.indexOf(p.group) < 0).length;
     if (loose) {
-      return `有 ${loose} 張照片沒分組（在一般畫面拍的），請按照片上的 × 刪掉，再到三組裡拍`
+      return `有 ${loose} 張照片沒分組（在一般畫面拍的），請按照片上的 × 刪掉，再到兩組裡拍` // 第28任：三組→兩組（緬文還寫「三組」，待譯 J5 重譯）
         + `／အုပ်စုမခွဲရသေးသော ဓာတ်ပုံ ${loose} ပုံ ရှိသည်（သာမန် စာမျက်နှာတွင် ရိုက်ထားသည်）၊ ဓာတ်ပုံပေါ်ရှိ × ကို နှိပ်၍ ဖျက်ပြီး သုံးစုံထဲတွင် ပြန်ရိုက်ပါ`;
     }
     const missGroups = CMP_GROUPS.filter(g => !(state.photos || []).some(p => p.group === g));
     if (missGroups.length) {
-      return '對照農民要拍三組照片：還缺「' + missGroups.map(g => CMP_TITLE[g]).join('、') + '」'
+      return '對照農民要拍兩組照片：還缺「' + missGroups.map(g => CMP_TITLE[g]).join('、') + '」'
         + '／နှိုင်းယှဉ် လယ်သမားအတွက် ဓာတ်ပုံ သုံးစုံ ရိုက်ရမည် - 「' + missGroups.map(g => CMP_TITLE_MY[g]).join('၊ ') + '」 လိုသေးသည်';
     }
     const v = id => String(($n(id) || {}).value || '').trim();
     if (!v('cmpCo')) return '請寫別間公司的名字／အခြားကုမ္ပဏီ နာမည် ရေးပါ';
-    if (!v('cmpCrop')) return '請寫別的作物是什麼／မည်သည့် အခြားသီးနှံဖြစ်ကြောင်း ရေးပါ';
-    const emptyGroups = [['cmpNote1', '自己'], ['cmpNote2', '別家'], ['cmpNote3', '別作物']].filter(([id]) => !v(id)).map(x => x[1]);
+    const emptyGroups = [['cmpNote1', '自己'], ['cmpNote2', '別家']].filter(([id]) => !v(id)).map(x => x[1]);
     if (!emptyGroups.length) return '';
-    return '對照農民三段都要打字：還缺「' + emptyGroups.map(g => CMP_TITLE[g]).join('、') + '」'
+    return '對照農民兩段都要打字：還缺「' + emptyGroups.map(g => CMP_TITLE[g]).join('、') + '」'
       + '／နှိုင်းယှဉ် လယ်သမား သုံးပိုဒ်လုံး စာရိုက်ရမည် - 「' + emptyGroups.map(g => CMP_TITLE_MY[g]).join('၊ ') + '」 လိုသေးသည်';
   }
   /** 三段打字＋每組是第幾張照片，合成一份打字內容（寫進 #note） */
@@ -3711,7 +3712,7 @@
     const v = id => String(($n(id) || {}).value || '').trim();
     const nums = g => (state.photos || []).map((p, i) => (p.group === g ? i + 1 : 0)).filter(Boolean);
     const sec = (g, head, body) => { const n = nums(g); return body || n.length ? `【${head}】${n.length ? '（照片 ' + n.join('、') + '）' : ''}${body}` : ''; };
-    $('note').value = [sec('自己', '自己的', v('cmpNote1')), sec('別家', '別間公司' + (v('cmpCo') ? '：' + v('cmpCo') : ''), v('cmpNote2')), sec('別作物', '別的作物' + (v('cmpCrop') ? '：' + v('cmpCrop') : ''), v('cmpNote3'))].filter(Boolean).join('\n');
+    $('note').value = [sec('自己', '自己的', v('cmpNote1')), sec('別家', '別間公司' + (v('cmpCo') ? '：' + v('cmpCo') : ''), v('cmpNote2'))].filter(Boolean).join('\n');
     state.cmpLast = $('note').value;
   }
   function paintCmp() {
@@ -3722,7 +3723,7 @@
     box.querySelectorAll('[data-cmpn]').forEach(el => { const n = (state.photos || []).filter(p => p.group === el.dataset.cmpn).length; el.textContent = n ? `已有 ${n} 張／${n} ပုံ ရှိပြီ` : '還沒有照片／ဓာတ်ပုံ မရှိသေးပါ'; });
   }
   function clearCmp() {
-    ['cmpNote1', 'cmpNote2', 'cmpNote3', 'cmpCo', 'cmpCrop'].forEach(id => { const e = $n(id); if (e) e.value = ''; });
+    ['cmpNote1', 'cmpNote2', 'cmpCo'].forEach(id => { const e = $n(id); if (e) e.value = ''; });
     state.photoGroup = '';
     state.cmpLast = '';
     state.cmpWasOn = false;
@@ -3731,7 +3732,7 @@
     const box = $n('cmpBox'); if (!box || !box.querySelectorAll) return;
     box.querySelectorAll('[data-cmpcam]').forEach(b => b.addEventListener('click', () => { state.photoGroup = b.dataset.cmpcam; $('photoInput').click(); }));
     box.querySelectorAll('[data-cmpalb]').forEach(b => b.addEventListener('click', () => { state.photoGroup = b.dataset.cmpalb; $('albumInput').click(); }));
-    ['cmpNote1', 'cmpNote2', 'cmpNote3', 'cmpCo', 'cmpCrop'].forEach(id => { const e = $n(id); if (e && e.addEventListener) e.addEventListener('input', () => { cmpCompose(); refreshSave(); }); });
+    ['cmpNote1', 'cmpNote2', 'cmpCo'].forEach(id => { const e = $n(id); if (e && e.addEventListener) e.addEventListener('input', () => { cmpCompose(); refreshSave(); }); });
   }
   /** 0.5.26：要選階段的時候沒選、也沒寫原因 → 不給存（打卡照樣可以，只要寫原因） */
   function stageProblem() {
@@ -4589,7 +4590,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261121-221904'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261121-224710'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
