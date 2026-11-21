@@ -1325,14 +1325,14 @@
   }
   /* 客戶清單右邊的標籤要寫什麼。老闆 2026-11-20：拜訪紀錄那邊有「種植第 N 天」，清單也要有（一般、推廣、對照農民都要）。
      沒在做試作、有填種植日期的農民：綠標後面加「・種植第 N 天／T 天」；原本沒有標籤的，單獨出一個綠標。
-     這裡只管「顯示」：排序和「要注意的」篩選照舊看 attnOf，
+     這裡只管「顯示」：排序和「要注意的」篩選看 listAttnOf（＝attnOf，再加上未簽約的店），
      例：20 天前拜訪的推廣農民多了天數標籤，但不會因此變成要注意（第28任）
      老闆 2026-11-20 晚「客戶只要有種植天數一律改為橘色」：帶了種植天數的標籤改用橘色（p-yel，跟試作／推廣進行中那顆同色）；
      紅色（逾期、該量測）照舊紅色、不加天數 */
   function listPillOf(c) {
     const attn = attnOf(c);
     const dealer = c.type === '盤商' || c.type === '種子商';
-    if (dealer && c.signed !== true && c.status !== '已結束') return unsignedPill(attn);
+    if (isUnsignedDealer(c)) return unsignedPill(attn);
     if (dealer || c.status === '已結束' || c.status === '暫停') return attn; // 老闆 2026-11-20：暫停的不顯示
     const grow = listGrowText(c);
     if (!grow) return attn;
@@ -1342,7 +1342,17 @@
   }
   /* 第28任 2026-11-21 董事長「主管網頁 客戶 未簽約種子商綠色，要顯示紅色未簽約字體」：
      盤商、種子商還沒有主管確認過的簽約（後台 signed 不是 true）→ 右邊標籤一律紅色，開頭寫「未簽約」，原本的拜訪日期等字接在後面。
-     例：綠色「11/20 拜訪」→ 紅色「未簽約・11/20 拜訪」。已簽約的照舊。緬文照譯稿 A396（沒簽約）。排序、要注意的篩選照舊看 attnOf */
+     例：綠色「11/20 拜訪」→ 紅色「未簽約・11/20 拜訪」。已簽約的照舊。緬文照譯稿 A396（沒簽約）。排序、要注意的篩選看 listAttnOf（未簽約也算要注意，見下面） */
+  const isUnsignedDealer = c => (c.type === '盤商' || c.type === '種子商') && c.signed !== true && c.status !== '已結束';
+  /* 老闆 2026-11-22（抓BUG第18輪 主管3 要他決定）選「算要注意」：未簽約的店也算「要注意的」——預設清單看得到、排在綠標前面。
+     排在逾期（0）、今天該回訪（1）、該量測（1.5）後面，進行中的試作（2）前面；原本就有更緊急提醒的照原本的順序。
+     只給清單的篩選、排序用；總覽、日曆等其他地方的 attnOf 不變 */
+  const UNSIGNED_RANK = 1.8;
+  function listAttnOf(c) {
+    const a = attnOf(c);
+    if (!isUnsignedDealer(c)) return a;
+    return Object.assign({}, a || {}, { rank: Math.min(a ? a.rank : 9, UNSIGNED_RANK) });
+  }
   function unsignedPill(attn) {
     const word = '未簽約／မချုပ်ရသေး';
     return { cls: 'p-red', text: attn ? word + '・' + attn.text : word };
@@ -1376,7 +1386,7 @@
     // 篩選本身沒動，清空搜尋就回到原本的篩選
     if (q) return state.data.customers.filter(c => [c.name, c.phone, c.id, c.crop, c.crop ? cropText(String(c.crop)) : '', c.area, c.area ? regionBi(String(c.area)) : ''].some(x => String(x == null ? '' : x).toLowerCase().includes(q))); // 0.5.18 C3：畫面上作物寫「英文／緬文」，用看到的字也要搜得到
     return state.data.customers.filter(c => (!f.staff || (c.staff || NO_STAFF) === f.staff) && (!f.area || c.area === f.area) && (!f.type || (c.kind || c.type || '農民') === f.type) /* 0.5.11 低B：篩選照一般／試作／推廣農民 */
-      && (f.show !== 'attn' || attnOf(c)));
+      && (f.show !== 'attn' || listAttnOf(c)));
   }
   /** 右邊（手機在下面）要顯示誰的履歷：有指定就是他，沒有就是篩選結果的第一位 */
   function custSelected() {
@@ -1427,7 +1437,7 @@
   }
   /** 照「要注意的程度」排（逾期最前），同程度照姓名。第15任：先把每位的程度算好一次再排（原本每次比較都重算兩位，3000 位要算好幾萬次）；排出來的順序跟原本一樣 */
   function sortByAttn(list) {
-    const rank = new Map(list.map(c => { const a = attnOf(c); return [c, a ? a.rank : 9]; }));
+    const rank = new Map(list.map(c => { const a = listAttnOf(c); return [c, a ? a.rank : 9]; }));
     return list.slice().sort((a, b) => (rank.get(a) - rank.get(b)) || String(a.name).localeCompare(String(b.name)));
   }
   function renderCustList() {
