@@ -151,6 +151,7 @@
       fb.hidden = true;
       if (typeof FarmVoice === 'object' && FarmVoice.active()) FarmVoice.stop(true);
     }
+    blockBehind();
     const cfg = (await H.getConfig()) || {};
     el('lockWho').textContent = (cfg.name || cfg.account || '') + (c.method === 'pattern' && c.fails ? `（已錯 ${c.fails} 次，錯 ${MAX_FAILS} 次要用密碼重新登入）／（${c.fails} ကြိမ် မှားပြီး၊ ${MAX_FAILS}`
       + ` ကြိမ် မှားလျှင် စကားဝှက်ဖြင့် ပြန်ဝင်ရမည်）` : '');
@@ -180,7 +181,27 @@
     if (await checkBio(cfg)) return unlock();
     el('lockMsg').textContent = '沒有解鎖（取消了或認不出來），請再按一次；不行就用密碼重新登入／သော့မဖွင့်နိုင်ပါ（ပယ်ဖျက်ခြင်း သို့မဟုတ် မမှတ်မိခြင်း）၊ ထပ်နှိပ်ပါ၊ မရလျှင် စကားဝှက်ဖြင့် ပြန်ဝင်ပါ';
   }
-  function unlock() { locked = false; if (el('lockScreen')) el('lockScreen').hidden = true; try { localStorage.removeItem(HID); } catch (e) { /* 記不了沒關係 */ } }
+  /* 抓BUG第20輪 手機1（第29任）：鎖畫面只是蓋上去的一層，後面的按鈕、輸入框照樣拿得到鍵盤焦點 →
+     藍牙鍵盤按 Tab 走得到「提供建議」、按 Enter 又把建議框開在鎖畫面上；上鎖前正在打字的搜尋框，上鎖後打字照樣寫進去。
+     上鎖時把鎖畫面以外的整頁設成不能操作（inert）、焦點拿掉；解鎖時只還原我們設的那些（本來就 inert 的不動） */
+  let inertSet = [];
+  function blockBehind() {
+    const lock = el('lockScreen');
+    const kids = document.body && document.body.children;
+    if (!kids || typeof kids.length !== 'number') return; // 舊測試的假畫面沒有這些：不做（真瀏覽器一定有）
+    Array.prototype.slice.call(kids).forEach(node => {
+      if (node === lock || node.inert) return;
+      node.inert = true;
+      inertSet.push(node);
+    });
+    const focused = document.activeElement;
+    if (focused && focused !== document.body && typeof focused.blur === 'function' && !(lock && lock.contains && lock.contains(focused))) focused.blur();
+  }
+  function unblockBehind() {
+    inertSet.forEach(node => { node.inert = false; });
+    inertSet = [];
+  }
+  function unlock() { locked = false; unblockBehind(); if (el('lockScreen')) el('lockScreen').hidden = true; try { localStorage.removeItem(HID); } catch (e) { /* 記不了沒關係 */ } }
   async function lockout(msg) { save(null); unlock(); await H.lockout(msg); }
   const enabled = async () => { try { return !H.getEnabled || (await H.getEnabled()) !== false; } catch (e) { return true; } }; // 第24任 第六批：設定分頁「解鎖功能」總開關
   async function maybeLock(force) {

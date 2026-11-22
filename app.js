@@ -1072,9 +1072,11 @@
   /** 把一筆拜訪的打字拆成 { own: 自己的那段（不含標題）, cmp: [別間公司、別的作物那幾段（含標題）] }；沒有段落標題回 { own: 原文, cmp: [] } */
   function cmpSplitText(text) {
     const s = String(text || '');
-    const segs = [], extra = [];
+    const segs = [], extra = [], transcript = [];
     let cur = null;
     s.split('\n').forEach(line => {
+      // 「🎤 逐字稿」一定接在最後、可能有好幾行：碰到 🎤 那行之後全部算逐字稿、放左欄最後（抓BUG第20輪 手機2，第29任）
+      if (transcript.length || /^🎤/.test(line.trim())) { transcript.push(line.trim()); return; }
       const m = CMP_HEAD_RE.exec(line);
       if (m) { cur = { title: m[1], lines: [line] }; segs.push(cur); return; }
       if (CMP_NOTE_RE.test(line.trim()) || !cur) { extra.push(line); return; } // 附加說明、第一個標題之前的字 → 左欄
@@ -1085,7 +1087,7 @@
     const ownSegs = segs.filter(g => g.title === '自己的').map(g => whole(g).replace(CMP_HEAD_RE, '').trim());
     const isNote = x => CMP_NOTE_RE.test(x.trim());
     const before = extra.filter(x => !isNote(x)).map(x => x.trim()), notes = extra.filter(isNote).map(x => x.trim());
-    const own = before.concat(ownSegs, notes).filter(Boolean).join('\n'); // 順序：標題前的字 → 自己的那段 → 附加說明
+    const own = before.concat(ownSegs, notes, transcript).filter(Boolean).join('\n'); // 順序：標題前的字 → 自己的那段 → 附加說明 → 逐字稿
     return { own, cmp: segs.filter(g => g.title !== '自己的').map(whole) };
   }
   /** 一段文字開頭寫的「（照片 1、2）」→ [1, 2] */
@@ -4613,7 +4615,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261122-154316'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261122-223541'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');

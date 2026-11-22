@@ -1024,17 +1024,19 @@
     const sum = v && v.summary ? `<p class="rsum"><button class="btn" type="button" data-speak="${esc(v.id)}" aria-label="念中文摘要">🔊</button> ${esc(v.summary)}</p>` : v ? `<p class="sub">${esc(noSummaryText(v))}</p>` : '';
     const miss = close ? closeMissing(x, v) : [];
     const missH = miss.length ? `<p class="rmiss">⚠ 缺／လိုနေ：${miss.map(esc).join('、')}</p>` : '';
+    // 抓BUG第20輪 主管1／後台1（第29任）：這筆結案的拜訪已被刪除（資料管理）→ 確認不了，只能退回，或先還原拜訪（新字待譯 J11）
+    const goneH = close && x.visitDeleted ? '<p class="rmiss">⚠ 這筆結案的拜訪已經被刪除（資料管理），不能確認；請按退回，或先到資料管理還原那筆拜訪</p>' : '';
     // 第28任 抓BUG第11輪 主管3：店家簽約後照樣在業務清單，可能又送一次簽約 → 這家已經簽過的，審核卡提醒主管（新字待譯）
     // 第14輪 主管4：後台有帶 signedBefore（比這筆早的已確認簽約）就看它；舊後台才退回看「這家有沒有簽過」
     const againH = close && x.result === '已簽約' && signedEarlier(x) ? '<p class="rmiss">⚠ 這家店之前已經簽過約（主管確認過），這筆是再一次簽約<span class="my">ဤဆိုင်သည် ယခင်က စာချုပ်ချုပ်ပြီးဖြစ်သည်（မန်နေဂျာ အတည်ပြုပြီး）၊ ဤတစ်ခုသည် ထပ်မံ စာချုပ်ချုပ်ခြင်း ဖြစ်သည်</span></p>' : '';
     const rej = R.rej === (close ? x.visitId : x.id) ? rejectPanel() : '';
-    const btns = close ? `<div class="rbtns"><button class="btn" type="button" data-rv="reject"${state.closeSending ? ' disabled' : ''}>退回（寫原因）<span class="my">ပြန်ပို့（အကြောင်းရင်း ရေး）</span></button><button class="btn primary" type="button" data-rv="confirm"${state.closeSending ? ' disabled' : ''}`
+    const btns = close ? `<div class="rbtns"><button class="btn" type="button" data-rv="reject"${state.closeSending ? ' disabled' : ''}>退回（寫原因）<span class="my">ပြန်ပို့（အကြောင်းရင်း ရေး）</span></button><button class="btn primary" type="button" data-rv="confirm"${state.closeSending || x.visitDeleted ? ' disabled' : ''}`
       + `>確認結案</button></div>`
       : `<div class="rbtns"><button class="btn" type="button" data-rv="ask">派任務追問<span class="my">မေးမြန်းရန် လုပ်ငန်း ပေး</span></button><button class="btn primary" type="button" data-rv="seen">已看過<span class="my">ကြည့်ပြီး</span></button></div>`;
     return `<div class="review" id="reviewCard"><div class="rtop"><button class="btn" type="button" data-rv="exit">← 回今天<span class="my">ယနေ့သို့ ပြန်</span></button><b>${pos}`
       + `</b><span><button class="btn" type="button" data-rv="prev" aria-label="上一筆／ယခင်တစ်ခု"${R.i ? '' : ' disabled'}>‹</button><button class="btn" type="button" data-rv="next" aria-label="下一筆／နောက်တစ်ခု"${R.i < items.length - 1 ? '' : ' disabled'}`
       + `>›</button></span></div>
-      <div class="rcard">${head}${cells}${ph}${fl}${sum}${againH}${missH}<p class="sub"><a href="javascript:void 0" data-go="${esc(x.cid)}">看這位客戶的完整紀錄<span class="my">ဤဖောက်သည်၏ မှတ်တမ်း အပြည့်အစုံ ကြည့်ရန်</span></a></p>${rej}`
+      <div class="rcard">${head}${cells}${ph}${fl}${sum}${againH}${missH}${goneH}<p class="sub"><a href="javascript:void 0" data-go="${esc(x.cid)}">看這位客戶的完整紀錄<span class="my">ဤဖောက်သည်၏ မှတ်တမ်း အပြည့်အစုံ ကြည့်ရန်</span></a></p>${rej}`
         + `</div>
       <p class="sub" id="closeMsg" aria-live="polite">${esc(state.closeMsg || '')}</p>${btns}</div>`;
   }
@@ -1112,6 +1114,9 @@
           // 抓BUG第3輪 主管組2：那筆已不在清單，畫面會換成下一筆 → 訊息只寫「這筆」會被看成眼前那筆；改成寫出是哪一位、已從清單移除（緬文待譯 D14 改這句）
           : Object.assign({}, r, { message: `「${x.name}」已經被別人「${r.state}」，跟你這次要做的（${ok ? '確認結案' : '退回'}）不一樣，已從清單移除；請到客戶履歷看清楚`
             + `／「${x.name}」 ကို အခြားသူက 「${r.state}」 လုပ်ပြီးဖြစ်၍ ယခု သင်လုပ်မည့်（${ok ? '確認結案' : '退回'}）နှင့် မတူသောကြောင့် စာရင်းမှ ဖယ်ရှားပြီးပြီ၊ ဖောက်သည် မှတ်တမ်းတွင် သေချာကြည့်ပါ` }); // 緬文照譯稿 D14
+        // 抓BUG第20輪 主管1（第29任）：拜訪被刪掉的結案，後台帶回的新清單已經沒有它，畫面會換成下一家 →
+        //   訊息原本只寫「這筆…不要的話按退回」，主管照著按，退掉的是下一家。改成寫出是哪一家、已從清單移除（新字待譯 J11）
+        if (r && r.code === 'VISIT_DELETED') r = Object.assign({}, r, { message: `「${x.name}」這筆結案的拜訪已經被刪除（資料管理），沒有確認；請按退回，或先到資料管理還原那筆拜訪再確認` });
         if (r.closings) setData({ closings: r.closings });
         R.rej = null;
         if (r.ok) {
@@ -1547,9 +1552,11 @@
   // 程式自己接在後面的說明行（〔…〕、手機照片／錄音讀不到、🎤 逐字稿）放左邊，同手機 CMP_NOTE_RE（抓BUG第19輪 手機3、4，第29任）
   const CMP_NOTE_RE = /^(〔|🎤|（(手機照片 \d+ 張讀不到|錄音讀不到))/;
   function cmpSplitText(text) {
-    const segs = [], before = [], notes = [];
+    const segs = [], before = [], notes = [], transcript = [];
     let cur = null;
     String(text || '').split('\n').forEach(line => {
+      // 多行逐字稿：🎤 那行之後全部算逐字稿、放左邊最後（同手機；抓BUG第20輪 手機2，第29任）
+      if (transcript.length || /^🎤/.test(line.trim())) { transcript.push(line.trim()); return; }
       const m = CMP_HEAD_RE.exec(line);
       if (m) { cur = { title: m[1], lines: [line] }; segs.push(cur); return; }
       if (CMP_NOTE_RE.test(line.trim())) { notes.push(line.trim()); return; }
@@ -1557,7 +1564,7 @@
       cur.lines.push(line);
     });
     const whole = g => g.lines.join('\n').trim();
-    const own = before.concat(segs.filter(g => g.title === '自己的').map(g => whole(g).replace(CMP_HEAD_RE, '').trim()), notes).filter(Boolean).join('\n');
+    const own = before.concat(segs.filter(g => g.title === '自己的').map(g => whole(g).replace(CMP_HEAD_RE, '').trim()), notes, transcript).filter(Boolean).join('\n');
     return { own, cmp: segs.filter(g => g.title !== '自己的').map(whole) };
   }
   const cmpPhotoNos = seg => { const m = /^【[^】]*】（照片 ([\d、 ]+)）/.exec(String(seg || '')); return m ? m[1].split('、').map(x => Number(x.trim())).filter(Boolean) : []; };
@@ -1644,7 +1651,17 @@
   function zoomable(el, id) {
     if (el.dataset.big) return;
     el.style.cursor = 'zoom-in';
-    el.addEventListener('click', () => { if (state.photos[id]) showBig(state.photos[id]); });
+    const open = () => { if (state.photos[id]) showBig(state.photos[id]); };
+    el.addEventListener('click', open);
+    // 鍵盤也打得開：Tab 移得到、按 Enter 或空白鍵開大圖（同審核卡縮圖是按鈕；抓BUG第20輪 主管2，第29任）
+    el.tabIndex = 0;
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-label', '看大圖');
+    el.addEventListener('keydown', ev => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      ev.preventDefault();
+      open();
+    });
   }
   async function loadPhotos() {
     const gen = state.renderGen;
