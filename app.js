@@ -1073,12 +1073,13 @@
   function cmpSplitText(text) {
     const s = String(text || '');
     const segs = [], extra = [], transcript = [];
-    let cur = null;
+    let cur = null, inTranscript = false;
     s.split('\n').forEach(line => {
-      // 「🎤 逐字稿」一定接在最後、可能有好幾行：碰到 🎤 那行之後全部算逐字稿、放左欄最後（抓BUG第20輪 手機2，第29任）
-      if (transcript.length || /^🎤/.test(line.trim())) { transcript.push(line.trim()); return; }
       const m = CMP_HEAD_RE.exec(line);
-      if (m) { cur = { title: m[1], lines: [line] }; segs.push(cur); return; }
+      if (m) { inTranscript = false; cur = { title: m[1], lines: [line] }; segs.push(cur); return; }
+      // 「🎤 逐字稿」可能有好幾行：🎤 那行起到下一個段落標題前都算逐字稿、放左邊最後（抓BUG第20輪 手機2）。
+      // 碰到標題就結束：業務自己打一行 🎤 開頭的字時，後面的【別間公司】照樣在右邊（抓BUG第21輪 手機2／後台2，第29任）
+      if (inTranscript || /^🎤/.test(line.trim())) { inTranscript = true; transcript.push(line.trim()); return; }
       if (CMP_NOTE_RE.test(line.trim()) || !cur) { extra.push(line); return; } // 附加說明、第一個標題之前的字 → 左欄
       cur.lines.push(line);
     });
@@ -4615,7 +4616,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261122-223541'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261122-233546'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');

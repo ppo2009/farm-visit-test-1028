@@ -1142,13 +1142,32 @@
       d.className = 'bigphoto';
       d.setAttribute('role', 'dialog');
       d.setAttribute('aria-label', '照片大圖／ဓာတ်ပုံ အကြီး');
-      d.addEventListener('click', () => { d.hidden = true; });
+      d.tabIndex = -1;
+      d.addEventListener('click', () => hideBig(d));
+      // 鍵盤：Esc 關掉；Tab 不讓焦點跑到黑幕後面，留在「另存檔案」（抓BUG第21輪 主管1，第29任）
+      d.addEventListener('keydown', ev => {
+        if (ev.key === 'Escape') { ev.preventDefault(); hideBig(d); return; }
+        if (ev.key !== 'Tab') return;
+        ev.preventDefault();
+        const save = d.querySelector('[data-bigsave]');
+        if (save) save.focus();
+      });
       document.body.appendChild(d);
     }
+    bigOpener = document.activeElement; // 關掉後焦點回到打開它的那格照片
     d.innerHTML = `<img src="${src}" alt="照片大圖／ဓာတ်ပုံ အကြီး"><span class="sub">點一下關閉<span class="my">ပိတ်ရန် တစ်ချက်နှိပ်ပါ</span></span>`
       + `<a class="btn" data-bigsave href="${src}" download="${bigFileName(src)}">另存檔案</a>`; // 第28任 董事長「上傳的圖片…可以另存檔案」
     d.querySelector('[data-bigsave]').addEventListener('click', ev => ev.stopPropagation()); // 按存檔不要順便關掉大圖
     d.hidden = false;
+    d.focus();
+  }
+  /* 大圖關掉：焦點還給打開它的那格照片（原本掉到整頁最上面，只用鍵盤的人要從頭 Tab 回來；抓BUG第21輪 主管1，第29任） */
+  let bigOpener = null;
+  function hideBig(d) {
+    d.hidden = true;
+    const back = bigOpener;
+    bigOpener = null;
+    if (back && back.isConnected && typeof back.focus === 'function') back.focus();
   }
   /** 存檔用的檔名：照片_年月日時分秒.jpg（副檔名照圖片格式：png、webp 照實，其他當 jpg） */
   function bigFileName(src) {
@@ -1553,12 +1572,13 @@
   const CMP_NOTE_RE = /^(〔|🎤|（(手機照片 \d+ 張讀不到|錄音讀不到))/;
   function cmpSplitText(text) {
     const segs = [], before = [], notes = [], transcript = [];
-    let cur = null;
+    let cur = null, inTranscript = false;
     String(text || '').split('\n').forEach(line => {
-      // 多行逐字稿：🎤 那行之後全部算逐字稿、放左邊最後（同手機；抓BUG第20輪 手機2，第29任）
-      if (transcript.length || /^🎤/.test(line.trim())) { transcript.push(line.trim()); return; }
       const m = CMP_HEAD_RE.exec(line);
-      if (m) { cur = { title: m[1], lines: [line] }; segs.push(cur); return; }
+      if (m) { inTranscript = false; cur = { title: m[1], lines: [line] }; segs.push(cur); return; }
+      // 「🎤 逐字稿」可能有好幾行：🎤 那行起到下一個段落標題前都算逐字稿、放左邊最後（抓BUG第20輪 手機2）。
+      // 碰到標題就結束：業務自己打一行 🎤 開頭的字時，後面的【別間公司】照樣在右邊（抓BUG第21輪 手機2／後台2，第29任）
+      if (inTranscript || /^🎤/.test(line.trim())) { inTranscript = true; transcript.push(line.trim()); return; }
       if (CMP_NOTE_RE.test(line.trim())) { notes.push(line.trim()); return; }
       if (!cur) { before.push(line.trim()); return; }
       cur.lines.push(line);

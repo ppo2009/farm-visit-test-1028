@@ -151,8 +151,11 @@
       fb.hidden = true;
       if (typeof FarmVoice === 'object' && FarmVoice.active()) FarmVoice.stop(true);
     }
+    // 抓BUG第21輪 手機1、3（第29任）：讀設定失敗時 app.js 改成回登入頁，但原本整頁已經先設成不能操作、「鎖住」也沒清 →
+    //   登入頁點不動、之後不再上鎖。改成先讀設定（失敗就清掉鎖住再往外丟），讀完、鎖畫面要出現時才擋後面
+    let cfg;
+    try { cfg = (await H.getConfig()) || {}; } catch (e) { locked = false; throw e; }
     blockBehind();
-    const cfg = (await H.getConfig()) || {};
     el('lockWho').textContent = (cfg.name || cfg.account || '') + (c.method === 'pattern' && c.fails ? `（已錯 ${c.fails} 次，錯 ${MAX_FAILS} 次要用密碼重新登入）／（${c.fails} ကြိမ် မှားပြီး၊ ${MAX_FAILS}`
       + ` ကြိမ် မှားလျှင် စကားဝှက်ဖြင့် ပြန်ဝင်ရမည်）` : '');
     el('lockMsg').textContent = '';
