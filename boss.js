@@ -1013,10 +1013,13 @@
       ${closeTags(x) ? `<p class="rtags">${closeTags(x)}</p>` : ''}${closeExtra(x) ? `<p class="sub">${closeExtra(x)}</p>` : ''}` : '';
     const rFig = (id, no) => `<figure class="pfig"><button type="button" class="rthumb" data-photo="${esc(id)}" data-big="${esc(id)}`
       + `" aria-label="看大圖 照片 ${no} ပုံကြီးကြည့်ရန် ဓာတ်ပုံ ${no}">讀取中…<span class="my">ဖတ်နေသည်</span></button><figcaption>照片 ${no}<span class="my">ဓာတ်ပုံ ${no}</span></figcaption></figure>`; /* 第27任：照片加編號，對得上打字裡的「照片 N」 */
+    // 抓BUG第19輪 主管3（第29任）：對照拜訪一張照片都沒有時，兩欄那條路原本不寫「沒有照片」→ 兩條路共用同一句
+    const rNoPhoto = '<p class="sub">（沒有照片）<span class="my">（ဓာတ်ပုံ မရှိပါ）</span></p>';
     const sides = !close ? cmpSidesOf(x) : null; // 第28任 2026-11-22：可疑拜訪是對照農民的 → 照片分兩邊（結案卡的照片來自好幾筆拜訪，照舊一排）
     const ph = sides ? `<div class="cmp2">${[['公司內部', sides.own], ['對照組', sides.cmp]].map(([title, sd]) => `<div class="cmpcol"><h4>${title}</h4>`
       + `${sd.photos.length ? `<div class="rphotos">${sd.photos.map(p => rFig(p.id, p.no)).join('')}</div>` : ''}${sd.text ? `<p class="pre" data-nomyfix>${esc(sd.text)}</p>` : ''}</div>`).join('')}</div>`
-      : photos.length ? `<div class="rphotos">${photos.map((id, i) => rFig(id, (nosOf || [])[i] || i + 1)).join('')}</div>` : '<p class="sub">（沒有照片）<span class="my">（ဓာတ်ပုံ မရှိပါ）</span></p>';
+      + (sides.own.photos.length || sides.cmp.photos.length ? '' : rNoPhoto)
+      : photos.length ? `<div class="rphotos">${photos.map((id, i) => rFig(id, (nosOf || [])[i] || i + 1)).join('')}</div>` : rNoPhoto;
     const fl = flags.length ? `<div class="flags big">${flags.map(f => `<span class="flag f-${f.k}">${esc(f.txt)}</span>`).join('')}</div>` : '';
     const sum = v && v.summary ? `<p class="rsum"><button class="btn" type="button" data-speak="${esc(v.id)}" aria-label="念中文摘要">🔊</button> ${esc(v.summary)}</p>` : v ? `<p class="sub">${esc(noSummaryText(v))}</p>` : '';
     const miss = close ? closeMissing(x, v) : [];
@@ -1154,6 +1157,7 @@
     const thumb = id => `<span class="vthumb lazy" data-lazyphoto="${esc(id)}"></span>`;
     const s = cmpSidesOf(v);
     if (!s) return ph.length ? `<div class="vthumbs">${ph.map(thumb).join('')}</div>` : '';
+    if (!s.own.photos.length && !s.cmp.photos.length) return ''; // 兩邊都沒照片不畫兩個空框，同一般拜訪（抓BUG第19輪 主管3，第29任）
     const col = (title, side) => `<div class="cmpcol"><h4>${title}</h4>${side.photos.length ? `<div class="vthumbs">${side.photos.slice(0, 2).map(p => thumb(p.id)).join('')}</div>` : ''}</div>`;
     return `<div class="cmp2">${col('公司內部', s.own)}${col('對照組', s.cmp)}</div>`;
   }
@@ -1362,7 +1366,8 @@
   const UNSIGNED_RANK = 1.8;
   function listAttnOf(c) {
     const a = attnOf(c);
-    if (!isUnsignedDealer(c)) return a;
+    // 暫停的店不算要注意（同暫停的農民 isActive）；紅色「未簽約」標籤照舊（抓BUG第19輪 主管2，第29任）
+    if (!isUnsignedDealer(c) || c.status === '暫停') return a;
     return Object.assign({}, a || {}, { rank: Math.min(a ? a.rank : 9, UNSIGNED_RANK) });
   }
   function unsignedPill(attn) {
@@ -1504,7 +1509,7 @@
       <div class="filters">${sel('show', '顯示', [['attn', '要注意的'], ['all', '全部客戶']])}${sel('staff', '業務', staffNames, '全部業務')}${sel('area', '地區', uniq(cs.map(c => c.area)), '全部地區')}`
         + `${sel('type', '類型', ['一般農民', '試作農民', '推廣農民', '盤商', '種子商'].concat(cs.some(c => (c.type || '農民') === '農民' && !c.kind) ? ['農民'] : []), '全部類型') /* 0.5.11 低B：可以只看一般／試作／推廣農民；還有沒分類的舊資料才多一個「農民」 */}`
         + `</div>
-      <span class="sub">要注意的＝逾期、今天該回訪、試作進行中、7 天內拜訪過<span class="my">သတိပြုရန်＝ရက်ကျော်၊ ယနေ့ သွားရန်၊ စမ်းသပ် လုပ်ဆောင်ဆဲ၊ ၇ ရက်အတွင်း သွားခဲ့ပြီး</span></span></div>`;
+      <span class="sub">要注意的＝逾期、今天該回訪、試作進行中、未簽約的店、7 天內拜訪過<span class="my">သတိပြုရန်＝ရက်ကျော်၊ ယနေ့ သွားရန်၊ စမ်းသပ် လုပ်ဆောင်ဆဲ၊ ၇ ရက်အတွင်း သွားခဲ့ပြီး</span></span></div>`;
     const c = custSelected();
     return `<div class="custgrid"><div>${tools}<div id="custList">${renderCustList()}</div></div>
       <div id="custDetail" data-cid="${esc(c ? c.id : '')}">${custDetailHtml()}</div></div>`;
@@ -1539,13 +1544,15 @@
      拆法跟手機 app.js cmpSplitText、後台 frCmpSplit_ 同一套：段落標題只認一行的開頭；「〔」開頭的附加說明、第一個標題前的字放左邊；
      照片照打字裡寫的「（照片 N）」分邊，沒寫到的放左邊。不是對照農民的打字（沒有別間公司／別的作物段）照原本一欄 */
   const CMP_HEAD_RE = /^【(自己的|別間公司[^】]*|別的作物[^】]*)】/;
+  // 程式自己接在後面的說明行（〔…〕、手機照片／錄音讀不到、🎤 逐字稿）放左邊，同手機 CMP_NOTE_RE（抓BUG第19輪 手機3、4，第29任）
+  const CMP_NOTE_RE = /^(〔|🎤|（(手機照片 \d+ 張讀不到|錄音讀不到))/;
   function cmpSplitText(text) {
     const segs = [], before = [], notes = [];
     let cur = null;
     String(text || '').split('\n').forEach(line => {
       const m = CMP_HEAD_RE.exec(line);
       if (m) { cur = { title: m[1], lines: [line] }; segs.push(cur); return; }
-      if (/^〔/.test(line.trim())) { notes.push(line.trim()); return; }
+      if (CMP_NOTE_RE.test(line.trim())) { notes.push(line.trim()); return; }
       if (!cur) { before.push(line.trim()); return; }
       cur.lines.push(line);
     });
@@ -1572,7 +1579,9 @@
     const s = cmpSidesOf(v);
     const col = (title, side) => `<div class="cmpcol"><h4>${title}</h4>${side.photos.length ? `<div class="photos">${side.photos.map(p => histFig(p.id, p.no)).join('')}</div>` : ''}`
       + `${side.text ? `<p class="pre" data-nomyfix>${esc(side.text)}</p>` : ''}</div>`;
-    return `<div class="cmp2">${col('公司內部', s.own)}${col('對照組', s.cmp)}</div>`;
+    // 兩邊都沒照片：照一般拜訪寫「沒有照片」（抓BUG第19輪 主管3，第29任）
+    const none = s.own.photos.length || s.cmp.photos.length ? '' : histPhotosHtml({ photos: [] });
+    return `${none}<div class="cmp2">${col('公司內部', s.own)}${col('對照組', s.cmp)}</div>`;
   }
   function renderCustDetail(c) {
     const list = visitsOf(c.id), s = dueState(c);
@@ -1630,6 +1639,13 @@
   }
   // 主管BUG(2號)#14：原本一張一張等，老客戶照片多要等很久 → 同時抓 3 張（太多會被 Apps Script 擋；換畫面照樣停）
   const PHOTO_PARALLEL = 3;
+  /* 客戶履歷的照片點了開大圖（可另存）。審核卡的縮圖本來就有自己的點擊（data-big），這裡跳過，不綁兩次。
+     原本履歷只放圖、不接點擊，主管在看一位客戶所有照片的地方反而不能放大（抓BUG第19輪 主管4，第29任） */
+  function zoomable(el, id) {
+    if (el.dataset.big) return;
+    el.style.cursor = 'zoom-in';
+    el.addEventListener('click', () => { if (state.photos[id]) showBig(state.photos[id]); });
+  }
   async function loadPhotos() {
     const gen = state.renderGen;
     const els = [...$('panel').querySelectorAll('[data-photo]')];
@@ -1641,7 +1657,7 @@
         if (!id) continue;
         const r = await getPhoto(id);
         if (!el.isConnected) continue;
-        if (state.photos[id]) el.innerHTML = `<img src="${state.photos[id]}" alt="田間照片">`;
+        if (state.photos[id]) { el.innerHTML = `<img src="${state.photos[id]}" alt="田間照片">`; zoomable(el, id); }
         else el.textContent = (r && r.message) || '照片讀取失敗／ဓာတ်ပုံ ဖတ်မရပါ';
       }
     };

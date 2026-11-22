@@ -1065,6 +1065,10 @@
      ① 業務自己打「比【別間公司】的高一倍」，後半句被搬到右欄；② 存檔時接在最後的「〔沒選生長階段的原因：…〕」被算進別間公司那段、跑到右欄。
      改成：標題只認「一行的開頭」（cmpCompose 每段本來就各起一行）；「〔」開頭的附加行（程式加的說明）一律放左欄。 */
   const CMP_HEAD_RE = /^【(自己的|別間公司[^】]*|別的作物[^】]*)】/;
+  /* 程式自己接在打字後面的說明行，一律放左欄（不是別間公司的內容）：
+     「〔沒選生長階段的原因…〕」、手機照片或錄音讀不到時 core.js 加的「（手機照片 N 張讀不到，沒傳）」、
+     後台在打字太短時接的「🎤 逐字稿」。後兩種原本被接在別間公司那段後面、跑到右欄（抓BUG第19輪 手機3、4，第29任） */
+  const CMP_NOTE_RE = /^(〔|🎤|（(手機照片 \d+ 張讀不到|錄音讀不到))/;
   /** 把一筆拜訪的打字拆成 { own: 自己的那段（不含標題）, cmp: [別間公司、別的作物那幾段（含標題）] }；沒有段落標題回 { own: 原文, cmp: [] } */
   function cmpSplitText(text) {
     const s = String(text || '');
@@ -1073,13 +1077,13 @@
     s.split('\n').forEach(line => {
       const m = CMP_HEAD_RE.exec(line);
       if (m) { cur = { title: m[1], lines: [line] }; segs.push(cur); return; }
-      if (/^〔/.test(line.trim()) || !cur) { extra.push(line); return; } // 附加說明、第一個標題之前的字 → 左欄
+      if (CMP_NOTE_RE.test(line.trim()) || !cur) { extra.push(line); return; } // 附加說明、第一個標題之前的字 → 左欄
       cur.lines.push(line);
     });
     if (!segs.length) return { own: s, cmp: [] };
     const whole = g => g.lines.join('\n').trim();
     const ownSegs = segs.filter(g => g.title === '自己的').map(g => whole(g).replace(CMP_HEAD_RE, '').trim());
-    const isNote = x => /^〔/.test(x.trim());
+    const isNote = x => CMP_NOTE_RE.test(x.trim());
     const before = extra.filter(x => !isNote(x)).map(x => x.trim()), notes = extra.filter(isNote).map(x => x.trim());
     const own = before.concat(ownSegs, notes).filter(Boolean).join('\n'); // 順序：標題前的字 → 自己的那段 → 附加說明
     return { own, cmp: segs.filter(g => g.title !== '自己的').map(whole) };
@@ -4609,7 +4613,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261122-012147'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261122-154316'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');

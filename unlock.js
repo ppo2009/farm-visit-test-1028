@@ -142,6 +142,15 @@
     ensureDom(); locked = true;
     // 抓BUG第18輪 手機1（第28任）：照片大圖（#bigPhoto，層級比解鎖畫面高）開著時上鎖 → 沒解鎖也看得到、存得到照片。上鎖先把大圖關掉
     const big = document.getElementById('bigPhoto'); if (big) big.hidden = true;
+    // 抓BUG第19輪 手機1、2（第29任）：「解鎖方式」設定框和鎖畫面同一層、比它晚放所以蓋在上面 → 撿到手機的人在設定框改設新圖形就能解開；
+    // 「提供建議」框層級也比鎖畫面高，開著上鎖時沒解鎖也看得到草稿、還能用業務的名義送出。上鎖一律先關掉這兩個。
+    // 建議框只是收起來（草稿留著）；它開著時才停語音，跟 app.js 關建議框的做法一樣（打卡畫面的語音不受影響）
+    if (el('unlockSet')) el('unlockSet').hidden = true;
+    const fb = document.getElementById('feedbackBox');
+    if (fb && !fb.hidden) {
+      fb.hidden = true;
+      if (typeof FarmVoice === 'object' && FarmVoice.active()) FarmVoice.stop(true);
+    }
     const cfg = (await H.getConfig()) || {};
     el('lockWho').textContent = (cfg.name || cfg.account || '') + (c.method === 'pattern' && c.fails ? `（已錯 ${c.fails} 次，錯 ${MAX_FAILS} 次要用密碼重新登入）／（${c.fails} ကြိမ် မှားပြီး၊ ${MAX_FAILS}`
       + ` ကြိမ် မှားလျှင် စကားဝှက်ဖြင့် ပြန်ဝင်ရမည်）` : '');
@@ -189,12 +198,14 @@
   /** 解鎖方式設定（登入後問一次；首頁「解鎖方式」也打開這個） */
   async function openSettings(intro) {
     ensureDom();
+    if (locked) return; // 鎖住時不准打開設定框（不然不用原本的圖形就能改設新圖形，抓BUG第19輪 手機1）
     const cfg = await H.getConfig(); if (!cfg || !cfg.deviceKey) return;
     if (!(await enabled())) { H.toast('主管已關閉解鎖功能／မန်နေဂျာက သော့ဖွင့် လုပ်ဆောင်ချက်ကို ပိတ်ထားသည်'); return; }
     const cur = await activeFor(cfg), bio = await bioAvailable();
     el('unlockSetIntro').textContent = intro || (cur ? '目前用' + (cur.method === 'bio' ? '人臉／指紋' : '九宮格') + '解鎖。可以換成另一種，或關閉。／လက်ရှိ သုံးနေသည် ' + (cur.method === 'bio' ? 'မျက်နှာ／လက်ဗွေ' : 'ပုံစံကွက်')
       + ' သော့ဖွင့်။ အခြားနည်း ပြောင်းနိုင်သည် သို့မဟုတ် ပိတ်နိုင်သည်။' : '以後打開 App、或離開一段時間再回來，用人臉／指紋或九宮格解鎖，不用再打密碼。／နောက်ပိုင်း App ဖွင့်လျှင် သို့မဟုတ် ခဏထွက်ပြီး ပြန်ဝင်လျှင် မျက်နှာ／လက်ဗွေ သို့မဟုတ် ပုံစံကွက်ဖြင့် ဖွင့်နိုင်သည်၊ စကားဝှက် ထပ်ရိုက်ရန် မလိုပါ။');
     el('setBio').hidden = !bio; el('setOff').hidden = !cur; el('setPatBox').hidden = true; el('unlockSetMsg').textContent = '';
+    if (locked) return; // 上面在等讀設定的途中剛好上鎖了，也不打開
     el('unlockSet').hidden = false;
     const close = () => { el('unlockSet').hidden = true; };
     el('setLater').onclick = close;
