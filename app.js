@@ -120,7 +120,12 @@
         // 第25任 審查①（安全）：原本這條路只記 loginLost、金鑰照留 → 鎖畫面收起後別人可以繼續用這個登入看客戶資料。改成金鑰一樣立刻清掉，
         //   只是不跳登入頁、表單留著：存檔照 0.5.23 J5「沒人登入、用表單主人存」，存完自動回登入頁；不存回首頁時 showHome 看 lockedOut 跳登入
         const dirty = state.view === 'visit' && typeof formDirty === 'function' && formDirty() && c && c.deviceKey;
-        if (typeof tagOwner === 'function') await tagOwner(); await Store.setMeta('config', { gasUrl: (c || {}).gasUrl });
+        // 手機寫不進去（空間不足等）時清不掉金鑰：照樣回登入頁再丟錯，unlock.js 就不清解鎖設定（抓BUG第24輪 手機1，第29任）。
+        //   原本直接丟錯、沒回登入頁，鎖畫面卻被收起來，等於不用解鎖就能用
+        try {
+          if (typeof tagOwner === 'function') await tagOwner();
+          await Store.setMeta('config', { gasUrl: (c || {}).gasUrl });
+        } catch (e) { showLogin(msg); throw e; }
         if (dirty) { state.lockedOut = msg; toast(msg + '。正在填的這一筆可以先儲存在手機裡，之後要用密碼重新登入／။ ယခု ဖြည့်နေသည်ကို ဖုန်းထဲ သိမ်းထားနိုင်သည်၊ နောက်မှ စကားဝှက်ဖြင့် ပြန်ဝင်ရမည်'); return; }
         showLogin(msg);
       }
@@ -4627,7 +4632,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261124-220421'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261124-231200'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');

@@ -55,7 +55,10 @@
     const ok = validPattern(seq) && (await patternHash(seq, c.salt, c.iter || ITER)) === c.hash;
     c.fails = ok ? 0 : (Number(c.fails) || 0) + 1;
     const locked = !ok && c.fails >= MAX_FAILS;
-    save(locked ? null : c); // 錯滿就整個作廢（要重新用密碼登入、重新設）
+    // 錯滿 5 次：先記成「錯滿」（次數留著），不在這裡清掉解鎖設定——等 lockout 真的回到登入頁、金鑰清掉才清。
+    //   原本在這裡先清，手機寫不進去時回登入頁失敗，恢復後重開 App 就直接進首頁、從此不再上鎖（抓BUG第24輪 手機1，第29任）。
+    //   錯滿的設定下次打開照樣上鎖，再畫一次照樣錯滿、照樣要用密碼重新登入
+    save(c);
     return { ok, fails: c.fails, locked };
   }
   /* ───── 人臉／指紋（WebAuthn） ───── */

@@ -124,7 +124,9 @@
   const API_TIMEOUT_MS = 30000, API_FILE_TIMEOUT_MS = 90000, API_AREPORT_TIMEOUT_MS = 170000;
   async function api(payload) {
     const sentKey = state.key;
-    const ms = payload.action === 'audioReport' ? API_AREPORT_TIMEOUT_MS : ['photo', 'audio', 'report'].indexOf(payload.action) >= 0 ? API_FILE_TIMEOUT_MS : API_TIMEOUT_MS;
+    // 第24輪 主管4（第29任）：AI 診斷的「開始診斷」後台要等 AI 回（按鈕寫大約 1 分鐘），比照錄音報告給 170 秒
+    const longWait = payload.action === 'audioReport' || (payload.action === 'aiDiag' && payload.op === 'run');
+    const ms = longWait ? API_AREPORT_TIMEOUT_MS : ['photo', 'audio', 'report'].indexOf(payload.action) >= 0 ? API_FILE_TIMEOUT_MS : API_TIMEOUT_MS;
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     let timedOut = false;
     const timer = ctl ? setTimeout(() => { timedOut = true; ctl.abort(); }, (typeof window !== 'undefined' && window.BOSS_TEST_TIMEOUT_MS) || ms) : null;
@@ -254,6 +256,9 @@
     // 0.5.24（第21任抓BUG）：連「正在拿」的標記一起換新、換世代：重讀前發出去的履歷／進度晚到就丟掉，重讀後馬上重拿（原本會被標記擋住、存進舊的）
     Object.assign(state, { hist: {}, prog: {}, histReq: {}, histErr: {}, progReq: {}, cacheGen: (state.cacheGen || 0) + 1 }); // 第28任：按「重新整理」也清掉「沒讀到」，重拿一次
     state.data = data;
+    // 按「重新整理」：之前讀失敗的資料管理名單、拜訪、AI 診斷狀態清掉，畫面重畫時再讀一次（抓BUG第24輪 主管3、5，第29任）
+    if (state.ai && state.ai.st && !state.ai.st.ok) state.ai.st = null;
+    if (state.adm) { if (state.adm.list && !state.adm.list.ok) state.adm.list = null; state.adm.histFail = {}; }
     if (window.FarmMyFix) window.FarmMyFix.set(data.myFixes || {}, true); // 第28任：主管改好的畫面緬文
     state.loadedAt = Date.now(); // 0.4.88 低8：切回頁面時判斷要不要重讀
     if (seq > (state.closeMsgSeq || 0)) state.closeMsg = ''; // 0.4.88 低7：讀完新資料，上一次結案的提示清掉（按完確認緊接著那次重讀不清，才看得到「已確認結案」）
@@ -357,7 +362,6 @@
     $('briefBadge').hidden = !unread; $('briefBadge').textContent = unread ? String(unread) : '';
     // 抓BUG第6輪 主管組3：整頁重畫（重新整理、離開 10 分鐘切回來自動重讀）也保留同一位客戶打開的修改框和打到一半的字
     const d0 = $('custDetail'), keepCid = d0 ? d0.dataset.cid : '', keepBoxes = d0 ? openFixBoxes(d0) : [];
-    if (state.tab === 'admin') admNoteEdits(admState()); // 資料管理打到一半的字（抓BUG第22輪 主管3）
     $('panel').innerHTML = segBar() + ({ today: renderToday, overdue: renderOverdue, review: renderReview, moremenu: renderMoreMenu, latest: renderLatest, cal: renderCal, trial: renderTrial, map: renderMap, table: renderTable, reports: renderReports, progress: () => staffCards() + renderProgress(), tasks: renderTasks, accounts: renderAccounts, briefs: renderBriefs, errors: renderErrors, myfix: renderMyFix, admin: renderAdmin, aidiag: renderAiDiag })[state.tab](); // 第24任 第七批：今天、逾期、審核、更多（手機）；本月目標、每位業務卡片搬到工作進度
     if (state.tab === 'tasks') bindTasks();
     if (state.tab === 'briefs') bindBriefs();
@@ -2260,7 +2264,8 @@
     if (!isGM()) return '<p class="empty" data-tr="待譯">只有總經理能用 AI 診斷</p>';
     const a = aiState(), st = a.st;
     if (!st) { loadAiStatus(); return '<p class="sub">讀取中…<span class="my">ဖတ်နေသည်…</span></p>'; }
-    if (!st.ok) return `<p class="err">${esc(st.message)}</p>`;
+    // 讀不到狀態：給「重試」（原本叫人按重新整理，但重新整理不會重讀這頁；抓BUG第24輪 主管5，第29任）
+    if (!st.ok) return `<p class="err">${esc(st.message)}</p><button class="btn" type="button" id="aiRetry" data-tr="待譯">重試</button>${a.result ? `<div class="pre aires" data-nomyfix>${esc(a.result.text)}</div>` : ''}`;
     const opts = Object.keys(st.hasKey).map(k => `<option value="${k}"${k === a.provider ? ' selected' : ''}>${k}${st.hasKey[k] ? '' : '（還沒放金鑰）'}</option>`).join('');
     const noKey = !st.hasKey[a.provider];
     const res = a.result ? `<h4 data-tr="待譯">這次的診斷（${esc(a.result.provider)}・${a.result.count} 筆錯誤・花 ${Number(a.result.costUsd || 0).toFixed(3)} 美元）</h4>`
@@ -2278,6 +2283,8 @@
     const sel = $('aiProv'), btn = $('aiRun');
     if (sel) sel.addEventListener('change', () => { aiState().provider = sel.value; render(); });
     if (btn) btn.addEventListener('click', runAiDiag);
+    const retry = $('aiRetry');
+    if (retry) retry.addEventListener('click', () => { aiState().st = null; render(); });
   }
   async function runAiDiag() {
     const a = aiState();
@@ -2286,7 +2293,12 @@
     let r; try { r = await api({ action: 'aiDiag', op: 'run', provider: a.provider }); } catch (e) { r = null; }
     a.busy = false;
     if (r && r.ok) { a.result = r; a.msg = ''; a.st = null; } // 重讀狀態（本月花費、最近 5 次）
-    else a.msg = (r && r.message) || '沒有診斷成功，請再試一次（沒有花錢）';
+    else if (r) a.msg = r.message || '沒有診斷成功，請再試一次';
+    else {
+      // 逾時或斷線：後台可能照樣跑完（AI 已收費、結果已存），不能說「沒有花錢」叫人再按一次（抓BUG第24輪 主管4，第29任；新字待譯 J15）
+      a.msg = '沒有等到結果：後台可能還在跑、可能已經花錢。請 1～2 分鐘後看下面「最近 5 次」，先不要再按';
+      a.st = null; // 重讀本月花費、最近 5 次
+    }
     if (state.tab === 'aidiag') render();
   }
   /*
@@ -2323,7 +2335,9 @@
   async function loadAdminHistory(cid) {
     const a = admState();
     let r; try { r = await api({ action: 'history', cid }); } catch (e) { r = null; }
-    a.hist[cid] = r && r.ok ? (r.visits || []) : [];
+    // 讀失敗另外記（原本存成空陣列，畫面寫「沒有拜訪紀錄」；抓BUG第24輪 主管3，第29任）
+    a.histFail = a.histFail || {};
+    if (r && r.ok) { a.hist[cid] = r.visits || []; delete a.histFail[cid]; } else a.histFail[cid] = (r && r.message) || '讀取失敗';
     if (state.tab === 'admin' && a.open === cid) render();
   }
   /** 一顆會送到後台的按鈕 */
@@ -2333,9 +2347,10 @@
   /* 負責業務下拉的選項：名單只有在職的業務，客戶現在的負責人不在名單裡（沒人負責、已停用或已刪除）時，
      瀏覽器會自動選第一位業務——畫面看起來像負責人是他，順手按「存」就真的改給他了。
      → 沒人負責放一個空白選項、不在名單的人照名字放一個「不在名單」選項，預設選中現在的負責人（抓BUG第22輪 主管1，第29任；新字待譯 J12） */
-  function admStaffPairs(sales, cur) {
+  function admStaffPairs(sales, cur, listOk) {
     const pairs = sales.map(name => [name, name]);
     if (!cur) return [['', '— 沒有負責業務 —']].concat(pairs);
+    if (!listOk) return [[cur, cur]]; // 名單還沒讀到（讀取中或讀失敗）：只放現在的負責人，不能說他不在名單（第24輪 主管3）
     if (sales.indexOf(cur) < 0) return [[cur, cur + '（不在名單：已停用或已刪除）']].concat(pairs);
     return pairs;
   }
@@ -2352,15 +2367,16 @@
     const dealer = c.type === '盤商' || c.type === '種子商';
     const kinds = dealer ? ADM_DEALER_KINDS : ADM_FARMER_KINDS;
     const curKind = dealer ? c.type : (c.kind || '一般農民');
-    const staffOpts = admOptions(admStaffPairs(sales, c.staff), c.staff || '');
+    const staffOpts = admOptions(admStaffPairs(sales, c.staff, !!(a.list && a.list.ok)), c.staff || '');
     const trials = ((state.data && state.data.trials) || []).filter(t => t.cid === id && t.status === '進行中');
-    const visits = a.hist[id];
-    if (!visits) loadAdminHistory(id);
+    const visits = a.hist[id], visitFail = (a.histFail || {})[id];
+    if (!visits && !visitFail) loadAdminHistory(id);
     const trialTag = t => (t.cat === '推廣' ? admMy('推廣', 'မြှင့်တင်') : admMy('對照', 'နှိုင်းယှဉ်'));
     const trialHtml = trials.map(t => `<div class="admrow"><b>${trialTag(t)} ${esc(t.id)}</b>
       <label>${admLabel('品項')} <input id="admTi_${esc(t.id)}" value="${esc(t.item || '')}" maxlength="60"></label>${admBtn('trialFix', { tid: t.id, field: 'item' }, admSave('品項'), 'admTi_' + t.id)}
       <label>${admLabel('開始日')} <input type="date" id="admTs_${esc(t.id)}" value="${esc(t.start || '')}"></label>${admBtn('trialFix', { tid: t.id, field: 'start' }, admSave('開始日'), 'admTs_' + t.id)}</div>`).join('');
-    const visitHtml = !visits ? `<p class="sub">${admMy('拜訪讀取中…', 'သွားရောက်မှု ဖတ်နေသည်…')}</p>`
+    const visitHtml = visitFail ? `<p class="err" data-tr="待譯">拜訪讀取失敗：${esc(visitFail)}</p><button type="button" class="btn" data-admretry="hist" data-cid="${esc(id)}" data-tr="待譯">重試</button>`
+      : !visits ? `<p class="sub">${admMy('拜訪讀取中…', 'သွားရောက်မှု ဖတ်နေသည်…')}</p>`
       : !visits.length ? `<p class="sub">${admMy('沒有拜訪紀錄', 'သွားရောက်မှု မှတ်တမ်း မရှိပါ')}</p>`
       : visits.slice().reverse().map(v => `<div class="admrow"><span>${esc(v.time || '')}・${esc(v.staff || '')}・${esc(v.cat || '')}</span>
         <input type="date" id="admVd_${esc(v.id)}" value="${esc(String(v.time || '').slice(0, 10))}" aria-label="拜訪日期／သွားရောက်သည့် ရက်စွဲ">${admBtn('visitDate', { vid: v.id }, admMy('改日期', 'ရက်စွဲ ပြင်မည်'), 'admVd_' + v.id)}
@@ -2413,8 +2429,12 @@
     const foundMy = `${all.length} ဦး တွေ့သည်${more ? `၊ ပထမ ${ADM_MAX} ဦးသာ ပြထားသည်၊ စာပိုရိုက်ပြီး ရှာပါ` : ''}`;
     return `<p class="sub">${admMy(foundZh, foundMy)}</p>${rows}`;
   }
+  /** 名單讀失敗：照實說、給重試（原本寫「沒有可以管理的帳號」、已刪除整段空白；抓BUG第24輪 主管3，第29任；新字待譯 J15） */
+  const admListFailHtml = l => `<p class="err" data-tr="待譯">名單讀取失敗：${esc(l.message || '')}</p><button type="button" class="btn" data-admretry="list" data-tr="待譯">重試</button>`;
   function admPeople() {
-    const people = (admState().list && admState().list.people) || [];
+    const l = admState().list;
+    if (l && !l.ok) return admListFailHtml(l);
+    const people = (l && l.people) || [];
     if (!people.length) return `<p class="sub">${admMy('沒有可以管理的帳號', 'စီမံနိုင်သော အကောင့် မရှိပါ')}</p>`;
     return people.map(p => `<div class="admrow"><span>${esc(p.name)}（${esc(p.account)}・${esc(p.role)}${p.active ? '' : '・停用'}）${p.active ? '' : '<span class="my">ပိတ်ထား</span>'}</span>
       <input id="admN_${esc(p.account)}" value="${esc(p.name)}" maxlength="40" aria-label="新名字／နာမည်အသစ်">${admBtn('staffRename', { account: p.account }, admMy('改名字', 'နာမည် ပြင်မည်'), 'admN_' + p.account)}
@@ -2422,7 +2442,8 @@
   }
   function admDeleted() {
     const l = admState().list;
-    if (!l || !l.ok) return '';
+    if (l && !l.ok) return admListFailHtml(l);
+    if (!l) return '';
     // 每一筆：還原、確定刪除（董事長「這邊要多一個確定刪除的按鈕，按下去就確定刪除了」）
     const restore = admMy('還原', 'ပြန်ယူမည်'), purge = admMy('確定刪除', 'အပြီးဖျက်မည်');
     const c = l.customers.map(x => `<div class="admrow"><span>${admMy('客戶', 'ဖောက်သည်')} ${esc(x.name)}（${esc(x.cid)}・${esc(x.type)}・${esc(x.staff)}）<small>${esc(x.mark)}</small></span>`
@@ -2498,6 +2519,7 @@
     }
     // 存好的這一欄改顯示後台真正存的值：拿掉記錄，框也標成「沒改過」（不然下次重畫前又被當成改過記回去）
     if (a.edits && btn.dataset.admval) delete a.edits[btn.dataset.admval];
+    if (/Delete|Purge/.test(op)) admDropEdits(btn.closest('details') || btn.closest('.admrow')); // 刪掉的那位、那筆，打到一半的字不留
     if (input && input.tagName === 'SELECT') [...input.options].forEach(opt => { opt.defaultSelected = opt.selected; });
     else if (input) input.defaultValue = input.value;
     const done = admDoneMsg(op);
@@ -2509,8 +2531,12 @@
     }
     if (op === 'custType') { a.kind = value; a.open = arg.cid; } // 換了類型：下拉跟著換到新的那一類，這位照樣開著
     a.hist = {};
-    a.list = null;
+    // 先把「已存好」畫出來：接著的重讀萬一失敗，畫面也看得出已存好，不會再按一次（抓BUG第24輪 主管6，第29任）
+    render();
+    // 名單重讀時舊的先留著，新的回來再換：原本先清成空的，重畫時負責業務下拉只剩一個選項，選好還沒存的人放不回去、變空白（第24輪 主管2）
+    const relist = loadAdminList();
     await load(); // 主管頁全部資料重讀（清單、拜訪、試作跟著更新）
+    await relist;
   }
   /* 資料管理裡改過、還沒存的框，記在 a.edits（{ 框的 id: 值 }）。存檔、重讀都會整頁重畫，輸入框照試算表的資料重新產生 →
      存失敗時剛打的字不見、別欄改到一半沒存的也被蓋回舊的，沒有任何提示（抓BUG第22輪 主管3，第29任）。
@@ -2518,35 +2544,67 @@
      - 記在 a.edits 而不是只活一次重畫：拜訪清單還在讀取時日期框不在畫面上，等讀完再畫出來也放得回去（第23輪 主管2）；
      - 範圍是整個資料管理頁（含業務、主管改名字框），搜尋框、類別下拉不算；
      - 存成功的那一欄從 a.edits 拿掉，畫面顯示後台真正存進去的值（後台會整理空白、電話只留數字；第23輪 主管1） */
+  /* 第24輪 主管1、2（第29任）：改成「打字當下」就記（input／change 事件），改回原值就拿掉。
+     原本只在整頁重畫、而且人在資料管理頁時才記：換分頁回來、收起再打開客戶，放棄的字會又冒出來。
+     收起客戶、搜尋、換類別、刪除時，那位客戶的框一起清掉（admDropEdits）。下拉只在有那個選項時才放回去（不然會變空白） */
   const ADM_NOT_EDITS = ['admQ', 'admKind'];
-  function admNoteEdits(a) {
+  function admNoteEdit(el) {
+    if (!el || !el.id || ADM_NOT_EDITS.indexOf(el.id) >= 0 || !/^(INPUT|SELECT)$/.test(el.tagName)) return;
+    if (!el.closest || !el.closest('.admin')) return;
+    const a = admState();
     a.edits = a.edits || {};
-    document.querySelectorAll('#panel .admin input[id], #panel .admin select[id]').forEach(el => {
-      if (ADM_NOT_EDITS.indexOf(el.id) >= 0) return;
-      const edited = el.tagName === 'SELECT' ? !(el.options[el.selectedIndex] || {}).defaultSelected : el.value !== el.defaultValue;
-      if (edited) a.edits[el.id] = el.value; else delete a.edits[el.id];
-    });
+    const edited = el.tagName === 'SELECT' ? !(el.options[el.selectedIndex] || {}).defaultSelected : el.value !== el.defaultValue;
+    if (edited) a.edits[el.id] = el.value; else delete a.edits[el.id];
+  }
+  /** 一塊畫面裡的框都不記了（收起客戶、刪除那一列） */
+  function admDropEdits(scope) {
+    const a = admState();
+    if (!scope || !a.edits) return;
+    scope.querySelectorAll('input[id], select[id]').forEach(el => { delete a.edits[el.id]; });
+  }
+  /** 現在打開的那位客戶收起來（搜尋、換類別、點別位） */
+  function admDropOpen() {
+    const a = admState();
+    if (a.open) admDropEdits(document.querySelector(`details.admcust[data-admcust="${CSS.escape(a.open)}"]`));
   }
   function admRestoreInputs(a) {
-    Object.keys(a.edits || {}).forEach(id => { const el = document.getElementById(id); if (el) el.value = a.edits[id]; });
+    Object.keys(a.edits || {}).forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (el.tagName === 'SELECT' && ![...el.options].some(opt => opt.value === a.edits[id])) return;
+      el.value = a.edits[id];
+    });
+  }
+  /** 讀取失敗的「重試」：名單整份重讀、拜訪重讀那位客戶 */
+  function admRetry(btn) {
+    const a = admState();
+    if (btn.dataset.admretry === 'list') { a.list = null; render(); return; }
+    if (a.histFail) delete a.histFail[btn.dataset.cid];
+    $('admCustList').innerHTML = admCustomers();
   }
   function bindAdmin() {
     const a = admState();
     const q = $('admQ'), list = $('admCustList');
-    if (q) q.addEventListener('input', () => { a.q = q.value; a.open = ''; list.innerHTML = admCustomers(); });
+    if (q) q.addEventListener('input', () => { a.q = q.value; admDropOpen(); a.open = ''; list.innerHTML = admCustomers(); });
     const kind = $('admKind');
-    if (kind) kind.addEventListener('change', () => { a.kind = kind.value; a.open = ''; list.innerHTML = admCustomers(); });
+    if (kind) kind.addEventListener('change', () => { a.kind = kind.value; admDropOpen(); a.open = ''; list.innerHTML = admCustomers(); });
     const panel = $('panel');
     if (panel.dataset.admBound) return;
     panel.dataset.admBound = '1';
+    const noteEdit = e => { if (state.tab === 'admin') admNoteEdit(e.target); };
+    panel.addEventListener('input', noteEdit);
+    panel.addEventListener('change', noteEdit);
     panel.addEventListener('click', e => {
       if (state.tab !== 'admin') return;
       const btn = e.target.closest && e.target.closest('[data-admop]');
       if (btn) { runAdmin(btn); return; }
+      const retry = e.target.closest && e.target.closest('[data-admretry]');
+      if (retry) { admRetry(retry); return; }
       const sum = e.target.closest && e.target.closest('details.admcust > summary');
       if (!sum) return;
       e.preventDefault();
       const id = sum.parentNode.dataset.admcust;
+      admDropOpen(); // 收起（或換到別位）時，原本打開那位打到一半的字不留（打開時本來就照試算表的值）
       a.open = a.open === id ? '' : id;
       $('admCustList').innerHTML = admCustomers(); // 每次重畫後清單是新的元素，要當下再找
 
