@@ -113,7 +113,9 @@
       toast: m => toast(m),
       // 九宮格錯 5 次、或按「用密碼重新登入」：跟登入失效一樣只清掉金鑰回登入頁，沒上傳的拜訪留在手機裡，同一人登入後再送
       lockout: async msg => {
-        const c = await getConfig();
+        // 手機資料庫讀不到登入設定（抓BUG第23輪 手機1）：照樣回登入頁，但丟錯讓 unlock.js 留著解鎖設定（金鑰沒清掉，下次打開照樣上鎖）
+        let c = null;
+        try { c = await getConfig(); } catch (e) { showLogin(msg); throw e; }
         // 第24任 第六批（老闆問：錯 5 次會不會丟資料）：正在填、還沒儲存的表單比照「登入失效」——先讓業務存進手機，離開打卡畫面才回登入頁（已儲存的本來就不會丟）
         // 第25任 審查①（安全）：原本這條路只記 loginLost、金鑰照留 → 鎖畫面收起後別人可以繼續用這個登入看客戶資料。改成金鑰一樣立刻清掉，
         //   只是不跳登入頁、表單留著：存檔照 0.5.23 J5「沒人登入、用表單主人存」，存完自動回登入頁；不存回首頁時 showHome 看 lockedOut 跳登入
@@ -1069,22 +1071,22 @@
      「〔沒選生長階段的原因…〕」、手機照片或錄音讀不到時 core.js 加的「（手機照片 N 張讀不到，沒傳）」
      （原本被接在別間公司那段後面、跑到右欄，抓BUG第19輪 手機3，第29任）。後台接的「🎤 逐字稿」另外看 cmpTranscriptAt */
   const CMP_NOTE_RE = /^(〔|（(手機照片 \d+ 張讀不到|錄音讀不到))/;
-  /* 後台接上的「🎤 逐字稿」從第幾行開始（沒有回 -1）。後台 visitRawText_ 只在業務打的字不到 20 字時，才在最後另起一行接
-     「🎤 逐字稿」（可能有好幾行）→ 🎤 那行前面不到 20 字、後面也沒有段落標題，才是逐字稿，整份放左邊最後。
-     其他 🎤 開頭的行是業務自己打的（例如在別間公司那段寫「🎤 老闆說下個月降價」），留在原本那段。
-     手機、主管頁 boss.js、後台 Word frCmpSplit_ 三邊同一套（抓BUG第22輪 手機3／後台3，第29任） */
-  function cmpTranscriptAt(lines, headRe) {
-    const at = lines.findIndex(line => /^🎤/.test(line.trim()));
-    if (at < 0) return -1;
-    if (lines.slice(at + 1).some(line => headRe.test(line))) return -1;
-    return lines.slice(0, at).join('\n').trim().length < 20 ? at : -1;
+  /* 後台接上的「🎤 逐字稿」從第幾行開始（沒有回 -1）。後台 visitRawText_ 只在業務打的字很短時，把逐字稿接在後面：
+     打的字 + 換行 + 「🎤 」+ 逐字稿（可能有好幾行），同時另外給 typed（業務打的字）。
+     → 原文以「typed + 換行 + 🎤」開頭，後面才是逐字稿（整份放左邊最後）；其他 🎤 開頭的行都是業務自己打的，留在原本那段。
+     第22輪用「🎤 前面不到 20 字」猜，只記別家、字又少時會把業務自己打的 🎤 行當成逐字稿（抓BUG第23輪 後台2，第29任）。
+     typed 沒給（舊資料）就不認逐字稿 */
+  function cmpTranscriptAt(text, typed) {
+    if (typeof typed !== 'string' || !typed) return -1;
+    if (!String(text || '').startsWith(typed + '\n🎤 ')) return -1;
+    return typed.split('\n').length;
   }
   /** 把一筆拜訪的打字拆成 { own: 自己的那段（不含標題）, cmp: [別間公司、別的作物那幾段（含標題）] }；沒有段落標題回 { own: 原文, cmp: [] } */
-  function cmpSplitText(text) {
+  function cmpSplitText(text, typed) {
     const s = String(text || '');
     const segs = [], extra = [];
     let cur = null;
-    const all = s.split('\n'), tAt = cmpTranscriptAt(all, CMP_HEAD_RE);
+    const all = s.split('\n'), tAt = cmpTranscriptAt(s, typed);
     const body = tAt < 0 ? all : all.slice(0, tAt), transcript = tAt < 0 ? [] : all.slice(tAt).map(line => line.trim());
     body.forEach(line => {
       const m = CMP_HEAD_RE.exec(line);
@@ -1120,7 +1122,7 @@
   /** 對照農民：左欄公司內部（自己的）、右欄對照組（別間公司、別的作物）；照片照每段寫的編號分邊 */
   function growthSplitHtml(rows) {
     const split = r => {
-      const p = cmpSplitText(r.text);
+      const p = cmpSplitText(r.text, r.v && r.v.typed);
       const cmpNos = [].concat(...p.cmp.map(cmpPhotoNos));
       return { own: { text: p.own, photos: r.photos.filter(ph => cmpNos.indexOf(ph.no) < 0) }, cmp: { text: p.cmp.join('\n'), photos: r.photos.filter(ph => cmpNos.indexOf(ph.no) >= 0) } };
     };
@@ -2576,7 +2578,7 @@
      右「對照組」放別間公司、別的作物和它們的照片（跟生長過程同一套拆法 cmpSplitText、照片照段落編號分邊）。
      日期｜業務｜類別、緬文翻譯、結案文字照舊整行；一般拜訪照舊一欄。裡面不能有 </li>（下面用 </li> 切每一筆）。 */
   function progressCmpItemHtml(v) {
-    const p = cmpSplitText(v.text);
+    const p = cmpSplitText(v.text, v.typed);
     const cmpNos = [].concat(...p.cmp.map(cmpPhotoNos));
     const photos = (v.photos || []).map((id, i) => ({ id, no: pno(v, i) }));
     const grid = list => (list.length ? `<div class="pgrid">${list.map(ph => `<button type="button" class="btn2 small" data-hph="${esc(ph.id)}">📷 照片 ${ph.no}／ဓာတ်ပုံ ${ph.no}</button>`).join('')}</div>` : '');
@@ -2597,7 +2599,7 @@
     const tr = trials.map(t => t && t.held === null ? `<li><b>${esc(t.cat)}：結案狀態未知，請洽主管</b>：${esc(cropText(t.item || '（未填品項）'))}<span class="my">${esc(t.cat)} - ပိတ်သိမ်းမှု အခြေအနေ မသိ၊ မန်နေဂျာကို မေးပါ - ${esc(cropText(t.item || '（未填品項）'))}</span></li>` : `<li><b>${esc(t.cat)}`
       + `進行中</b>：${esc(cropText(t.item || '（未填品項）'))}${t.start ? `，${esc(t.start)} 開始${wk(t.start) != null ? `（第 ${wk(t.start)} 天）` : ''}` : ''}<span class="my">${esc(t.cat)}`
       + ` လုပ်ဆောင်ဆဲ - ${esc(cropText(t.item || '（未填品項）'))}${t.start ? `၊ ${esc(t.start)} စတင်${wk(t.start) != null ? `（${wk(t.start)} ရက်မြောက်）` : ''}` : ''}</span></li>`).join('');
-    const vs = recent.map(v => (cmpSplitText(v.text).cmp.length ? progressCmpItemHtml(v) : `<li>${esc(v.time)}｜${esc(v.staff)}｜${esc(CAT_LABEL(v.cat))}${v.text ? `：${esc(v.text).replace(/\n/g, '<br>') /* 第26任：業務原文的換行、「🎤 逐字稿」另起一行照樣顯示 */}` : ''}`
+    const vs = recent.map(v => (cmpSplitText(v.text, v.typed).cmp.length ? progressCmpItemHtml(v) : `<li>${esc(v.time)}｜${esc(v.staff)}｜${esc(CAT_LABEL(v.cat))}${v.text ? `：${esc(v.text).replace(/\n/g, '<br>') /* 第26任：業務原文的換行、「🎤 逐字稿」另起一行照樣顯示 */}` : ''}`
       + `${v.textMy && v.textMy !== v.text ? `<span class="my">${esc(v.textMy)}</span>` : ''}${v.plantFail ? `<br><span class="pill late">種植失敗 စိုက်ပျိုးမှု မအောင်မြင်</span> ${esc(v.plantFail)}` : ''}`
       + `${v.closing ? `<br>${esc(v.closing)}` : ''}${(v.photos || []).length ? `<div class="pgrid">${v.photos.map((id, i) => `<button type="button" class="btn2 small" data-hph="${esc(id)}`
       + `">📷 照片 ${pno(v, i)}／ဓာတ်ပုံ ${pno(v, i)}</button>`).join('')}</div>` : ''}</li>`)).join(''); // 第26任：上次拜訪的照片（董事長「這邊要有上次拜訪的圖片」）
@@ -4625,7 +4627,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261124-210956'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261124-220421'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');

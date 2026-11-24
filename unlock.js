@@ -207,24 +207,36 @@
     inertSet = [];
   }
   function unlock() { locked = false; unblockBehind(); if (el('lockScreen')) el('lockScreen').hidden = true; try { localStorage.removeItem(HID); } catch (e) { /* 記不了沒關係 */ } }
-  async function lockout(msg) { save(null); unlock(); await H.lockout(msg); }
+  /* 改用密碼重新登入：先請 app.js 清登入資料、回登入頁，**成功了**才清這支手機的解鎖設定。
+     原本順序相反：手機資料庫一直讀不到時 app.js 那步失敗，登入頁沒出來、解鎖設定卻已經清掉，等資料庫恢復重開 App 就直接進首頁、
+     從此不再上鎖（抓BUG第23輪 手機1，第29任）。清不掉就留著解鎖設定，下次打開照樣上鎖 */
+  async function lockout(msg) {
+    let failed = null;
+    try { await H.lockout(msg); } catch (e) { failed = e; }
+    if (!failed) save(null);
+    unlock();
+    if (failed) throw failed;
+  }
   const enabled = async () => { try { return !H.getEnabled || (await H.getEnabled()) !== false; } catch (e) { return true; } }; // 第24任 第六批：設定分頁「解鎖功能」總開關
   /* 切回 App 要上鎖時出錯（例如讀不到手機設定）：原本錯誤沒人接，鎖畫面不出來、整頁照常能用，等於這次不用解鎖。
      比照重開 App（app.js 第26任老闆核准，判斷方式一樣）：這支手機有設過解鎖就改用帳號密碼重新登入；沒設過的不動（抓BUG第22輪 手機2，第29任） */
   function lockFailed() {
     const c = load();
     const had = !!(c && (c.method === 'bio' || c.method === 'pattern'));
-    if (had) lockout('解鎖功能出錯，請用帳號密碼重新登入（沒上傳的資料還在手機裡）');
+    if (had) lockout('解鎖功能出錯，請用帳號密碼重新登入（沒上傳的資料還在手機裡）').catch(() => { /* 回登入頁已盡力；解鎖設定照留，下次打開照樣上鎖 */ });
   }
   async function maybeLock(force) {
+    // 切回 App：先看離開多久、要不要鎖（不用讀手機設定），不用鎖就到此為止。
+    //   原本先讀設定，只離開幾秒（拍照、接電話）剛好讀失敗一次，也被當成上鎖出錯、整個登出（抓BUG第23輪 手機2，第29任）
+    if (!force) {
+      let hid = 0; try { hid = Number(localStorage.getItem(HID)) || 0; } catch (e) { hid = 0; }
+      let minutes = null; try { minutes = await H.getMinutes(); } catch (e) { minutes = null; } // 讀不到分鐘數就用預設 10 分鐘
+      if (!needLockAfterHidden(hid, Date.now(), minutes)) return false;
+    }
     if (!(await enabled())) { unlock(); return false; }
     const cfg = await H.getConfig();
     const c = await activeFor(cfg);
     if (!c) { unlock(); return false; }
-    if (!force) {
-      let hid = 0; try { hid = Number(localStorage.getItem(HID)) || 0; } catch (e) { hid = 0; }
-      if (!needLockAfterHidden(hid, Date.now(), await H.getMinutes())) return false;
-    }
     if (!locked) await showLock(c);
     return true;
   }

@@ -357,14 +357,14 @@
     $('briefBadge').hidden = !unread; $('briefBadge').textContent = unread ? String(unread) : '';
     // 抓BUG第6輪 主管組3：整頁重畫（重新整理、離開 10 分鐘切回來自動重讀）也保留同一位客戶打開的修改框和打到一半的字
     const d0 = $('custDetail'), keepCid = d0 ? d0.dataset.cid : '', keepBoxes = d0 ? openFixBoxes(d0) : [];
-    const admKeep = state.tab === 'admin' ? admEditedInputs() : null; // 資料管理打到一半的字（抓BUG第22輪 主管3）
+    if (state.tab === 'admin') admNoteEdits(admState()); // 資料管理打到一半的字（抓BUG第22輪 主管3）
     $('panel').innerHTML = segBar() + ({ today: renderToday, overdue: renderOverdue, review: renderReview, moremenu: renderMoreMenu, latest: renderLatest, cal: renderCal, trial: renderTrial, map: renderMap, table: renderTable, reports: renderReports, progress: () => staffCards() + renderProgress(), tasks: renderTasks, accounts: renderAccounts, briefs: renderBriefs, errors: renderErrors, myfix: renderMyFix, admin: renderAdmin, aidiag: renderAiDiag })[state.tab](); // 第24任 第七批：今天、逾期、審核、更多（手機）；本月目標、每位業務卡片搬到工作進度
     if (state.tab === 'tasks') bindTasks();
     if (state.tab === 'briefs') bindBriefs();
     if (state.tab === 'accounts') bindAccounts();
     if (state.tab === 'errors') bindErrors();
     if (state.tab === 'myfix') bindMyFix();
-    if (state.tab === 'admin') { admRestoreInputs(admKeep); bindAdmin(); } // 第28任：資料管理
+    if (state.tab === 'admin') { admRestoreInputs(admState()); bindAdmin(); } // 第28任：資料管理
     if (state.tab === 'aidiag') bindAiDiag(); // 第28任：AI 診斷
     if (state.tab === 'trial') bindCustomers();
     bindGo($('panel'));
@@ -1577,20 +1577,11 @@
   const CMP_HEAD_RE = /^【(自己的|別間公司[^】]*|別的作物[^】]*)】/;
   // 程式自己接在後面的說明行（〔…〕、手機照片／錄音讀不到、🎤 逐字稿）放左邊，同手機 CMP_NOTE_RE（抓BUG第19輪 手機3、4，第29任）
   const CMP_NOTE_RE = /^(〔|（(手機照片 \d+ 張讀不到|錄音讀不到))/;
-  /* 後台接上的「🎤 逐字稿」從第幾行開始（沒有回 -1）：🎤 那行前面不到 20 字、後面也沒有段落標題才算（後台 visitRawText_ 只在打字不到 20 字時接）；
-     其他 🎤 開頭的行是業務自己打的，留在原本那段（同手機 cmpTranscriptAt；抓BUG第22輪 手機3／後台3，第29任） */
-  function cmpTranscriptAt(lines, headRe) {
-    const at = lines.findIndex(line => /^🎤/.test(line.trim()));
-    if (at < 0) return -1;
-    if (lines.slice(at + 1).some(line => headRe.test(line))) return -1;
-    return lines.slice(0, at).join('\n').trim().length < 20 ? at : -1;
-  }
   function cmpSplitText(text) {
     const segs = [], before = [], notes = [];
     let cur = null;
-    const all = String(text || '').split('\n'), tAt = cmpTranscriptAt(all, CMP_HEAD_RE);
-    const body = tAt < 0 ? all : all.slice(0, tAt), transcript = tAt < 0 ? [] : all.slice(tAt).map(line => line.trim());
-    body.forEach(line => {
+    // 主管頁拿到的是「打字內容」原文，後台從不在裡面接逐字稿：🎤 開頭的行都是業務自己打的，照段落分（抓BUG第23輪 主管3，第29任）
+    String(text || '').split('\n').forEach(line => {
       const m = CMP_HEAD_RE.exec(line);
       if (m) { cur = { title: m[1], lines: [line] }; segs.push(cur); return; }
       if (CMP_NOTE_RE.test(line.trim())) { notes.push(line.trim()); return; }
@@ -1598,7 +1589,7 @@
       cur.lines.push(line);
     });
     const whole = g => g.lines.join('\n').trim();
-    const own = before.concat(segs.filter(g => g.title === '自己的').map(g => whole(g).replace(CMP_HEAD_RE, '').trim()), notes, transcript).filter(Boolean).join('\n');
+    const own = before.concat(segs.filter(g => g.title === '自己的').map(g => whole(g).replace(CMP_HEAD_RE, '').trim()), notes).filter(Boolean).join('\n');
     return { own, cmp: segs.filter(g => g.title !== '自己的').map(whole) };
   }
   const cmpPhotoNos = seg => { const m = /^【[^】]*】（照片 ([\d、 ]+)）/.exec(String(seg || '')); return m ? m[1].split('、').map(x => Number(x.trim())).filter(Boolean) : []; };
@@ -2505,6 +2496,10 @@
       render();
       return;
     }
+    // 存好的這一欄改顯示後台真正存的值：拿掉記錄，框也標成「沒改過」（不然下次重畫前又被當成改過記回去）
+    if (a.edits && btn.dataset.admval) delete a.edits[btn.dataset.admval];
+    if (input && input.tagName === 'SELECT') [...input.options].forEach(opt => { opt.defaultSelected = opt.selected; });
+    else if (input) input.defaultValue = input.value;
     const done = admDoneMsg(op);
     a.msg = done[0];
     a.msgMy = done[1];
@@ -2517,19 +2512,23 @@
     a.list = null;
     await load(); // 主管頁全部資料重讀（清單、拜訪、試作跟著更新）
   }
-  /* 資料管理裡改過、還沒存的框：{ 框的 id: 值 }。存檔、重讀都會整頁重畫，輸入框照試算表的資料重新產生 →
+  /* 資料管理裡改過、還沒存的框，記在 a.edits（{ 框的 id: 值 }）。存檔、重讀都會整頁重畫，輸入框照試算表的資料重新產生 →
      存失敗時剛打的字不見、別欄改到一半沒存的也被蓋回舊的，沒有任何提示（抓BUG第22輪 主管3，第29任）。
-     render 重畫前記下、重畫後照 id 放回去；剛存成功的那一欄，框裡的字本來就等於新資料，放回去也一樣 */
-  function admEditedInputs() {
-    const out = {};
-    document.querySelectorAll('#panel .admbody input[id], #panel .admbody select[id]').forEach(el => {
+     - render 重畫前把畫面上的框記進 a.edits（改回原值的拿掉），重畫後照 id 放回去；
+     - 記在 a.edits 而不是只活一次重畫：拜訪清單還在讀取時日期框不在畫面上，等讀完再畫出來也放得回去（第23輪 主管2）；
+     - 範圍是整個資料管理頁（含業務、主管改名字框），搜尋框、類別下拉不算；
+     - 存成功的那一欄從 a.edits 拿掉，畫面顯示後台真正存進去的值（後台會整理空白、電話只留數字；第23輪 主管1） */
+  const ADM_NOT_EDITS = ['admQ', 'admKind'];
+  function admNoteEdits(a) {
+    a.edits = a.edits || {};
+    document.querySelectorAll('#panel .admin input[id], #panel .admin select[id]').forEach(el => {
+      if (ADM_NOT_EDITS.indexOf(el.id) >= 0) return;
       const edited = el.tagName === 'SELECT' ? !(el.options[el.selectedIndex] || {}).defaultSelected : el.value !== el.defaultValue;
-      if (edited) out[el.id] = el.value;
+      if (edited) a.edits[el.id] = el.value; else delete a.edits[el.id];
     });
-    return out;
   }
-  function admRestoreInputs(keep) {
-    Object.keys(keep || {}).forEach(id => { const el = document.getElementById(id); if (el) el.value = keep[id]; });
+  function admRestoreInputs(a) {
+    Object.keys(a.edits || {}).forEach(id => { const el = document.getElementById(id); if (el) el.value = a.edits[id]; });
   }
   function bindAdmin() {
     const a = admState();
