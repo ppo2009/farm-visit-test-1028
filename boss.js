@@ -257,8 +257,14 @@
     Object.assign(state, { hist: {}, prog: {}, histReq: {}, histErr: {}, progReq: {}, cacheGen: (state.cacheGen || 0) + 1 }); // 第28任：按「重新整理」也清掉「沒讀到」，重拿一次
     state.data = data;
     // 按「重新整理」：之前讀失敗的資料管理名單、拜訪、AI 診斷狀態清掉，畫面重畫時再讀一次（抓BUG第24輪 主管3、5，第29任）
-    if (state.ai && state.ai.st && !state.ai.st.ok) state.ai.st = null;
-    if (state.adm) { if (state.adm.list && !state.adm.list.ok) state.adm.list = null; state.adm.histFail = {}; }
+    // 第25輪 主管4、7（第29任）：讀成功的也要重讀——帳號頁剛開的業務、業務剛上傳的拜訪、AI 診斷逾時後後台跑完的結果，原本都看不到
+    if (state.ai && !state.ai.busy) state.ai.st = null;
+    if (state.adm) {
+      state.adm.histFail = {};
+      admRefreshHist(state.adm);
+      if (state.adm.list && !state.adm.list.ok) state.adm.list = null;
+      else if (state.adm.list && state.tab === 'admin') loadAdminList(); // 舊名單先留著，新的回來再換
+    }
     if (window.FarmMyFix) window.FarmMyFix.set(data.myFixes || {}, true); // 第28任：主管改好的畫面緬文
     state.loadedAt = Date.now(); // 0.4.88 低8：切回頁面時判斷要不要重讀
     if (seq > (state.closeMsgSeq || 0)) state.closeMsg = ''; // 0.4.88 低7：讀完新資料，上一次結案的提示清掉（按完確認緊接著那次重讀不清，才看得到「已確認結案」）
@@ -2233,7 +2239,7 @@
     let r; try { r = await api({ action: 'myFixSet', from: it.my, to }); } catch (e) { r = null; }
     row.querySelectorAll('button').forEach(b => { b.disabled = false; });
     if (!r || !r.ok) { showMyFixFail(msg, (r && r.message) || '沒有存成功，請再試一次'); return; }
-    state.data.myFixes = r.myFixes;
+    setData({ myFixes: r.myFixes }); // 走 setData：資料版本加一，存檔前就發出的重讀晚到時會被擋掉、不蓋回舊字（抓BUG第25輪 主管5，第29任）
     if (window.FarmMyFix) window.FarmMyFix.set(r.myFixes, true);
     state.mf.msg = undo ? '已還原成原本的字／မူရင်းစာသားသို့ ပြန်ယူပြီးပြီ'
       : '已存好；手機下次同步後也會換成新的字／သိမ်းပြီးပြီ၊ ဖုန်း နောက်တစ်ကြိမ် စင့်ခ်လုပ်ပြီးနောက် စာသားအသစ်သို့ ပြောင်းသွားမည်';
@@ -2298,6 +2304,8 @@
       // 逾時或斷線：後台可能照樣跑完（AI 已收費、結果已存），不能說「沒有花錢」叫人再按一次（抓BUG第24輪 主管4，第29任；新字待譯 J15）
       a.msg = '沒有等到結果：後台可能還在跑、可能已經花錢。請 1～2 分鐘後看下面「最近 5 次」，先不要再按';
       a.st = null; // 重讀本月花費、最近 5 次
+      // 90 秒後自動再讀一次（後台通常那時已跑完），提示說的「看最近 5 次」才看得到（第25輪 主管7）
+      setTimeout(() => { if (!a.busy) { a.st = null; if (state.tab === 'aidiag') render(); } }, 90000);
     }
     if (state.tab === 'aidiag') render();
   }
@@ -2334,10 +2342,14 @@
   }
   async function loadAdminHistory(cid) {
     const a = admState();
-    let r; try { r = await api({ action: 'history', cid }); } catch (e) { r = null; }
-    // 讀失敗另外記（原本存成空陣列，畫面寫「沒有拜訪紀錄」；抓BUG第24輪 主管3，第29任）
+    // 同一位客戶同時只讀一次（原本存一欄後一次發 3 個；抓BUG第25輪 主管6，第29任）
+    a.histReq = a.histReq || {};
+    if (a.histReq[cid]) return;
+    a.histReq[cid] = true;
+    let r; try { r = await api({ action: 'history', cid }); } catch (e) { r = null; } finally { delete a.histReq[cid]; }
+    // 讀失敗另外記（原本存成空陣列，畫面寫「沒有拜訪紀錄」；第24輪 主管3）；已經讀到的，晚到的失敗不蓋掉
     a.histFail = a.histFail || {};
-    if (r && r.ok) { a.hist[cid] = r.visits || []; delete a.histFail[cid]; } else a.histFail[cid] = (r && r.message) || '讀取失敗';
+    if (r && r.ok) { a.hist[cid] = r.visits || []; delete a.histFail[cid]; } else if (!a.hist[cid]) a.histFail[cid] = (r && r.message) || '讀取失敗';
     if (state.tab === 'admin' && a.open === cid) render();
   }
   /** 一顆會送到後台的按鈕 */
@@ -2517,11 +2529,8 @@
       render();
       return;
     }
-    // 存好的這一欄改顯示後台真正存的值：拿掉記錄，框也標成「沒改過」（不然下次重畫前又被當成改過記回去）
-    if (a.edits && btn.dataset.admval) delete a.edits[btn.dataset.admval];
-    if (/Delete|Purge/.test(op)) admDropEdits(btn.closest('details') || btn.closest('.admrow')); // 刪掉的那位、那筆，打到一半的字不留
-    if (input && input.tagName === 'SELECT') [...input.options].forEach(opt => { opt.defaultSelected = opt.selected; });
-    else if (input) input.defaultValue = input.value;
+    // 刪掉的那位、那筆，打到一半的字不留：刪客戶清整位，刪拜訪、刪帳號只清那一列（原本刪一筆拜訪，同一位客戶所有沒存的字都不見；抓BUG第25輪 主管2，第29任）
+    if (/Delete|Purge/.test(op)) admDropEdits(/^cust/.test(op) ? btn.closest('details') : (btn.closest('.admrow') || btn.closest('details')));
     const done = admDoneMsg(op);
     a.msg = done[0];
     a.msgMy = done[1];
@@ -2529,14 +2538,42 @@
       a.msg += `；他名下還有 ${r.customersLeft} 位客戶，請改負責業務`;
       a.msgMy += `၊ ၎င်းတာဝန်ယူထားသော ဖောက်သည် ${r.customersLeft} ဦး ကျန်သေးသည်၊ တာဝန်ခံ ဝန်ထမ်း ပြောင်းပေးပါ`;
     }
-    if (op === 'custType') { a.kind = value; a.open = arg.cid; } // 換了類型：下拉跟著換到新的那一類，這位照樣開著
-    a.hist = {};
-    // 先把「已存好」畫出來：接著的重讀萬一失敗，畫面也看得出已存好，不會再按一次（抓BUG第24輪 主管6，第29任）
-    render();
-    // 名單重讀時舊的先留著，新的回來再換：原本先清成空的，重畫時負責業務下拉只剩一個選項，選好還沒存的人放不回去、變空白（第24輪 主管2）
+    if (op === 'custType') { a.kind = value; a.open = arg.cid; admSetKindLocal(arg.cid, value); } // 換了類型：下拉跟著換到新的那一類，這位照樣開著
+    admRefreshHist(a);
+    // 先讓上方提示寫「已存好」，但不整頁重畫：資料還是舊的，重畫會把框變回改之前的值，總經理再按一次就存回舊值
+    //   （第24輪 主管6 的修法造成；抓BUG第25輪 主管1，第29任）。剛存的那一欄打的字留著，等重讀成功才換成後台真正存的值
+    admShowMsg(a);
+    // 名單重讀時舊的先留著，新的回來再換（第24輪 主管2）
     const relist = loadAdminList();
+    const loadedBefore = state.loadedAt;
     await load(); // 主管頁全部資料重讀（清單、拜訪、試作跟著更新）
     await relist;
+    if (state.loadedAt === loadedBefore || !btn.dataset.admval || !a.edits) return; // 重讀沒成功：打的字照留（畫面跟剛存的一樣）
+    delete a.edits[btn.dataset.admval];
+    if (state.tab === 'admin') render(); // 換成後台真正存的值（會整理空白、電話只留數字；第23輪 主管1）
+  }
+  /* 拜訪清單重讀：打開那位的舊清單先留著顯示、背景重讀（成功才換、失敗照留），其他位清掉下次打開再讀。
+     原本整個清空才重讀，重讀那次剛好失敗，畫面就只剩「讀取失敗」（抓BUG第25輪 主管6，第29任） */
+  function admRefreshHist(a) {
+    const keep = a.open && a.hist[a.open];
+    a.hist = {};
+    if (!keep) return;
+    a.hist[a.open] = keep;
+    loadAdminHistory(a.open);
+  }
+  /* 存類型成功：畫面資料裡這位的類型先跟著改。上面的類別下拉已經換到新的那一類，名單在背景重讀回來會重畫，
+     那時主管頁資料還沒重讀完（或重讀失敗），這位客戶就不在新的那一類、變成「找到 0 位」（抓BUG第25輪 主管1④，第29任） */
+  function admSetKindLocal(cid, kind) {
+    const c = ((state.data && state.data.customers) || []).find(x => x.id === cid);
+    if (!c) return;
+    if (kind === '盤商' || kind === '種子商') c.type = kind; else c.kind = kind;
+  }
+  /** 只更新資料管理上方那行提示（不整頁重畫） */
+  function admShowMsg(a) {
+    const box = document.getElementById('admMsg');
+    if (!box) return;
+    box.textContent = a.msg || '';
+    if (a.msgMy) { const my = document.createElement('span'); my.className = 'my'; my.textContent = a.msgMy; box.appendChild(my); }
   }
   /* 資料管理裡改過、還沒存的框，記在 a.edits（{ 框的 id: 值 }）。存檔、重讀都會整頁重畫，輸入框照試算表的資料重新產生 →
      存失敗時剛打的字不見、別欄改到一半沒存的也被蓋回舊的，沒有任何提示（抓BUG第22輪 主管3，第29任）。
@@ -2596,6 +2633,7 @@
     panel.addEventListener('change', noteEdit);
     panel.addEventListener('click', e => {
       if (state.tab !== 'admin') return;
+      const a = admState(); // 點擊當下才取：登出再登入後狀態整個換新，掛監聽時記住的是舊的（抓BUG第25輪 主管3，第29任）
       const btn = e.target.closest && e.target.closest('[data-admop]');
       if (btn) { runAdmin(btn); return; }
       const retry = e.target.closest && e.target.closest('[data-admretry]');
@@ -2808,7 +2846,9 @@
       </tbody></table></div>`;
   }
 
-  document.querySelectorAll('.tab[data-tab]').forEach(t => t.addEventListener('click', () => { state.tab = t.dataset.tab; state.newPw = null; state.moreOpen = false; render(); })); // 換分頁就把開通結果收起來
+  // 換到 AI 診斷分頁時重讀狀態（本月花費、最近 5 次；第25輪 主管7）
+  const freshAiOnTab = tab => { if (tab === 'aidiag' && state.ai && !state.ai.busy) state.ai.st = null; };
+  document.querySelectorAll('.tab[data-tab]').forEach(t => t.addEventListener('click', () => { freshAiOnTab(t.dataset.tab); state.tab = t.dataset.tab; state.newPw = null; state.moreOpen = false; render(); })); // 換分頁就把開通結果收起來
   $('moreBtn').addEventListener('click', () => {
     // 正在看「更多」裡的分頁時按「更多」不收起來（收起來就看不出現在在哪一頁）
     if (MORE_TABS.indexOf(state.tab) >= 0) return;

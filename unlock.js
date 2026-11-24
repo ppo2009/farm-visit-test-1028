@@ -13,6 +13,8 @@
   'use strict';
   const KEY = 'farm-unlock', HID = 'farm-unlock-hidden';
   const MAX_FAILS = 5, MIN_POINTS = 4, ITER = 150000, DEFAULT_MIN = 10;
+  /** 九宮格錯滿 5 次的提示（錯滿當下、錯滿後再打開 App 共用） */
+  const lockedOutMsg = () => '九宮格錯了 ' + MAX_FAILS + ' 次，請用密碼重新登入（沒上傳的資料還在手機裡）／ပုံစံကွက် မှားနေသည် ' + MAX_FAILS + ' ကြိမ် မှားပြီ၊ စကားဝှက်ဖြင့် ပြန်ဝင်ပါ（မတင်ရသေးသော ဒေတာ ဖုန်းထဲတွင် ရှိနေသည်）';
   const RELOGIN_MSG = '請用帳號密碼重新登入／အကောင့်နှင့် စကားဝှက်ဖြင့် ပြန်ဝင်ပါ'; // 用密碼重新登入（「用密碼重新登入」那顆、登入已失效共用）
 
   /* ───── 純計算與儲存（測試直接呼叫） ───── */
@@ -52,13 +54,16 @@
   async function checkPattern(cfg, seq) {
     const c = await activeFor(cfg);
     if (!c || c.method !== 'pattern') return { ok: false, fails: 0, locked: false, none: true };
+    // 已經錯滿 5 次（回登入頁沒成功、重開 App 又來）：不再比對，畫對也不算——不然 5 次上限靠重開 App 就能一直續命（抓BUG第25輪 手機1，第29任）
+    if ((Number(c.fails) || 0) >= MAX_FAILS) return { ok: false, fails: Number(c.fails), locked: true };
     const ok = validPattern(seq) && (await patternHash(seq, c.salt, c.iter || ITER)) === c.hash;
     c.fails = ok ? 0 : (Number(c.fails) || 0) + 1;
     const locked = !ok && c.fails >= MAX_FAILS;
     // 錯滿 5 次：先記成「錯滿」（次數留著），不在這裡清掉解鎖設定——等 lockout 真的回到登入頁、金鑰清掉才清。
     //   原本在這裡先清，手機寫不進去時回登入頁失敗，恢復後重開 App 就直接進首頁、從此不再上鎖（抓BUG第24輪 手機1，第29任）。
     //   錯滿的設定下次打開照樣上鎖，再畫一次照樣錯滿、照樣要用密碼重新登入
-    save(c);
+    // 錯了又存不進手機（空間不足等）：次數記不住就能無限次猜 → 直接當錯滿，走用密碼重新登入（抓BUG第25輪 手機2，第29任）
+    if (!save(c) && !ok) return { ok: false, fails: c.fails, locked: true };
     return { ok, fails: c.fails, locked };
   }
   /* ───── 人臉／指紋（WebAuthn） ───── */
@@ -90,7 +95,7 @@
   const needLockAfterHidden = (hiddenAt, now, minutes) => { const m = Number(minutes) > 0 ? Number(minutes) : DEFAULT_MIN; return Number(hiddenAt) > 0 && now - Number(hiddenAt) >= m * 60000; };
 
   /* ───── 畫面 ───── */
-  let H = null, locked = false;
+  let H = null, locked = false, lockKey = '';
   const el = id => document.getElementById(id);
   function ensureDom() {
     if (el('lockScreen')) return;
@@ -165,17 +170,27 @@
       + ` ကြိမ် မှားလျှင် စကားဝှက်ဖြင့် ပြန်ဝင်ရမည်）` : '');
     el('lockMsg').textContent = '';
     el('lockBio').hidden = c.method !== 'bio'; el('lockPat').hidden = c.method !== 'pattern';
+    // 已經錯滿 5 次的：不給畫九宮格，只留「用密碼重新登入」（抓BUG第25輪 手機1，第29任）
+    const usedUp = c.method === 'pattern' && (Number(c.fails) || 0) >= MAX_FAILS;
+    if (usedUp) { el('lockPat').hidden = true; el('lockMsg').textContent = lockedOutMsg(); }
+    // 記下上鎖時是誰的登入：另一個畫面換人登入後，這個畫面不能清掉新的人的登入、也不能用新的人的圖形解開（抓BUG第25輪 手機3）
+    lockKey = cfg.deviceKey || '';
     el('lockScreen').hidden = false;
     let checking = false; // 第25任 審查②：驗證要跑十幾萬次雜湊（慢手機近 1 秒），途中再畫一次會兩次同時讀到同一個錯誤次數、各自 +1 寫回 → 少算一次
-    if (c.method === 'pattern') grid(el('lockGrid'), async seq => {
+    if (c.method === 'pattern' && !usedUp) grid(el('lockGrid'), async seq => {
       if (checking) return; checking = true;
-      let r; try { r = await checkPattern(await H.getConfig(), seq); } finally { checking = false; }
+      let r, now;
+      try {
+        now = await H.getConfig();
+        if (otherLogin(now)) return lockout(RELOGIN_MSG); // 換人了：app.js 只回登入頁、不清新的人的登入
+        r = await checkPattern(now, seq);
+      } finally { checking = false; }
       if (!locked) return; // 驗證途中已經用別的方式解開或登出了
       if (r.ok) return unlock();
       // 第26任 抓BUG第2輪 手機組1：鎖畫面開著時登入失效（主管重設密碼、背景同步收到 BAD_LOGIN，金鑰被清掉）→ 找不到這把金鑰的解鎖設定（none）。
       //   原本當成「圖形不對」，畫對也一直說不對、次數不減、出不去 → 改成直接帶去用密碼重新登入（同「用密碼重新登入」那顆）
       if (r.none) return lockout(RELOGIN_MSG);
-      if (r.locked) return lockout('九宮格錯了 ' + MAX_FAILS + ' 次，請用密碼重新登入（沒上傳的資料還在手機裡）／ပုံစံကွက် မှားနေသည် ' + MAX_FAILS + ' ကြိမ် မှားပြီ၊ စကားဝှက်ဖြင့် ပြန်ဝင်ပါ（မတင်ရသေးသော ဒေတာ ဖုန်းထဲတွင် ရှိနေသည်）');
+      if (r.locked) return lockout(lockedOutMsg());
       el('lockWho').textContent = (cfg.name || cfg.account || '') + `（已錯 ${r.fails} 次，錯 ${MAX_FAILS} 次要用密碼重新登入）／（${r.fails} ကြိမ် မှားပြီး၊ ${MAX_FAILS} ကြိမ် မှားလျှင် စကားဝှက်ဖြင့် ပြန်ဝင်ရမည်）`; // 第26任 低風險修正3④：上面的「已錯 N 次」原本只在上鎖時寫一次，跟下面「還可以試」對不起來
       el('lockMsg').textContent = `圖形不對，還可以試 ${MAX_FAILS - r.fails} 次／ပုံစံ မမှန်ပါ၊ နောက်ထပ် ${MAX_FAILS - r.fails} ကြိမ် စမ်းနိုင်သည်`;
     });
@@ -185,6 +200,7 @@
   async function tryBio() {
     el('lockMsg').textContent = '';
     const cfg = await H.getConfig();
+    if (otherLogin(cfg)) return lockout(RELOGIN_MSG); // 另一個畫面換人登入了：不用新的人的人臉設定解開這個畫面（第25輪 手機3）
     if (!(await activeFor(cfg))) return lockout(RELOGIN_MSG); // 第26任 抓BUG第2輪 手機組1：登入已失效（找不到這把金鑰的設定）→ 直接用密碼重新登入，不說「認不出來」
     if (await checkBio(cfg)) return unlock();
     el('lockMsg').textContent = '沒有解鎖（取消了或認不出來），請再按一次；不行就用密碼重新登入／သော့မဖွင့်နိုင်ပါ（ပယ်ဖျက်ခြင်း သို့မဟုတ် မမှတ်မိခြင်း）၊ ထပ်နှိပ်ပါ၊ မရလျှင် စကားဝှက်ဖြင့် ပြန်ဝင်ပါ';
@@ -213,10 +229,13 @@
   /* 改用密碼重新登入：先請 app.js 清登入資料、回登入頁，**成功了**才清這支手機的解鎖設定。
      原本順序相反：手機資料庫一直讀不到時 app.js 那步失敗，登入頁沒出來、解鎖設定卻已經清掉，等資料庫恢復重開 App 就直接進首頁、
      從此不再上鎖（抓BUG第23輪 手機1，第29任）。清不掉就留著解鎖設定，下次打開照樣上鎖 */
+  /** 另一個畫面已經換成別人登入（金鑰換了、不是被清掉） */
+  const otherLogin = cfg => !!(lockKey && cfg && cfg.deviceKey && cfg.deviceKey !== lockKey);
   async function lockout(msg) {
-    let failed = null;
-    try { await H.lockout(msg); } catch (e) { failed = e; }
-    if (!failed) save(null);
+    let failed = null, result;
+    // 帶上鎖時的金鑰：app.js 看到已經換人登入，就只回登入頁、不清新的人的登入，這裡也不清解鎖設定（那是新的人的；抓BUG第25輪 手機3）
+    try { result = await H.lockout(msg, lockKey); } catch (e) { failed = e; }
+    if (!failed && result !== 'otherLogin') save(null);
     unlock();
     if (failed) throw failed;
   }
