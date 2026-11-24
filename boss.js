@@ -357,13 +357,14 @@
     $('briefBadge').hidden = !unread; $('briefBadge').textContent = unread ? String(unread) : '';
     // 抓BUG第6輪 主管組3：整頁重畫（重新整理、離開 10 分鐘切回來自動重讀）也保留同一位客戶打開的修改框和打到一半的字
     const d0 = $('custDetail'), keepCid = d0 ? d0.dataset.cid : '', keepBoxes = d0 ? openFixBoxes(d0) : [];
+    const admKeep = state.tab === 'admin' ? admEditedInputs() : null; // 資料管理打到一半的字（抓BUG第22輪 主管3）
     $('panel').innerHTML = segBar() + ({ today: renderToday, overdue: renderOverdue, review: renderReview, moremenu: renderMoreMenu, latest: renderLatest, cal: renderCal, trial: renderTrial, map: renderMap, table: renderTable, reports: renderReports, progress: () => staffCards() + renderProgress(), tasks: renderTasks, accounts: renderAccounts, briefs: renderBriefs, errors: renderErrors, myfix: renderMyFix, admin: renderAdmin, aidiag: renderAiDiag })[state.tab](); // 第24任 第七批：今天、逾期、審核、更多（手機）；本月目標、每位業務卡片搬到工作進度
     if (state.tab === 'tasks') bindTasks();
     if (state.tab === 'briefs') bindBriefs();
     if (state.tab === 'accounts') bindAccounts();
     if (state.tab === 'errors') bindErrors();
     if (state.tab === 'myfix') bindMyFix();
-    if (state.tab === 'admin') bindAdmin(); // 第28任：資料管理
+    if (state.tab === 'admin') { admRestoreInputs(admKeep); bindAdmin(); } // 第28任：資料管理
     if (state.tab === 'aidiag') bindAiDiag(); // 第28任：AI 診斷
     if (state.tab === 'trial') bindCustomers();
     bindGo($('panel'));
@@ -1155,6 +1156,8 @@
       document.body.appendChild(d);
     }
     bigOpener = document.activeElement; // 關掉後焦點回到打開它的那格照片
+    // 大圖開著時畫面可能重畫（自動重讀），舊的那格就不在了 → 也記照片編號，關掉時找新畫出來的那格（抓BUG第22輪 主管2，第29任）
+    bigOpenerPhoto = bigOpener && bigOpener.dataset ? bigOpener.dataset.big || bigOpener.dataset.photo || '' : '';
     d.innerHTML = `<img src="${src}" alt="照片大圖／ဓာတ်ပုံ အကြီး"><span class="sub">點一下關閉<span class="my">ပိတ်ရန် တစ်ချက်နှိပ်ပါ</span></span>`
       + `<a class="btn" data-bigsave href="${src}" download="${bigFileName(src)}">另存檔案</a>`; // 第28任 董事長「上傳的圖片…可以另存檔案」
     d.querySelector('[data-bigsave]').addEventListener('click', ev => ev.stopPropagation()); // 按存檔不要順便關掉大圖
@@ -1162,11 +1165,15 @@
     d.focus();
   }
   /* 大圖關掉：焦點還給打開它的那格照片（原本掉到整頁最上面，只用鍵盤的人要從頭 Tab 回來；抓BUG第21輪 主管1，第29任） */
-  let bigOpener = null;
+  let bigOpener = null, bigOpenerPhoto = '';
   function hideBig(d) {
     d.hidden = true;
-    const back = bigOpener;
+    let back = bigOpener;
+    if (!(back && back.isConnected) && bigOpenerPhoto) {
+      back = document.querySelector(`[data-big="${CSS.escape(bigOpenerPhoto)}"], [data-photo="${CSS.escape(bigOpenerPhoto)}"]`);
+    }
     bigOpener = null;
+    bigOpenerPhoto = '';
     if (back && back.isConnected && typeof back.focus === 'function') back.focus();
   }
   /** 存檔用的檔名：照片_年月日時分秒.jpg（副檔名照圖片格式：png、webp 照實，其他當 jpg） */
@@ -1569,16 +1576,23 @@
      照片照打字裡寫的「（照片 N）」分邊，沒寫到的放左邊。不是對照農民的打字（沒有別間公司／別的作物段）照原本一欄 */
   const CMP_HEAD_RE = /^【(自己的|別間公司[^】]*|別的作物[^】]*)】/;
   // 程式自己接在後面的說明行（〔…〕、手機照片／錄音讀不到、🎤 逐字稿）放左邊，同手機 CMP_NOTE_RE（抓BUG第19輪 手機3、4，第29任）
-  const CMP_NOTE_RE = /^(〔|🎤|（(手機照片 \d+ 張讀不到|錄音讀不到))/;
+  const CMP_NOTE_RE = /^(〔|（(手機照片 \d+ 張讀不到|錄音讀不到))/;
+  /* 後台接上的「🎤 逐字稿」從第幾行開始（沒有回 -1）：🎤 那行前面不到 20 字、後面也沒有段落標題才算（後台 visitRawText_ 只在打字不到 20 字時接）；
+     其他 🎤 開頭的行是業務自己打的，留在原本那段（同手機 cmpTranscriptAt；抓BUG第22輪 手機3／後台3，第29任） */
+  function cmpTranscriptAt(lines, headRe) {
+    const at = lines.findIndex(line => /^🎤/.test(line.trim()));
+    if (at < 0) return -1;
+    if (lines.slice(at + 1).some(line => headRe.test(line))) return -1;
+    return lines.slice(0, at).join('\n').trim().length < 20 ? at : -1;
+  }
   function cmpSplitText(text) {
-    const segs = [], before = [], notes = [], transcript = [];
-    let cur = null, inTranscript = false;
-    String(text || '').split('\n').forEach(line => {
+    const segs = [], before = [], notes = [];
+    let cur = null;
+    const all = String(text || '').split('\n'), tAt = cmpTranscriptAt(all, CMP_HEAD_RE);
+    const body = tAt < 0 ? all : all.slice(0, tAt), transcript = tAt < 0 ? [] : all.slice(tAt).map(line => line.trim());
+    body.forEach(line => {
       const m = CMP_HEAD_RE.exec(line);
-      if (m) { inTranscript = false; cur = { title: m[1], lines: [line] }; segs.push(cur); return; }
-      // 「🎤 逐字稿」可能有好幾行：🎤 那行起到下一個段落標題前都算逐字稿、放左邊最後（抓BUG第20輪 手機2）。
-      // 碰到標題就結束：業務自己打一行 🎤 開頭的字時，後面的【別間公司】照樣在右邊（抓BUG第21輪 手機2／後台2，第29任）
-      if (inTranscript || /^🎤/.test(line.trim())) { inTranscript = true; transcript.push(line.trim()); return; }
+      if (m) { cur = { title: m[1], lines: [line] }; segs.push(cur); return; }
       if (CMP_NOTE_RE.test(line.trim())) { notes.push(line.trim()); return; }
       if (!cur) { before.push(line.trim()); return; }
       cur.lines.push(line);
@@ -2325,6 +2339,15 @@
   function admBtn(op, arg, label, valId, danger) {
     return `<button type="button" class="btn${danger ? ' ghost' : ''}" data-admop="${op}" data-admarg="${esc(JSON.stringify(arg))}"${valId ? ` data-admval="${valId}"` : ''}>${label}</button>`;
   }
+  /* 負責業務下拉的選項：名單只有在職的業務，客戶現在的負責人不在名單裡（沒人負責、已停用或已刪除）時，
+     瀏覽器會自動選第一位業務——畫面看起來像負責人是他，順手按「存」就真的改給他了。
+     → 沒人負責放一個空白選項、不在名單的人照名字放一個「不在名單」選項，預設選中現在的負責人（抓BUG第22輪 主管1，第29任；新字待譯 J12） */
+  function admStaffPairs(sales, cur) {
+    const pairs = sales.map(name => [name, name]);
+    if (!cur) return [['', '— 沒有負責業務 —']].concat(pairs);
+    if (sales.indexOf(cur) < 0) return [[cur, cur + '（不在名單：已停用或已刪除）']].concat(pairs);
+    return pairs;
+  }
   const admOptions = (pairs, cur) => pairs.map(([v, n]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(n)}</option>`).join('');
   /** 類別下拉：選項裡放不了小字，緬文直接接在中文後面（跟 biDom 補選項的寫法一樣） */
   const admKindOptions = (pairs, cur) => admOptions(pairs.map(([v, n]) => [v, admKindMy(n) ? n + '／' + admKindMy(n) : n]), cur);
@@ -2338,7 +2361,7 @@
     const dealer = c.type === '盤商' || c.type === '種子商';
     const kinds = dealer ? ADM_DEALER_KINDS : ADM_FARMER_KINDS;
     const curKind = dealer ? c.type : (c.kind || '一般農民');
-    const staffOpts = admOptions(sales.map(n => [n, n]), c.staff);
+    const staffOpts = admOptions(admStaffPairs(sales, c.staff), c.staff || '');
     const trials = ((state.data && state.data.trials) || []).filter(t => t.cid === id && t.status === '進行中');
     const visits = a.hist[id];
     if (!visits) loadAdminHistory(id);
@@ -2493,6 +2516,20 @@
     a.hist = {};
     a.list = null;
     await load(); // 主管頁全部資料重讀（清單、拜訪、試作跟著更新）
+  }
+  /* 資料管理裡改過、還沒存的框：{ 框的 id: 值 }。存檔、重讀都會整頁重畫，輸入框照試算表的資料重新產生 →
+     存失敗時剛打的字不見、別欄改到一半沒存的也被蓋回舊的，沒有任何提示（抓BUG第22輪 主管3，第29任）。
+     render 重畫前記下、重畫後照 id 放回去；剛存成功的那一欄，框裡的字本來就等於新資料，放回去也一樣 */
+  function admEditedInputs() {
+    const out = {};
+    document.querySelectorAll('#panel .admbody input[id], #panel .admbody select[id]').forEach(el => {
+      const edited = el.tagName === 'SELECT' ? !(el.options[el.selectedIndex] || {}).defaultSelected : el.value !== el.defaultValue;
+      if (edited) out[el.id] = el.value;
+    });
+    return out;
+  }
+  function admRestoreInputs(keep) {
+    Object.keys(keep || {}).forEach(id => { const el = document.getElementById(id); if (el) el.value = keep[id]; });
   }
   function bindAdmin() {
     const a = admState();

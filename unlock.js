@@ -140,6 +140,12 @@
   }
   async function showLock(c) {
     ensureDom(); locked = true;
+    // 抓BUG第21輪 手機1、3（第29任）：讀設定失敗時 app.js 改成回登入頁，但原本整頁已經先設成不能操作、「鎖住」也沒清 →
+    //   登入頁點不動、之後不再上鎖。改成先讀設定（失敗就清掉鎖住再往外丟），讀完、鎖畫面要出現時才擋後面
+    let cfg;
+    try { cfg = (await H.getConfig()) || {}; } catch (e) { locked = false; throw e; }
+    // 抓BUG第22輪 手機1（第29任）：關掉蓋在上面的框要跟「擋住後面」同一步做、中間不再等。
+    //   原本先關框、再等讀設定（慢手機幾百毫秒），這段空檔業務還點得開建議框，結果它蓋在鎖畫面上、又關不掉
     // 抓BUG第18輪 手機1（第28任）：照片大圖（#bigPhoto，層級比解鎖畫面高）開著時上鎖 → 沒解鎖也看得到、存得到照片。上鎖先把大圖關掉
     const big = document.getElementById('bigPhoto'); if (big) big.hidden = true;
     // 抓BUG第19輪 手機1、2（第29任）：「解鎖方式」設定框和鎖畫面同一層、比它晚放所以蓋在上面 → 撿到手機的人在設定框改設新圖形就能解開；
@@ -151,10 +157,6 @@
       fb.hidden = true;
       if (typeof FarmVoice === 'object' && FarmVoice.active()) FarmVoice.stop(true);
     }
-    // 抓BUG第21輪 手機1、3（第29任）：讀設定失敗時 app.js 改成回登入頁，但原本整頁已經先設成不能操作、「鎖住」也沒清 →
-    //   登入頁點不動、之後不再上鎖。改成先讀設定（失敗就清掉鎖住再往外丟），讀完、鎖畫面要出現時才擋後面
-    let cfg;
-    try { cfg = (await H.getConfig()) || {}; } catch (e) { locked = false; throw e; }
     blockBehind();
     el('lockWho').textContent = (cfg.name || cfg.account || '') + (c.method === 'pattern' && c.fails ? `（已錯 ${c.fails} 次，錯 ${MAX_FAILS} 次要用密碼重新登入）／（${c.fails} ကြိမ် မှားပြီး၊ ${MAX_FAILS}`
       + ` ကြိမ် မှားလျှင် စကားဝှက်ဖြင့် ပြန်ဝင်ရမည်）` : '');
@@ -207,6 +209,13 @@
   function unlock() { locked = false; unblockBehind(); if (el('lockScreen')) el('lockScreen').hidden = true; try { localStorage.removeItem(HID); } catch (e) { /* 記不了沒關係 */ } }
   async function lockout(msg) { save(null); unlock(); await H.lockout(msg); }
   const enabled = async () => { try { return !H.getEnabled || (await H.getEnabled()) !== false; } catch (e) { return true; } }; // 第24任 第六批：設定分頁「解鎖功能」總開關
+  /* 切回 App 要上鎖時出錯（例如讀不到手機設定）：原本錯誤沒人接，鎖畫面不出來、整頁照常能用，等於這次不用解鎖。
+     比照重開 App（app.js 第26任老闆核准，判斷方式一樣）：這支手機有設過解鎖就改用帳號密碼重新登入；沒設過的不動（抓BUG第22輪 手機2，第29任） */
+  function lockFailed() {
+    const c = load();
+    const had = !!(c && (c.method === 'bio' || c.method === 'pattern'));
+    if (had) lockout('解鎖功能出錯，請用帳號密碼重新登入（沒上傳的資料還在手機裡）');
+  }
   async function maybeLock(force) {
     if (!(await enabled())) { unlock(); return false; }
     const cfg = await H.getConfig();
@@ -265,7 +274,7 @@
   function hookPage() {
     if (hookPage.done) return; hookPage.done = true;
     const mark = () => { try { if (!locked) localStorage.setItem(HID, String(Date.now())); } catch (e) { /* 記不了沒關係 */ } };
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') mark(); else maybeLock(false); });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') mark(); else maybeLock(false).catch(lockFailed); });
     g.addEventListener && g.addEventListener('pagehide', mark);
   }
   /** 開網頁：已登入、有解鎖設定 → 一律先鎖（重開 App 要解鎖） */
