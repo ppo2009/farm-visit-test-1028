@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="build-20261125-191839">
+<meta name="app-build" content="build-20261125-203835">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -457,7 +457,7 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
   <!-- 0.5.07 董事長截圖：一般／試作／推廣改成真正的下拉選單 → 選單放進各自卡片的框裡（hubwrap），從卡片正下方往下展開、直排、蓋在下面內容上 -->
   <div class="cats">
     <div class="hubwrap">
-    <button type="button" class="cat hub" id="farmerBtn" aria-expanded="false" aria-controls="farmerMenu">農民 ▾<span class="my">လယ်သမား</span><small class="hint">點開選：一般拜訪／試作／推廣<br>နှိပ်ပြီး ရွေးပါ - ပုံမှန် / စမ်းသပ် / မြှင့်တင်</small></button>
+    <button type="button" class="cat hub" id="farmerBtn" aria-expanded="false" aria-controls="farmerMenu">農民 ▾<span class="my">လယ်သမား</span><small class="hint">點開選：一般拜訪／試作／推廣<br>ဖွင့်၍ရွေးရန် - ပုံမှန် သွားရောက်မှု／နှိုင်းယှဉ်／မြှင့်တင်ရောင်းချ</small></button>
   <!-- 0.4.32 董事長 2026-11-12：「農民」改成下拉選單：一般拜訪農民／試作農民／推廣農民，選了直接進那一種打卡（結案在打卡畫面上方切換） -->
   <div class="farmermenu hubmenu" id="farmerMenu" role="menu" hidden>
     <button type="button" role="menuitem" data-farmercat="農戶">一般拜訪農民<span class="my">ပုံမှန်သွားရောက် လယ်သမား</span></button>
@@ -520,7 +520,7 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
   <div class="mine">
   <!-- 0.5.13 董事長「還沒做完的都算是執行任務那邊」：我的試作（進行中的試作、推廣）從歷史成就搬過來（id 不變） -->
   <section class="msec" id="mineTrials">
-    <h2>我的試作<span class="my">ကျွန်ုပ်၏ စမ်းသပ်ကွက်များ</span><span class="sub">進行中的試作、推廣，點一下去拜訪／လုပ်ဆောင်ဆဲ စမ်းသပ်မှု・မြှင့်တင်များ၊ နှိပ်ပြီး သွားရောက်ပါ</span></h2>
+    <h2>我的試作<span class="my">ကျွန်ုပ်၏ နှိုင်းယှဉ်ကွက်များ</span><span class="sub">進行中的試作、推廣，點一下去拜訪／လုပ်ဆောင်ဆဲ နှိုင်းယှဉ်၊ မြှင့်တင်ရောင်းချမှုများ၊ သွားရောက်ရန် နှိပ်ပါ</span></h2>
     <ul id="trialList"></ul>
   </section>
   <section class="msec" id="todoPlanGrow">
@@ -623,7 +623,7 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
       <!-- 0.4.82 董事長截圖：新增客戶、試作兩格要看得出是哪幾位、哪一類 → 後台有明細時整格可點，在兩排卡片下面展開（同時只開一格） -->
       <div class="stat" id="statNewBox"><b id="statNew">—</b><span class="sub">新增客戶／ဖောက်သည်အသစ်</span><small class="statsub" id="statNewSub" hidden></small></div>
       <div class="stat"><b id="statCust">—</b><span class="sub">拜訪過的客戶／သွားခဲ့သော ဖောက်သည်</span></div>
-      <div class="stat" id="statTrialBox"><b id="statTrials">—</b><span class="sub" id="statTrialsLab">試作 開始／完成<br>စမ်းသပ် စတင်／ပြီးဆုံး</span></div>
+      <div class="stat" id="statTrialBox"><b id="statTrials">—</b><span class="sub" id="statTrialsLab">試作 開始／完成<br>နှိုင်းယှဉ် စတင်／ပြီးဆုံး</span></div>
     </div>
     <ul class="nclist" id="statDetail" hidden aria-live="polite"></ul>
     <p class="sub" id="statByCat"></p>
@@ -653,14 +653,14 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
   </div>
   <!-- 第29任 2026-11-25 董事長「結案那邊可以新增下拉搜尋，分人、事、時、地、物查過往紀錄」：搜自己負責、已結案的農民，按了到種植資料看完整紀錄 -->
   <section class="msec" id="closeSearch">
-    <h2>查過往紀錄<span class="my" data-tr="待譯"></span><span class="sub">自己負責、已結案的農民，按名字看種植紀錄<span class="my" data-tr="待譯"></span></span></h2>
+    <h2>查過往紀錄<span class="my">ယခင်မှတ်တမ်းများ ရှာဖွေရန်</span><span class="sub">自己負責、已結案的農民，按名字看種植紀錄<span class="my">မိမိတာဝန်ခံ၍ ပိတ်သိမ်းပြီးသော လယ်သမားများ၊ အမည်ကိုနှိပ်၍ စိုက်ပျိုးမှုမှတ်တမ်း ကြည့်ပါ</span></span></h2>
     <!-- 董事長同天更正：「不是把人事時地物放進一個下拉，是五個下拉」：人（農民）、事（一般／對照／推廣）、時（年份）、地（地區）、物（作物），一起篩 -->
     <div class="fields">
-      <div><label class="lab" for="csWho">人（農民）<span class="my" data-tr="待譯"></span></label><select id="csWho"><option value="">全部</option></select></div>
-      <div><label class="lab" for="csWhat">事（哪一種農民）<span class="my" data-tr="待譯"></span></label><select id="csWhat"><option value="">全部</option></select></div>
-      <div><label class="lab" for="csWhen">時（年份）<span class="my" data-tr="待譯"></span></label><select id="csWhen"><option value="">全部</option></select></div>
-      <div><label class="lab" for="csWhere">地（地區）<span class="my" data-tr="待譯"></span></label><select id="csWhere"><option value="">全部</option></select></div>
-      <div><label class="lab" for="csThing">物（作物）<span class="my" data-tr="待譯"></span></label><select id="csThing"><option value="">全部</option></select></div>
+      <div><label class="lab" for="csWho">人（農民）<span class="my">လူ（လယ်သမား）</span></label><select id="csWho"><option value="">全部 အားလုံး</option></select></div>
+      <div><label class="lab" for="csWhat">事（哪一種農民）<span class="my">အမျိုးအစား（မည်သည့်လယ်သမား）</span></label><select id="csWhat"><option value="">全部 အားလုံး</option></select></div>
+      <div><label class="lab" for="csWhen">時（年份）<span class="my">အချိန်（ခုနှစ်）</span></label><select id="csWhen"><option value="">全部 အားလုံး</option></select></div>
+      <div><label class="lab" for="csWhere">地（地區）<span class="my">နေရာ（ဒေသ）</span></label><select id="csWhere"><option value="">全部 အားလုံး</option></select></div>
+      <div><label class="lab" for="csThing">物（作物）<span class="my">သီးနှံ（သီးနှံ）</span></label><select id="csThing"><option value="">全部 အားလုံး</option></select></div>
     </div>
     <p class="sub" id="csSum" aria-live="polite"></p>
     <ul id="csList"></ul>
@@ -780,7 +780,7 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
       <!-- 第24任 第六批⑪（tomtom 實測：種植失敗在第 7 題之後，但它決定前面要不要填）：先問結果，再只顯示相關欄位 -->
       <p class="lab closefirst">先選這次的結果<span class="my">ယခုအကြိမ် ရလဒ် အရင်ရွေးပါ</span></p>
       <div id="closeTrialBox" class="fields" hidden>
-        <label class="lab" for="cTrialOutcome" id="closeTrialLab">試作結果（必填）<span class="my">စမ်းသပ် ရလဒ် (မဖြစ်မနေ)</span></label>
+        <label class="lab" for="cTrialOutcome" id="closeTrialLab">試作結果（必填）<span class="my">နှိုင်းယှဉ် ရလဒ်（မဖြစ်မနေ ဖြည့်ရန်）</span></label>
         <p class="sub" id="closeTrialNow"></p>
         <select id="cTrialOutcome"><option value="">— 請選 ရွေးပါ —</option><option value="成功">成功／အောင်မြင်</option><option value="失敗">失敗／မအောင်မြင်</option></select>
       </div>
@@ -821,7 +821,7 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
 
     <!-- 0.4.75 董事長「盤商跟種子商變成以簽約才結案」：盤商、種子商有見到之後勾「已簽約」→ 打開下面的結案框（只寫簽約內容），送主管確認後結案 -->
     <label class="chk" id="dcSignedLab" hidden><input type="checkbox" id="dcSigned"> <b>已簽約</b>（送主管確認後結案）<span class="my">စာချုပ်ချုပ်ပြီး (မန်နေဂျာ အတည်ပြုပြီးမှ ပိတ်သိမ်းမည်)</span></label>
-    <p class="sub" id="dcSignLock" hidden data-tr="待譯">🔒 主管已確認這家的簽約，已經結案，「已簽約」不能再改；這次存檔是一般拜訪。</p><!-- 第28任 2026-11-21 董事長「主管確認過後結案就要鎖死，不能再改動」 -->
+    <p class="sub" id="dcSignLock" hidden>🔒 主管已確認這家的簽約，已經結案，「已簽約」不能再改；這次存檔是一般拜訪。<span class="my">🔒 မန်နေဂျာက ဤဆိုင်၏ စာချုပ်ချုပ်ဆိုမှုကို အတည်ပြုပြီး ပိတ်သိမ်းပြီးဖြစ်၍「စာချုပ်ချုပ်ပြီး」ကို ပြန်ပြင်၍မရတော့ပါ；ယခုသိမ်းဆည်းမှုသည် ပုံမှန် သွားရောက်မှု ဖြစ်ပါသည်။</span></p><!-- 第28任 2026-11-21 董事長「主管確認過後結案就要鎖死，不能再改動」 -->
     <p class="sub" id="dcSignNote" hidden>這家不是你負責的，只有負責業務能送「已簽約」結案；簽約了請告訴負責業務或主管。<br><span class="my">ဤဆိုင်သည် သင့်တာဝန် မဟုတ်ပါ၊ တာဝန်ခံ ဝန်ထမ်းသာ 「စာချုပ်ချုပ်ပြီး」 ပိတ်သိမ်းမှု ပို့နိုင်သည်။ စာချုပ်ချုပ်ပြီးပါက တာဝန်ခံ ဝန်ထမ်း သို့မဟုတ် မန်နေဂျာကို ပြောပါ။</span></p>
     <!-- 0.4.42 董事長：盤商、種子商結案＝洽談成功或失敗都送主管審核，主管確認才正式結案 -->
     <div id="dealerCloseBox" class="trial" hidden>
@@ -886,10 +886,10 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
 
 
     <div id="trialBox" class="trial" hidden>
-      <span class="lab" id="trialLab">試作<span class="my">စမ်းသပ်</span></span>
+      <span class="lab" id="trialLab">試作<span class="my">နှိုင်းယှဉ်</span></span>
       <p class="sub" id="trialNow"></p>
       <div class="two">
-        <button type="button" class="btn2" id="trialStartBtn">＋ 開始新的試作<span class="my">စမ်းသပ်မှု အသစ် စတင်</span></button>
+        <button type="button" class="btn2" id="trialStartBtn">＋ 開始新的試作<span class="my">နှိုင်းယှဉ်မှု အသစ် စတင်ရန်</span></button>
         <button type="button" class="btn2" id="trialEndBtn">填結果／結束<span class="my">ရလဒ်ဖြည့် / ပြီးဆုံး</span></button>
         <p class="sub" id="trialEndHint">要結束這件，請到「結案」分頁填結果／ပြီးဆုံးရန် 「ပိတ်သိမ်း」 တွင် ရလဒ်ဖြည့်ပါ</p>
       </div>
