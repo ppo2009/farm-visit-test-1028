@@ -732,32 +732,48 @@
     if (typeof window !== 'undefined' && window.scrollTo) window.scrollTo(0, 0);
   }
   /* ───── 第29任 2026-11-25 董事長「結案那邊可以新增下拉搜尋，分人、事、時、地、物查過往紀錄」─────
-     結案分頁下面「查過往紀錄」：下拉選依什麼查，打字就篩自己負責、已結案的農民；按名字跟歷史成就一樣跳到種植資料看完整紀錄。
-     例：選「物」打「玉米」→ 列出種過玉米、已結案的農民。畫面把「試作」顯示成「對照」，所以打「對照」也找得到試作農民。 */
-  const CLOSE_SEARCH_FIELDS = {
-    who: f => [f.name, f.phone, f.id],
-    what: f => [f.kind || '一般農民'],
-    when: f => [f.plantDate, f.lastVisit],
-    where: f => [f.area, f.town, f.village, f.address],
-    thing: f => [f.crop, f.crop ? cropText(f.crop) : '', f.variety, f.varCode]
+     結案分頁下面「查過往紀錄」：五個下拉一起篩自己負責、已結案的農民（同天董事長更正：「五個下拉，人（農民）、事、時（2025 年起）、地（曼德勒、仰光等地區）、物（農作物）」）；
+     按名字跟歷史成就一樣跳到種植資料看完整紀錄。每個下拉預設「全部」；選了幾個就要每個都符合。
+     例：地選「曼德勒區」、物選「玉米」→ 只列在曼德勒區種玉米、已結案的農民。 */
+  const FIRST_SEARCH_YEAR = 2025;
+  /** 地區：客戶的地區欄寫「業務名 -曼德勒區」或只寫「曼德勒區」，取最後一段 */
+  const regionOfArea = area => String(area || '').split(/[-－]/).pop().trim();
+  const yearsOfFarmer = f => [f.plantDate, f.lastVisit].map(d => String(d || '').slice(0, 4)).filter(y => /^\d{4}$/.test(y));
+  const kindLabel = kind => (kind === '試作農民' ? '對照農民' : kind || '一般農民'); // 畫面把試作叫對照（第27任）
+  /** 五個下拉各自怎麼取值、怎麼顯示、這位符不符合 */
+  const CLOSE_SEARCH_PICKS = {
+    csWho: { values: f => [f.id], label: (v, list) => (list.find(f => f.id === v) || {}).name || v },
+    csWhat: { values: f => [f.kind || '一般農民'], label: v => kindLabel(v) },
+    csWhen: { values: yearsOfFarmer, label: v => v + ' 年' },
+    csWhere: { values: f => [regionOfArea(f.area)].filter(Boolean), label: v => v },
+    csThing: { values: f => [String(f.crop || '').trim()].filter(Boolean), label: v => cropText(v) }
   };
-  function closeSearchHit(f, what, text) {
-    const pick = CLOSE_SEARCH_FIELDS[what];
-    const fields = pick ? pick(f) : Object.keys(CLOSE_SEARCH_FIELDS).reduce((all, k) => all.concat(CLOSE_SEARCH_FIELDS[k](f)), []);
-    const hay = fields.filter(x => x != null && x !== '').join(' ').toLowerCase();
-    return hay.indexOf(text) >= 0;
+  /** 下拉的選項：從名單裡有的值來（年份另外補 2025 年到今年），保留業務原本選的；原本選的已經沒有了就回「全部」 */
+  function fillCloseSearchSelect(id, list) {
+    const el = $n(id), pick = CLOSE_SEARCH_PICKS[id], keep = el.value || '';
+    const values = list.reduce((all, f) => all.concat(pick.values(f)), []);
+    if (id === 'csWhen') for (let y = FIRST_SEARCH_YEAR; y <= Number(mmDay(0).slice(0, 4)); y++) values.push(String(y));
+    const uniq = values.filter((v, i) => values.indexOf(v) === i);
+    if (id === 'csWhen') uniq.sort();
+    el.innerHTML = '<option value="">全部</option>' + uniq.map(v => `<option value="${esc(v)}">${esc(pick.label(v, list))}</option>`).join('');
+    el.value = uniq.indexOf(keep) >= 0 ? keep : '';
+  }
+  function closeSearchHit(f, chosen) {
+    return Object.keys(chosen).every(id => !chosen[id] || CLOSE_SEARCH_PICKS[id].values(f).indexOf(chosen[id]) >= 0);
   }
   function renderCloseSearch() {
     const list = $('csList');
     if (!list) return; // 舊頁面沒有這一區
-    const what = $n('csWhat').value || 'all';
-    const text = String($n('csText').value || '').trim().toLowerCase().replace(/對照/g, '試作');
-    const hits = (state.endedMine || []).filter(f => !text || closeSearchHit(f, what, text));
+    const ended = state.endedMine || [];
+    const chosen = {};
+    Object.keys(CLOSE_SEARCH_PICKS).forEach(id => { fillCloseSearchSelect(id, ended); chosen[id] = $n(id).value; });
+    const filtered = Object.keys(chosen).some(id => chosen[id]); // 有選任何一個才寫「找到幾位」
+    const hits = ended.filter(f => closeSearchHit(f, chosen));
     const place = f => [f.area, f.town, f.village].filter(Boolean).join('・');
     list.innerHTML = hits.map(f => `<li><button type="button" class="btn2 small" data-endedcid="${esc(f.id)}">${esc(f.name || '')}　看種植紀錄 ›</button>`
-      + `｜${esc(f.kind || '一般農民')}${f.crop ? '｜' + esc(cropText(f.crop)) : ''}${place(f) ? '｜' + esc(place(f)) : ''}${f.lastVisit ? '｜最後拜訪 ' + esc(f.lastVisit) : ''}</li>`).join('');
+      + `｜${esc(kindLabel(f.kind))}${f.crop ?'｜' + esc(cropText(f.crop)) : ''}${place(f) ? '｜' + esc(place(f)) : ''}${f.lastVisit ? '｜最後拜訪 ' + esc(f.lastVisit) : ''}</li>`).join('');
     $n('csSum').textContent = !(state.endedMine || []).length ? '還沒有已結案的農民'
-      : text ? `找到 ${hits.length} 位` : `共 ${hits.length} 位已結案的農民`;
+      : filtered ? `找到 ${hits.length} 位` : `共 ${hits.length} 位已結案的農民`;
   }
   /** 選了農民（0.4.82 起只有審核過的已結案農民）：顯示目前種植資料（唯讀）＋完整紀錄＋產生 Word；不能修改 */
   async function onPlantFarmer() {
@@ -4709,7 +4725,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261125-185547'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261125-191839'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -5230,8 +5246,7 @@
     };
     $n('endedFarmers').addEventListener('click', openFromButton);
     $n('csList').addEventListener('click', openFromButton); // 第29任：結案分頁「查過往紀錄」同一套
-    $n('csWhat').addEventListener('change', renderCloseSearch);
-    $n('csText').addEventListener('input', renderCloseSearch);
+    ['csWho', 'csWhat', 'csWhen', 'csWhere', 'csThing'].forEach(id => $n(id).addEventListener('change', renderCloseSearch)); // 第29任：五個下拉
     $n('plSave').addEventListener('click', savePlant);
     // 0.4.82 修改搬到月分工作進度（pfEditBtn 在 showCloseProgress 畫）：種植資料頁的 plEditBtn 一律藏起來、不再掛修改
     $n('plWordBtn').addEventListener('click', () => downloadFarmerReport($n('plWordBtn'))); // 0.4.77 產生 Word 檔
