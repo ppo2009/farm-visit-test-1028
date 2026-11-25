@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f6b3a">
 <!-- 0.4.91 中1：版本標記，要跟 app.js 的 APP_BUILD 一模一樣（改 index.html 或 app.js 時兩邊一起改；test-mobile0491 會比對）。不一樣＝新舊混用，app.js 會重新整理一次 -->
-<meta name="app-build" content="build-20261125-135745">
+<meta name="app-build" content="build-20261125-185547">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="田間打卡">
 <link rel="manifest" href="manifest.json">
@@ -651,6 +651,25 @@ label.chk input[type=checkbox]:disabled{opacity:.6} label.chk input[type=checkbo
     <button type="button" data-signclose="盤商">盤商結案<span class="my">ကုန်သည် ပိတ်သိမ်း</span></button>
     <button type="button" data-signclose="種子商">種子商結案<span class="my">မျိုးစေ့ဆိုင် ပိတ်သိမ်း</span></button>
   </div>
+  <!-- 第29任 2026-11-25 董事長「結案那邊可以新增下拉搜尋，分人、事、時、地、物查過往紀錄」：搜自己負責、已結案的農民，按了到種植資料看完整紀錄 -->
+  <section class="msec" id="closeSearch">
+    <h2>查過往紀錄<span class="my" data-tr="待譯"></span><span class="sub">自己負責、已結案的農民，按名字看種植紀錄<span class="my" data-tr="待譯"></span></span></h2>
+    <div class="fields">
+      <div><label class="lab" for="csWhat">依什麼查<span class="my" data-tr="待譯"></span></label>
+        <select id="csWhat">
+          <option value="all">全部</option>
+          <option value="who">人（農民名字、電話、編號）</option>
+          <option value="what">事（一般、對照、推廣農民）</option>
+          <option value="when">時（種植日、最後拜訪日，例 2026-11）</option>
+          <option value="where">地（地區、鎮、村、地址）</option>
+          <option value="thing">物（作物、品種、代碼）</option>
+        </select></div>
+      <div><label class="lab" for="csText">要找的字<span class="my" data-tr="待譯"></span></label>
+        <input id="csText" type="search" autocomplete="off" placeholder="例：U San、玉米、曼德勒、2026-11"></div>
+    </div>
+    <p class="sub" id="csSum" aria-live="polite"></p>
+    <ul id="csList"></ul>
+  </section>
   </div>
 
   <!-- 分頁 5 種植資料（0.4.59 董事長：這邊改種植資料）：選自己負責的農民，改作物、種子公司、代碼、面積、種植日期、肥料；直接存，不算一次拜訪 -->

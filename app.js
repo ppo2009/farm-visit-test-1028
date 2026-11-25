@@ -477,6 +477,7 @@
     });
     try { localStorage.setItem('farm-home-tab', tab); } catch (e) { /* 存不了 */ }
     renderPlantHistory(); // 0.4.77 種植資料的完整紀錄：只有在這一頁才讀、離開就收起（換掉讀取記號，晚到的結果不會再打開）
+    if (tab === 'close') renderCloseSearch(); // 第29任：結案分頁「查過往紀錄」用最新的已結案名單
   }
   function initHomeTabs() {
     let saved = '';
@@ -570,7 +571,9 @@
     const kindOf = f => (order.indexOf(f.kind) >= 0 ? f.kind : '一般農民');
     const groups = order.map(k => [k, (list || []).filter(f => kindOf(f) === k)]).filter(([, fs]) => fs.length);
     const place = f => [f.town, f.village].filter(Boolean).join('・');
-    const row = f => `<li><b>${esc(f.name || '')}</b>｜${esc(f.id)}${place(f) ? '｜' + esc(place(f)) : ''}${f.lastVisit ? `｜最後拜訪 နောက်ဆုံး သွားရောက်မှု ${esc(f.lastVisit)}` : ''}</li>`;
+    // 董事長 2026-11-25（客戶：已結案的農民要能點進去看他過去的種植紀錄）：名字做成按鈕，按了跳到「種植資料」直接選好這位
+    const row = f => `<li><button type="button" class="btn2 small" data-endedcid="${esc(f.id)}">${esc(f.name || '')}　看種植紀錄 ›</button>`
+      + `｜${esc(f.id)}${place(f) ? '｜' + esc(place(f)) : ''}${f.lastVisit ? `｜最後拜訪 နောက်ဆုံး သွားရောက်မှု ${esc(f.lastVisit)}` : ''}</li>`;
     box.innerHTML = groups.length
       ? groups.map(([k, fs]) => `<h3>${esc(k)}（${fs.length}）</h3><ul>${fs.map(row).join('')}</ul>`).join('')
       : '<p class="sub">還沒有已結案的農民<span class="my">ပိတ်သိမ်းပြီးသော လယ်သမား မရှိသေးပါ</span></p>';
@@ -588,6 +591,7 @@
     state.closeList = allMine.filter(f => (f.type || '農民') === '農民');
     state.endedMine = ((await Store.getMeta('endedMine')) || []).filter(f => (f.type || '農民') === '農民' && !state.closeList.some(x => x.id === f.id)); // 0.4.80 中3
     renderEndedFarmers(state.endedMine); // 第28任：歷史成就列出已結案的農民
+    if (state.homeTab === 'close') renderCloseSearch(); // 第29任：結案分頁開著才跟著名單更新（換到結案分頁時 setHomeTab 會畫）
     const today = mmDay(0); // 業務BUG#4：緬甸的今天（0.4.75 種植進度也用這個日期算）
     const groupOf = {}, growOfId = {};
     // 0.5.14 作物生長天數；0.5.16 第1輪：先讀手機資料庫（每次同步都更新）—— state.options 只在打開打卡畫面時讀一次，主管後來填的天數會看不到
@@ -652,13 +656,27 @@
     sel.value = keep && ended.some(f => f.id === keep) ? keep : '';
     if (!sel.value) { $n('plCard').hidden = true; $n('plBtns').hidden = true; renderPlantHistory(); }
   }
+  /**
+   * 種植天數：從種植日期算到最後一次拜訪（已結案的農民，最後一次拜訪通常就是結案那次）。
+   * 例：11/01 種、11/23 結案 →「22 天（種植日到最後一次拜訪 2026-11-23）」。缺日期、日期不對、最後拜訪比種植早就回空白（卡片寫「未填」）
+   */
+  function plantDaysText(f) {
+    const from = String(f.plantDate || '').slice(0, 10), to = String(f.lastVisit || '').slice(0, 10);
+    if (!/^\d{4}-\d\d-\d\d$/.test(from) || !/^\d{4}-\d\d-\d\d$/.test(to)) return '';
+    const days = Math.round((Date.parse(to) - Date.parse(from)) / 86400000);
+    if (!isFinite(days) || days < 0) return '';
+    return `${days} 天（種植日到最後一次拜訪 ${to}）`;
+  }
   /** 0.4.61 董事長「選擇農民後下面的資料應該是自動載入，不是要填寫的」：唯讀卡片（沒填的寫「未填」） */
   function plantCardHtml(f, o) {
     const v = String(f.variety || ''), cos = o.seedCompanies || [];
     const co = cos.find(c => v === c || v.indexOf(c + ' ') === 0) || v;
     const u = o.areaUnit || '英畝', blank = '<span class="sub">未填 မဖြည့်ရသေး</span>';
     const val = x => (x === '' || x == null ? blank : esc(String(x)));
-    const rows = [['種子公司 မျိုးစေ့ ကုမ္ပဏီ', co], ['作物 သီးနှံ', f.crop ? cropText(f.crop) : ''], ['代碼 ကုဒ်', f.varCode], ['種植日期 စိုက်သည့်ရက်', f.plantDate],
+    // 董事長 2026-11-25（客戶：已結案農民點進去要看到日期、天數、照片、電話、面積等詳細資料）：前面加電話、地區、鎮村，種植日期後面加種了幾天
+    const rows = [['電話', f.phone], ['地區', f.area ? String(f.area).trim() : ''], ['鎮・村', [f.town, f.village].filter(Boolean).join('・')],
+      ['種子公司 မျိုးစေ့ ကုမ္ပဏီ', co], ['作物 သီးနှံ', f.crop ? cropText(f.crop) : ''], ['代碼 ကုဒ်', f.varCode], ['種植日期 စိုက်သည့်ရက်', f.plantDate],
+      ['種植天數', plantDaysText(f)],
       ['目前種植面積 လက်ရှိ စိုက်ဧက', f.areaNow === '' || f.areaNow == null ? '' : `${f.areaNow} ${u}`], ['可種植面積 စိုက်နိုင်သော ဧက', f.areaMax === '' || f.areaMax == null ? '' : `${f.areaMax}`
         + ` ${u}`], ['其他 အခြား', f.fertilizer]];
     return `<h3>目前種植資料／လက်ရှိ အချက်အလက်<span class="who"><b>${esc(f.name)}</b></span></h3><ul>${rows.map(([k, x]) => `<li>${k}：${val(x)}</li>`).join('')}</ul>`;
@@ -700,6 +718,46 @@
       setTimeout(() => URL.revokeObjectURL(url), 10000);
       $n('plWordHint').textContent = 'Word 檔已下載／ဒေါင်းပြီး';
     } catch (e) { const m = farmerReportErr(null); toast(m); $n('plWordHint').textContent = m; } finally { btn.disabled = false; btn.innerHTML = label; }
+  }
+  /**
+   * 歷史成就按了某位已結案的農民 → 換到「種植資料」分頁、選單直接選好他，下面跟自己選的一樣出現種植資料卡、完整紀錄（照片、錄音）、Word 鈕。
+   * 左上 ↩ 可以回歷史成就（setHomeTab 會記上一頁）。名單裡已經沒有他（例如剛同步、他被改回追蹤中）就留在原頁提示。
+   */
+  async function openEndedFarmer(cid) {
+    if (!plantPool().some(f => f.id === cid)) { toast('找不到這位已結案的農民，請重新整理'); return; }
+    setHomeTab('plant');
+    fillPlantFarmers();
+    $n('plFarmer').value = cid;
+    await onPlantFarmer();
+    if (typeof window !== 'undefined' && window.scrollTo) window.scrollTo(0, 0);
+  }
+  /* ───── 第29任 2026-11-25 董事長「結案那邊可以新增下拉搜尋，分人、事、時、地、物查過往紀錄」─────
+     結案分頁下面「查過往紀錄」：下拉選依什麼查，打字就篩自己負責、已結案的農民；按名字跟歷史成就一樣跳到種植資料看完整紀錄。
+     例：選「物」打「玉米」→ 列出種過玉米、已結案的農民。畫面把「試作」顯示成「對照」，所以打「對照」也找得到試作農民。 */
+  const CLOSE_SEARCH_FIELDS = {
+    who: f => [f.name, f.phone, f.id],
+    what: f => [f.kind || '一般農民'],
+    when: f => [f.plantDate, f.lastVisit],
+    where: f => [f.area, f.town, f.village, f.address],
+    thing: f => [f.crop, f.crop ? cropText(f.crop) : '', f.variety, f.varCode]
+  };
+  function closeSearchHit(f, what, text) {
+    const pick = CLOSE_SEARCH_FIELDS[what];
+    const fields = pick ? pick(f) : Object.keys(CLOSE_SEARCH_FIELDS).reduce((all, k) => all.concat(CLOSE_SEARCH_FIELDS[k](f)), []);
+    const hay = fields.filter(x => x != null && x !== '').join(' ').toLowerCase();
+    return hay.indexOf(text) >= 0;
+  }
+  function renderCloseSearch() {
+    const list = $('csList');
+    if (!list) return; // 舊頁面沒有這一區
+    const what = $n('csWhat').value || 'all';
+    const text = String($n('csText').value || '').trim().toLowerCase().replace(/對照/g, '試作');
+    const hits = (state.endedMine || []).filter(f => !text || closeSearchHit(f, what, text));
+    const place = f => [f.area, f.town, f.village].filter(Boolean).join('・');
+    list.innerHTML = hits.map(f => `<li><button type="button" class="btn2 small" data-endedcid="${esc(f.id)}">${esc(f.name || '')}　看種植紀錄 ›</button>`
+      + `｜${esc(f.kind || '一般農民')}${f.crop ? '｜' + esc(cropText(f.crop)) : ''}${place(f) ? '｜' + esc(place(f)) : ''}${f.lastVisit ? '｜最後拜訪 ' + esc(f.lastVisit) : ''}</li>`).join('');
+    $n('csSum').textContent = !(state.endedMine || []).length ? '還沒有已結案的農民'
+      : text ? `找到 ${hits.length} 位` : `共 ${hits.length} 位已結案的農民`;
   }
   /** 選了農民（0.4.82 起只有審核過的已結案農民）：顯示目前種植資料（唯讀）＋完整紀錄＋產生 Word；不能修改 */
   async function onPlantFarmer() {
@@ -4651,7 +4709,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261125-135745'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261125-185547'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');
@@ -5165,6 +5223,15 @@
     document.querySelectorAll('[data-signclose]').forEach(b => b.addEventListener('click', () => signCloseOpen(b.dataset.signclose)));
     $n('closeFarmer').addEventListener('change', showCloseProgress); // 0.4.57 結案選單挑農民 → 列出進度
     $n('plFarmer').addEventListener('change', onPlantFarmer); // 0.4.59 種植資料
+    // 董事長 2026-11-25：歷史成就的已結案農民按了看種植紀錄（名單每次重畫，所以接在外框上）
+    const openFromButton = ev => {
+      const b = ev.target && ev.target.closest ? ev.target.closest('[data-endedcid]') : null;
+      if (b) openEndedFarmer(b.dataset.endedcid).catch(e => noteErr('看已結案農民的種植紀錄', e));
+    };
+    $n('endedFarmers').addEventListener('click', openFromButton);
+    $n('csList').addEventListener('click', openFromButton); // 第29任：結案分頁「查過往紀錄」同一套
+    $n('csWhat').addEventListener('change', renderCloseSearch);
+    $n('csText').addEventListener('input', renderCloseSearch);
     $n('plSave').addEventListener('click', savePlant);
     // 0.4.82 修改搬到月分工作進度（pfEditBtn 在 showCloseProgress 畫）：種植資料頁的 plEditBtn 一律藏起來、不再掛修改
     $n('plWordBtn').addEventListener('click', () => downloadFarmerReport($n('plWordBtn'))); // 0.4.77 產生 Word 檔
