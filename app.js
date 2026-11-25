@@ -105,7 +105,22 @@
   async function tagOwner() { try { if (Store.tagSrvOwner) await Store.tagSrvOwner(); } catch (e) { /* 補不了：只是重新登入後這一輪少併一次 */ } }
   /** 第24任 必改第四批：人臉／指紋、九宮格解鎖（unlock.js）。只擋畫面，登入設定（裝置金鑰）照留，背景上傳不停。
    *  舊頁面、抽函式跑的舊測試沒有 FarmLock 就整個不做（每個用到的地方各自寫 typeof FarmLock === 'object'：抽單一函式跑的舊測試找不到名字；有些舊測試的假環境把不認得的名字都當成空函式，所以要認「是物件」才算有） */
+  /** 回登入頁時表單填到一半：提示先存進手機（原本寫在 lockout 裡，第26輪抽出來共用） */
+  const DIRTY_LOCK_TIP = '。正在填的這一筆可以先儲存在手機裡，之後要用密碼重新登入／။ ယခု ဖြည့်နေသည်ကို ဖုန်းထဲ သိမ်းထားနိုင်သည်၊ နောက်မှ စကားဝှက်ဖြင့် ပြန်ဝင်ရမည်';
   const OTHER_LOGIN_MSG = '另一個畫面已經換人登入，請重新整理網頁／အခြား စာမျက်နှာတွင် ဝင်ထားပြီ၊ ပြန်ဖွင့်ပါ';
+  /* 鎖畫面要回登入頁時，手機裡的登入已經換成別人（另一個畫面換人登入）：不清新的人的登入。
+     表單填到一半的，比照「登入失效」先讓業務存進手機（存的時候照表單主人判斷：同一個帳號照存、別人登入就不存、表單留著），
+     不直接蓋登入頁；沒在填的才回登入頁，先停錄音、清表單（不讓錄音器開著跑到登入頁，比照登出）（抓BUG第26輪 手機2，第29任） */
+  function lockOtherLogin() {
+    if (state.view === 'visit' && typeof formDirty === 'function' && formDirty()) {
+      state.lockedOut = OTHER_LOGIN_MSG;
+      toast(OTHER_LOGIN_MSG + DIRTY_LOCK_TIP);
+      return 'otherLogin';
+    }
+    if ((state.view === 'visit' || state.rec) && typeof resetForm === 'function') resetForm();
+    showLogin(OTHER_LOGIN_MSG);
+    return 'otherLogin';
+  }
   function lockHooks() {
     return {
       getConfig,
@@ -119,7 +134,7 @@
         // 手機資料庫讀不到登入設定（抓BUG第23輪 手機1）：照樣回登入頁，但丟錯讓 unlock.js 留著解鎖設定（金鑰沒清掉，下次打開照樣上鎖）
         let c = null;
         try { c = await getConfig(); } catch (e) { showLogin(msg); throw e; }
-        if (expectKey && c && c.deviceKey && c.deviceKey !== expectKey) { showLogin(OTHER_LOGIN_MSG); return 'otherLogin'; }
+        if (expectKey && c && c.deviceKey && c.deviceKey !== expectKey) return lockOtherLogin();
         // 第24任 第六批（老闆問：錯 5 次會不會丟資料）：正在填、還沒儲存的表單比照「登入失效」——先讓業務存進手機，離開打卡畫面才回登入頁（已儲存的本來就不會丟）
         // 第25任 審查①（安全）：原本這條路只記 loginLost、金鑰照留 → 鎖畫面收起後別人可以繼續用這個登入看客戶資料。改成金鑰一樣立刻清掉，
         //   只是不跳登入頁、表單留著：存檔照 0.5.23 J5「沒人登入、用表單主人存」，存完自動回登入頁；不存回首頁時 showHome 看 lockedOut 跳登入
@@ -130,7 +145,7 @@
           if (typeof tagOwner === 'function') await tagOwner();
           await Store.setMeta('config', { gasUrl: (c || {}).gasUrl });
         } catch (e) { showLogin(msg); throw e; }
-        if (dirty) { state.lockedOut = msg; toast(msg + '。正在填的這一筆可以先儲存在手機裡，之後要用密碼重新登入／။ ယခု ဖြည့်နေသည်ကို ဖုန်းထဲ သိမ်းထားနိုင်သည်၊ နောက်မှ စကားဝှက်ဖြင့် ပြန်ဝင်ရမည်'); return; }
+        if (dirty) { state.lockedOut = msg; toast(msg + DIRTY_LOCK_TIP); return; }
         showLogin(msg);
       }
     };
@@ -4636,7 +4651,7 @@
      防無限重整：同一對「網頁標記｜程式標記」只重整一次（記在 sessionStorage）；記不下來就不重整 */
   // 0.4.98（第13任 手機7）：原本固定 '0491-1'，之後 index.html 改過（0.4.96 加「播種」選項）標記沒跟著換 → 新程式配舊網頁偵測不到。
   // 改成跟版號一樣（config.js appVersion、index.html app-build、這裡三個一起改；test-0498_第13任.js 檢查三個相同）
-  const APP_BUILD = 'build-20261125-001639'; // 要跟 index.html 的 app-build 一模一樣
+  const APP_BUILD = 'build-20261125-135745'; // 要跟 index.html 的 app-build 一模一樣
   function buildCheck() {
     try {
       const m = document.querySelector && document.querySelector('meta[name="app-build"]');

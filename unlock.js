@@ -248,6 +248,7 @@
     if (had) lockout('解鎖功能出錯，請用帳號密碼重新登入（沒上傳的資料還在手機裡）').catch(() => { /* 回登入頁已盡力；解鎖設定照留，下次打開照樣上鎖 */ });
   }
   async function maybeLock(force) {
+    if (force) { try { const now = await H.getConfig(); lockKey = (now && now.deviceKey) || ''; } catch (e) { /* 讀不到：下面讀設定照樣會丟錯 */ } } // 開 App：這個畫面的登入
     // 切回 App：先看離開多久、要不要鎖（不用讀手機設定），不用鎖就到此為止。
     //   原本先讀設定，只離開幾秒（拍照、接電話）剛好讀失敗一次，也被當成上鎖出錯、整個登出（抓BUG第23輪 手機2，第29任）
     if (!force) {
@@ -257,6 +258,9 @@
     }
     if (!(await enabled())) { unlock(); return false; }
     const cfg = await H.getConfig();
+    // 這個畫面鎖住的是別人的登入（另一個畫面換人登入了）：保持鎖住，不拿新的人的解鎖設定決定要不要解開——
+    //   新的人沒設解鎖時原本會直接解開，露出前一位業務的首頁（抓BUG第26輪 手機1，第29任）
+    if (locked && otherLogin(cfg)) return true;
     const c = await activeFor(cfg);
     if (!c) { unlock(); return false; }
     if (!locked) await showLock(c);
@@ -317,6 +321,9 @@
   async function afterLogin(hooks) {
     H = hooks; hookPage();
     const cfg = await H.getConfig(); const c = load();
+    // lockKey＝這個畫面現在的登入：在這個畫面用密碼重新登入後換成新的金鑰，之後上鎖出錯才不會被當成「另一個畫面換人」
+    //   （抓BUG第26輪 手機3；第26輪先改成解鎖時清空，反而讓別的畫面換人登入時認不出來，獨立審查抓到，改成這樣）
+    lockKey = (cfg && cfg.deviceKey) || '';
     if (c && !(await activeFor(cfg))) save(null);
     if (!(await activeFor(cfg)) && (await enabled())) await openSettings('要用人臉／指紋或九宮格解鎖這支手機嗎？以後打開 App 不用再打密碼。／ဤဖုန်းကို မျက်နှာ／လက်ဗွေ သို့မဟုတ် ပုံစံကွက်ဖြင့် ဖွင့်မလား။ နောက်ပိုင်း App ဖွင့်လျှင် စကားဝှက် ရိုက်ရန် မလိုတော့ပါ။');
   }

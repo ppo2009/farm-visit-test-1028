@@ -261,9 +261,11 @@
     if (state.ai && !state.ai.busy) state.ai.st = null;
     if (state.adm) {
       state.adm.histFail = {};
-      admRefreshHist(state.adm);
+      admRefreshHist(state.adm, true);
       if (state.adm.list && !state.adm.list.ok) state.adm.list = null;
-      else if (state.adm.list && state.tab === 'admin') loadAdminList(); // 舊名單先留著，新的回來再換
+      // 名單標「要重讀」，人不在資料管理頁也一樣（帳號頁剛開的業務；抓BUG第26輪 主管5）；進資料管理時背景重讀，舊名單先留著
+      else if (state.adm.list) state.adm.listStale = true;
+      if (state.adm.listStale && state.tab === 'admin') { state.adm.listStale = false; loadAdminList(); }
     }
     if (window.FarmMyFix) window.FarmMyFix.set(data.myFixes || {}, true); // 第28任：主管改好的畫面緬文
     state.loadedAt = Date.now(); // 0.4.88 低8：切回頁面時判斷要不要重讀
@@ -1068,6 +1070,17 @@
     const box = $('panel').querySelector ? $('panel').querySelector('#reviewCard') : null; if (!box) return; // 舊測試的假畫面沒有 querySelector
     const R = state.review, items = reviewItems(), x = items[R.i], close = R.kind === 'close';
     const go = d => { R.keep = null; R.i = Math.max(0, Math.min(items.length - 1, R.i + d)); R.rej = null; state.closeMsg = ''; render(); window.scrollTo(0, 0); }; // 自己換張：不再跟著剛剛那筆
+    // 用按鈕換卡、標看過、按退回後整頁重畫：焦點放回新卡的同一顆按鈕（退回放第一個原因），不掉到整頁（第26輪 主管7）
+    if (R.focusRv) {
+      const want = R.focusRv;
+      R.focusRv = '';
+      const other = { prev: 'next', next: 'prev' }[want];
+      const target = want === 'reject' ? box.querySelector('input[name=rj]') : box.querySelector(`[data-rv="${want}"]:not([disabled])`);
+      // 翻到第一張／最後一張時那顆停用：改放反方向那顆，再不行放卡片本身——不能放到卡片第一顆「← 回今天」，再按 Enter 就整個離開審核（獨立審查抓到）
+      const fallback = (other && box.querySelector(`[data-rv="${other}"]:not([disabled])`)) || box;
+      if (fallback === box) box.tabIndex = -1;
+      (target || fallback).focus();
+    }
     let sx = null; // 左右滑動切換
     box.addEventListener('touchstart', e => { sx = e.touches[0].clientX; }, { passive: true });
     box.addEventListener('touchend', e => { if (sx == null) return; const dx = e.changedTouches[0].clientX - sx; sx = null; if (Math.abs(dx) > 60 && !R.rej) go(dx < 0 ? 1 : -1); });
@@ -1084,8 +1097,12 @@
     box.querySelectorAll('[data-rv]').forEach(b => b.addEventListener('click', async () => {
       const a = b.dataset.rv;
       if (a === 'exit') { state.review = null; state.tab = 'today'; state.closeMsg = ''; render(); return; }
+      if (a === 'prev' || a === 'next' || a === 'seen' || a === 'reject') R.focusRv = a;
       if (a === 'prev') return go(-1);
       if (a === 'next') return go(1);
+      // 剛按完「已看過」0.5 秒內的第二下不收：連點兩下，第二下剛好落在下一張的「已看過」上，會把還沒看的那筆也標掉（抓BUG第26輪 主管6，第29任）
+      if (a === 'seen' && Date.now() - (R.seenAt || 0) < 500) { R.focusRv = ''; return; }
+      if (a === 'seen') R.seenAt = Date.now();
       if (a === 'seen') { markSeen(x.id); state.closeMsg = '已標「看過」／「ကြည့်ပြီး」 ဟု မှတ်ပြီး'; render(); return; }
       // 第26任 低風險修正3①：原本一按就標「看過」→ 盤商、種子商（任務只能派給農民）或已結束的客戶派不出去，這筆可疑拜訪卻已經從清單消失；
       //   改成：派不了就留在清單、寫原因；派得了就帶到任務頁，任務真的派出去才標「看過」
@@ -1963,10 +1980,11 @@
         // 抓BUG第3輪 主管組1：追問帶到任務頁後主管換了業務／農民（改派別的事），原本照樣帶 ask、還把那筆可疑拜訪標「看過」
         //   → 業務和農民都還是追問帶來的那一組才算追問
         const isAsk = !!(state.tf.seenVid && state.tf.staff === state.tf.askStaff && state.tf.cid === state.tf.askCid);
-        try { r = await api({ action: 'taskAdd', staff: state.tf.staff, cid: state.tf.cid, text: state.tf.text.trim(), rid: state.tf.rid, ask: isAsk }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再按一次（不會派成兩條）／ဆာဗာနှင့် ချိတ်မရပါ၊ ထပ်နှိပ်ပါ（နှစ်ခု ဖြစ်မသွားပါ）' }; }
+        const sentText = state.tf.text.trim(); // 送出的這段：派好後框裡還是它才清（等待時打的下一條留著；抓BUG第26輪 主管8，第29任）
+        try { r = await api({ action: 'taskAdd', staff: state.tf.staff, cid: state.tf.cid, text: sentText, rid: state.tf.rid, ask: isAsk }); } catch (e) { r = { ok: false, message: '連不上伺服器，請再按一次（不會派成兩條）／ဆာဗာနှင့် ချိတ်မရပါ၊ ထပ်နှိပ်ပါ（နှစ်ခု ဖြစ်မသွားပါ）' }; }
         if (r.ok) {
           setData({ tasks: r.tasks });
-          state.tf.text = '';
+          if (state.tf.text.trim() === sentText) state.tf.text = '';
           state.tf.rid = '';
           state.tf.ridKey = '';
           state.taskMsg = toBoss ? '已派出（主管打開主管網頁「任務」就會看到）／ပေးပို့ပြီး (မန်နေဂျာ ဝဘ် 「လုပ်ငန်း」 တွင် မြင်ရမည်)' : '已派出（業務手機下次同步就會看到）／ပေးပို့ပြီး (ဝန်ထမ်းဖုန်း နောက်တစ်ကြိမ် စင့်ခ်လုပ်လျှင် မြင်ရမည်)';
@@ -2334,19 +2352,29 @@
   /** 類別的緬文：對照農民是新字（G6），其他四類主管頁原本就有 */
   const admKindMy = kind => (kind === '對照農民' ? 'နှိုင်းယှဉ် လယ်သမား' : BI[kind] || '');
   const admState = () => state.adm || (state.adm = { q: '', open: '', list: null, hist: {}, msg: '', msgMy: '' });
-  async function loadAdminList() {
+  async function loadAdminList(afterChange) {
     const a = admState();
     let r; try { r = await api({ action: 'admin', op: 'list' }); } catch (e) { r = null; }
-    a.list = r && r.ok ? r : { ok: false, message: (r && r.message) || '讀取失敗，請按重新整理' };
+    // 已經讀好的名單，背景重讀失敗就保留舊的（不整段換成「名單讀取失敗」；抓BUG第26輪 主管4，第29任）。
+    // 剛存檔、刪除、還原之後那次重讀（afterChange）失敗時，舊名單確定不是最新，要標明＋給重試（獨立審查抓到；新字待譯 J16）
+    if (r && r.ok) { a.list = r; a.listNote = ''; }
+    else if (!(a.list && a.list.ok)) a.list = { ok: false, message: (r && r.message) || '讀取失敗，請按重新整理' };
+    else if (afterChange) a.listNote = (r && r.message) || '讀取失敗';
     if (state.tab === 'admin') render();
   }
-  async function loadAdminHistory(cid) {
+  async function loadAdminHistory(cid, force) {
     const a = admState();
-    // 同一位客戶同時只讀一次（原本存一欄後一次發 3 個；抓BUG第25輪 主管6，第29任）
+    // 同一位客戶同時只讀一次（原本存一欄後一次發 3 個；抓BUG第25輪 主管6，第29任）。
+    // 存檔、重新整理要重讀時（force）照發，比它早發出去的那次回來就作廢——不然存之前就發出的讀取帶回舊清單（第26輪 主管1）
     a.histReq = a.histReq || {};
-    if (a.histReq[cid]) return;
+    a.histSeq = a.histSeq || {};
+    if (a.histReq[cid] && !force) return;
+    const seq = (a.histSeq[cid] || 0) + 1;
+    a.histSeq[cid] = seq;
     a.histReq[cid] = true;
-    let r; try { r = await api({ action: 'history', cid }); } catch (e) { r = null; } finally { delete a.histReq[cid]; }
+    let r; try { r = await api({ action: 'history', cid }); } catch (e) { r = null; }
+    if (a.histSeq[cid] !== seq) return; // 後面又發了一次，這次的結果作廢
+    delete a.histReq[cid];
     // 讀失敗另外記（原本存成空陣列，畫面寫「沒有拜訪紀錄」；第24輪 主管3）；已經讀到的，晚到的失敗不蓋掉
     a.histFail = a.histFail || {};
     if (r && r.ok) { a.hist[cid] = r.visits || []; delete a.histFail[cid]; } else if (!a.hist[cid]) a.histFail[cid] = (r && r.message) || '讀取失敗';
@@ -2443,9 +2471,15 @@
   }
   /** 名單讀失敗：照實說、給重試（原本寫「沒有可以管理的帳號」、已刪除整段空白；抓BUG第24輪 主管3，第29任；新字待譯 J15） */
   const admListFailHtml = l => `<p class="err" data-tr="待譯">名單讀取失敗：${esc(l.message || '')}</p><button type="button" class="btn" data-admretry="list" data-tr="待譯">重試</button>`;
+  /** 名單是舊的（剛存檔後重讀失敗）：標明＋重試 */
+  const admListNoteHtml = () => (admState().listNote ? `<p class="err" data-tr="待譯">名單讀取失敗，下面可能不是最新的（${esc(admState().listNote)}），請按重試</p><button type="button" class="btn" data-admretry="list" data-tr="待譯">重試</button>` : '');
   function admPeople() {
     const l = admState().list;
     if (l && !l.ok) return admListFailHtml(l);
+    if (admState().listNote) return admListNoteHtml() + admPeopleRows(l);
+    return admPeopleRows(l);
+  }
+  function admPeopleRows(l) {
     const people = (l && l.people) || [];
     if (!people.length) return `<p class="sub">${admMy('沒有可以管理的帳號', 'စီမံနိုင်သော အကောင့် မရှိပါ')}</p>`;
     return people.map(p => `<div class="admrow"><span>${esc(p.name)}（${esc(p.account)}・${esc(p.role)}${p.active ? '' : '・停用'}）${p.active ? '' : '<span class="my">ပိတ်ထား</span>'}</span>
@@ -2470,7 +2504,7 @@
   function renderAdmin() {
     if (!isGM()) return `<p class="empty">${admMy('只有總經理能用資料管理', 'အထွေထွေမန်နေဂျာသာ ဒေတာ စီမံခန့်ခွဲမှု သုံးနိုင်သည်')}</p>`;
     const a = admState();
-    if (!a.list) loadAdminList();
+    if (!a.list || a.listStale) { a.listStale = false; loadAdminList(); }
     const loading = `<p class="sub">${admMy('讀取中…', 'ဖတ်နေသည်…')}</p>`;
     const msgMy = a.msgMy ? `<span class="my">${esc(a.msgMy)}</span>` : '';
     return `<section class="admin"><h3>${admMy('資料管理', 'ဒေတာ စီမံခန့်ခွဲမှု')} <span class="sub">${admMy('只有總經理看得到；刪除的資料可以在最下面還原', 'အထွေထွေမန်နေဂျာသာ မြင်ရသည်၊ ဖျက်ထားသော ဒေတာများကို အောက်ဆုံးတွင် ပြန်ယူနိုင်သည်')}</span></h3>
@@ -2539,27 +2573,34 @@
       a.msgMy += `၊ ၎င်းတာဝန်ယူထားသော ဖောက်သည် ${r.customersLeft} ဦး ကျန်သေးသည်၊ တာဝန်ခံ ဝန်ထမ်း ပြောင်းပေးပါ`;
     }
     if (op === 'custType') { a.kind = value; a.open = arg.cid; admSetKindLocal(arg.cid, value); } // 換了類型：下拉跟著換到新的那一類，這位照樣開著
+    // 拜訪改日期、刪拜訪、刪客戶：先在畫面的資料套用這次的改動再畫（不然重讀回來前畫的是舊清單：框跳回舊日期再按就改回去、
+    //   刪掉的那筆／那位還在畫面上可以再按一次；抓BUG第26輪 主管1、9，第29任）
+    const changedLocal = admApplyLocal(a, op, arg, r);
     admRefreshHist(a);
-    // 先讓上方提示寫「已存好」，但不整頁重畫：資料還是舊的，重畫會把框變回改之前的值，總經理再按一次就存回舊值
-    //   （第24輪 主管6 的修法造成；抓BUG第25輪 主管1，第29任）。剛存的那一欄打的字留著，等重讀成功才換成後台真正存的值
-    admShowMsg(a);
+    // 其他動作：先讓上方提示寫「已存好」，但不整頁重畫：資料還是舊的，重畫會把框變回改之前的值，總經理再按一次就存回舊值
+    //   （第24輪 主管6 的修法造成；第25輪 主管1）。剛存的那一欄打的字留著，等重讀成功才換成後台真正存的值
+    if (changedLocal && state.tab === 'admin') render(); else admShowMsg(a);
     // 名單重讀時舊的先留著，新的回來再換（第24輪 主管2）
-    const relist = loadAdminList();
+    const relist = loadAdminList(true);
     const loadedBefore = state.loadedAt;
     await load(); // 主管頁全部資料重讀（清單、拜訪、試作跟著更新）
     await relist;
     if (state.loadedAt === loadedBefore || !btn.dataset.admval || !a.edits) return; // 重讀沒成功：打的字照留（畫面跟剛存的一樣）
+    // 那格還是剛送出的值才清：等重讀時接著改的字不能被清回剛存的值（抓BUG第26輪 主管2，第29任）
+    if (a.edits[btn.dataset.admval] !== value) return;
     delete a.edits[btn.dataset.admval];
     if (state.tab === 'admin') render(); // 換成後台真正存的值（會整理空白、電話只留數字；第23輪 主管1）
   }
   /* 拜訪清單重讀：打開那位的舊清單先留著顯示、背景重讀（成功才換、失敗照留），其他位清掉下次打開再讀。
      原本整個清空才重讀，重讀那次剛好失敗，畫面就只剩「讀取失敗」（抓BUG第25輪 主管6，第29任） */
-  function admRefreshHist(a) {
+  function admRefreshHist(a, onlyIfIdle) {
     const keep = a.open && a.hist[a.open];
     a.hist = {};
     if (!keep) return;
     a.hist[a.open] = keep;
-    loadAdminHistory(a.open);
+    // 整份重讀時（onlyIfIdle）：存檔後剛發出的重讀還在路上就不再多讀一次（第26輪修主管1 時造成重複讀，第25輪 主管6 的測試抓到）
+    if (onlyIfIdle && (a.histReq || {})[a.open]) return;
+    loadAdminHistory(a.open, true);
   }
   /* 存類型成功：畫面資料裡這位的類型先跟著改。上面的類別下拉已經換到新的那一類，名單在背景重讀回來會重畫，
      那時主管頁資料還沒重讀完（或重讀失敗），這位客戶就不在新的那一類、變成「找到 0 位」（抓BUG第25輪 主管1④，第29任） */
@@ -2567,6 +2608,21 @@
     const c = ((state.data && state.data.customers) || []).find(x => x.id === cid);
     if (!c) return;
     if (kind === '盤商' || kind === '種子商') c.type = kind; else c.kind = kind;
+  }
+  /** 存好後先套用到畫面的資料：拜訪改日期（後台回新時間）、刪拜訪、刪客戶。有改回 true */
+  function admApplyLocal(a, op, arg, r) {
+    const visits = a.open && a.hist[a.open];
+    if (op === 'visitDate' && visits) {
+      const v = visits.find(x => x.id === arg.vid);
+      if (v && r.value) { v.time = String(r.value); return true; }
+    }
+    if (op === 'visitDelete' && visits) { a.hist[a.open] = visits.filter(x => x.id !== arg.vid); return true; }
+    if (op === 'custDelete' && state.data && state.data.customers) {
+      state.data.customers = state.data.customers.filter(c => c.id !== arg.cid);
+      if (a.open === arg.cid) a.open = '';
+      return true;
+    }
+    return false;
   }
   /** 只更新資料管理上方那行提示（不整頁重畫） */
   function admShowMsg(a) {
@@ -2615,7 +2671,7 @@
   /** 讀取失敗的「重試」：名單整份重讀、拜訪重讀那位客戶 */
   function admRetry(btn) {
     const a = admState();
-    if (btn.dataset.admretry === 'list') { a.list = null; render(); return; }
+    if (btn.dataset.admretry === 'list') { a.list = null; a.listNote = ''; render(); return; }
     if (a.histFail) delete a.histFail[btn.dataset.cid];
     $('admCustList').innerHTML = admCustomers();
   }
@@ -2857,7 +2913,7 @@
   });
   $('reload').addEventListener('click', load);
   // 第28任 2026-11-21：右上角「AI 診斷」（只有總經理看得到，見 onLogin）
-  { const aiBtn = document.getElementById('aiBtn'); if (aiBtn) aiBtn.addEventListener('click', () => { state.tab = 'aidiag'; state.moreOpen = false; render(); }); }
+  { const aiBtn = document.getElementById('aiBtn'); if (aiBtn) aiBtn.addEventListener('click', () => { freshAiOnTab('aidiag'); state.tab = 'aidiag'; state.moreOpen = false; render(); }); }
   // 第24任 第七批：手機底部導覽（今天｜拜訪｜客戶｜更多）；記住拜訪、客戶上次看的是哪一種顯示方式
   const lastOf = { visits: 'latest', customers: 'trial' };
   document.querySelectorAll('#bnav [data-bnav]').forEach(b => b.addEventListener('click', () => {
